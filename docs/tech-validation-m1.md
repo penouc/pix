@@ -24,7 +24,7 @@
 | Tool events for permission inputs | [~] | tool.requested includes name + inputSummary + risk heuristic |
 | Abort kills bash process tree | [~] | `killProcessTree` unit tests pass; Pi abort/abortBash on session; full agent-bash integration TBD |
 | No orphan processes on quit | [~] | dispose on before-quit |
-| Provider login + model list + real call | [~] | env key hydrate + Auth status IPC; real LLM call needs user keys |
+| Provider login + model list + real call | [x] | OpenCode Go from `~/.local/share/opencode/auth.json`; eval fixture full tool loop PASS |
 | Version locked + upgrade steps | [x] | ADR-0002 |
 
 ## Route decision (SDK vs Pi RPC)
@@ -34,7 +34,7 @@
 | Continue in-process SDK | **Default / still preferred** — packaged dir build succeeded with Pi deps |
 | Pi RPC stdin/stdout sidecar | Backup if packaged runtime fails on GUI smoke |
 
-Decision: **continue SDK** pending manual GUI smoke of packaged app + one authenticated prompt.
+Decision: **continue SDK**. Evidence: headless `pnpm eval:fixture` with `opencode-go/kimi-k2.7-code` completed real read/edit/bash on fixture (2026-07-24). Packaged GUI smoke still optional.
 
 ## How to try
 

@@ -9,5 +9,6 @@ export { killProcessTree, isAlive, listDescendantPids } from './process-tree.js'
 export {
   hydrateRuntimeAuthFromEnv,
   describeAuthSources,
+  loadOpenCodeAuthFromDisk,
   type ProviderAuthSummary,
 } from './credentials.js';

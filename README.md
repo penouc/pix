@@ -56,7 +56,11 @@ pnpm dev
 | `pnpm smoke:runtime` | Headless Fake Runtime 流式冒烟 |
 | `pnpm smoke:runtime:pi` | Headless 真实 Pi createSession（需已 build packages） |
 
-真模型调用：启动前导出 `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `XAI_API_KEY` 等；右侧 Auth 行显示已就绪 provider。
+真模型调用：优先使用 **OpenCode Go**（自动读取 `~/.local/share/opencode/auth.json`，也可设置 `OPENCODE_API_KEY`）。右侧 Auth 行显示已就绪 provider。
+
+```bash
+pnpm eval:fixture   # headless 真改码验收（默认 opencode-go/kimi-k2.7-code）
+```
 
 ## 架构约束（摘要）
 

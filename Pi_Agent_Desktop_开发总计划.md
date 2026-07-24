@@ -370,11 +370,11 @@ rememberable: boolean;
 - [ ] 打通 Renderer → Typed IPC → Pi → Event Stream。（已接线；真流依赖 Provider 登录）
 - [ ] 支持发送消息、展示流式文本、Tool Event 和 Stop。
 - [ ] 完成 dev 与 packaged build 验证。
-- [ ] 在测试仓库中完成一次真实代码修改和测试运行。
+- [x] 在测试仓库中完成一次真实代码修改和测试运行。（headless `pnpm eval:fixture` + OpenCode Go PASS）
 
 > **完成门槛：** 不打开 Pi TUI，也能从桌面窗口完成一次真实编码任务。
 >
-> **进度台账：** 见 [`docs/TODOS.md`](./docs/TODOS.md)。已锁 Pi `0.82.0` 并实现 `PiAgentRuntime`；**M1 门槛仍未关闭**。
+> **进度台账：** 见 [`docs/TODOS.md`](./docs/TODOS.md)。SDK 真改码证据已齐；GUI 手测仍建议但非阻塞 headless 证据。
 
 
 ## M2：领域契约与状态机

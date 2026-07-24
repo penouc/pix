@@ -498,14 +498,14 @@ docs/（见 §6.1）                     [~] 见下表
 1. [x] 对齐文档与 TODOS  
 2. [x] 锁定 Pi SDK 0.82.0 + ADR  
 3. [x] `PiAgentRuntime` + Main createSession 接线  
-4. [~] 第一条真实消息（自动选鉴权模型 + run.started 即时反馈；**真 LLM 仍需用户密钥**）  
+4. [x] 第一条真实消息（`opencode-go/kimi-k2.7-code` 流式 + tool 闭环）  
 5. [~] Abort / 进程树：`killProcessTree` 单测通过；Pi abortBash 已调  
-6. [~] Fixture baseline + acceptance 脚本齐；真 Agent 改码未跑  
-7. [~] packaged dir + `node scripts/smoke-packaged.mjs` **通过**；GUI 手测仍建议  
-8. [~] tech-validation 倾向 SDK；GUI 真任务后可关 M1  
-9. [~] 已切入 §18.1 / M3 部分（Trust + Session 元数据）；M1 真 LLM 仍待手测  
+6. [x] Fixture 真改码验收 **PASS**（见 `docs/eval-reports/react-button-label-latest.md`）  
+7. [~] packaged dir + asar smoke **通过**；GUI 手测仍建议  
+8. [~] tech-validation：继续 SDK；默认用 OpenCode Go 凭据（`~/.local/share/opencode/auth.json`）  
+9. [~] 已切入 §18.1 / M3 部分；M1 核心技术证据基本齐，packaged GUI 手测可选  
 
-**立即下一刀：** API Key 真任务验收；随后 SQLite 替换 JSON SessionStore。
+**立即下一刀：** SQLite Session Repository；或 M5 Permission Pipeline 骨架。
 
 ---
 
@@ -543,6 +543,7 @@ docs/（见 §6.1）                     [~] 见下表
 | 2026-07-24 | process-tree 单测；env 凭据水合 + Auth IPC；react-button-label fixture；electron-builder mac-arm64 dir 打包成功 |
 | 2026-07-24 | 自动选鉴权模型、Browse 选目录、最近项目持久化、模型下拉、packaged asar 冒烟脚本、acceptance docs |
 | 2026-07-24 | Workspace Trust、SessionStore JSON 持久化、delta rAF 批处理、smoke:runtime headless |
+| 2026-07-24 | OpenCode Go 鉴权（auth.json）；`pnpm eval:fixture` 真改码 PASS（kimi-k2.7-code） |
 
 ---
 

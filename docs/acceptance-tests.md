@@ -33,9 +33,16 @@ Do not change unrelated files.
 
 ### Desktop path
 
-1. Export a provider key (`OPENAI_API_KEY` / …).
-2. `pnpm dev` → Browse to fixture path → New session.
+1. Prefer OpenCode Go login (`~/.local/share/opencode/auth.json`) or `OPENCODE_API_KEY`.
+2. `pnpm dev` → Browse to fixture path → Trust workspace → New session → select `opencode-go/*` model.
 3. Paste agent prompt → verify tools + stream → run acceptance.
+
+### Headless path (CI / automated)
+
+```bash
+pnpm eval:fixture
+# optional: EVAL_MODEL=opencode-go/glm-5.2 pnpm eval:fixture
+```
 
 ## Packaged smoke
 
