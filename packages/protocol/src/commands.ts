@@ -62,6 +62,7 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('agent.setModel'), params: SetModelInputSchema }),
   z.object({ method: z.literal('agent.resolveApproval'), params: ResolveApprovalInputSchema }),
   z.object({ method: z.literal('agent.listModels'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('agent.authStatus'), params: z.object({}).optional() }),
 ]);
 export type IpcCommand = z.infer<typeof IpcCommandSchema>;
 export type IpcMethod = IpcCommand['method'];

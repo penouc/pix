@@ -2,6 +2,7 @@
   "name": "@pi-desktop/desktop",
   "version": "0.1.0",
   "private": true,
+  "author": "Pi Desktop",
   "description": "Pi Agent Desktop — Electron shell",
   "main": "dist-electron/main/index.js",
   "type": "module",
@@ -9,7 +10,9 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit && vite build",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "package:dir": "pnpm build && electron-builder --mac dir --config electron-builder.yml --publish never",
+    "package:dmg": "pnpm build && electron-builder --mac dmg --config electron-builder.yml --publish never"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.82.0",
@@ -34,6 +37,7 @@
     "@types/react-dom": "^19.1.5",
     "@vitejs/plugin-react": "^4.5.1",
     "electron": "36.4.0",
+    "electron-builder": "26.0.12",
     "tailwindcss": "^4.1.8",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",

@@ -357,10 +357,10 @@ docs/（见 §6.1）                     [~] 见下表
 | 7 | protocol package，Typed IPC + Zod | [x] | |
 | 8 | Main 创建 **Pi Session** 并发送第一条消息 | [~] | Session create 通；首条真模型消息需鉴权 |
 | 9 | message delta 与 tool events 显示到 Renderer | [~] | 映射已接；真流依赖成功 prompt |
-| 10 | Stop，并验证 Bash 子进程树被终止 | [ ] | abort API 已调；进程树验证未做 |
-| 11 | 准备测试 React 项目；Agent 改组件并跑测试 | [ ] | fixtures 占位不足 |
-| 12 | packaged macOS build，验证 Pi 仍能跑 | [ ] | |
-| 13 | 记录技术验证结果；SDK vs Pi RPC | [~] | 日志初稿有；结论未定 |
+| 10 | Stop，并验证 Bash 子进程树被终止 | [~] | process-tree 单测 + abort/abortBash；集成验证未完 |
+| 11 | 准备测试 React 项目；Agent 改组件并跑测试 | [~] | fixture baseline 可跑；Agent 实跑未做 |
+| 12 | packaged macOS build，验证 Pi 仍能跑 | [~] | `package:dir` 产出 app；GUI 手测待做 |
+| 13 | 记录技术验证结果；SDK vs Pi RPC | [~] | 倾向 SDK；最终结论待 GUI 手测 |
 
 ### 4.2 技术验证通过后（§18.1）
 
@@ -498,14 +498,14 @@ docs/（见 §6.1）                     [~] 见下表
 1. [x] 对齐文档与 TODOS  
 2. [x] 锁定 Pi SDK 0.82.0 + ADR  
 3. [x] `PiAgentRuntime` + Main createSession 接线  
-4. [~] 第一条真实消息（需配置 Pi 凭据后 GUI 验证）  
-5. [ ] 验证 Stop / Abort 与 Bash 子进程树  
-6. [ ] 补齐 fixture；跑一次真改码任务  
-7. [ ] Electron Builder/Forge；packaged macOS ARM64 + Pi  
-8. [~] tech-validation 日志；结论待 packaged  
+4. [~] 第一条真实消息（env key 水合 + Auth 面板；**GUI 真 prompt 待用户密钥**）  
+5. [~] Abort / 进程树：`killProcessTree` 单测通过；Pi abortBash 已调  
+6. [~] Fixture `react-button-label` 可跑 baseline 测试；真 Agent 改码未跑  
+7. [~] electron-builder mac-arm64 **dir** 打包成功；packaged GUI 手测 / Pi 加载未自动化  
+8. [~] tech-validation 日志更新；倾向继续 SDK  
 9. [ ] 关闭 M1 后进入 §18.1 / M3  
 
-**立即下一刀：** 配置至少一个 Provider 凭据 → `pnpm dev` 打开 fixture 项目 → New session → Send → 确认流式 delta/tool；然后做 abort 进程树测试。
+**立即下一刀：** 设置 `OPENAI_API_KEY`（或其它）→ `pnpm dev` → 打开 fixture → 真改码任务 → 手测 packaged app。
 
 ---
 
@@ -540,6 +540,7 @@ docs/（见 §6.1）                     [~] 见下表
 |------|------|
 | 2026-07-24 | 通读总纲全文后创建本文件；归档会话 todos；纠正 Fake≠Pi 的进度误标；定义 M1 有序队列 |
 | 2026-07-24 | 锁定 Pi `@earendil-works/*@0.82.0`；实现 PiAgentRuntime + 事件映射 + Main 默认真 Pi；smoke/tests 绿；更新 M1 进度为部分完成 |
+| 2026-07-24 | process-tree 单测；env 凭据水合 + Auth IPC；react-button-label fixture；electron-builder mac-arm64 dir 打包成功 |
 
 ---
 

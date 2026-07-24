@@ -2,7 +2,12 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createAgentRuntime, PI_SDK_PACKAGES } from '@pi-desktop/agent-pi';
+import {
+  createAgentRuntime,
+  describeAuthSources,
+  PI_SDK_PACKAGES,
+  type ProviderAuthSummary,
+} from '@pi-desktop/agent-pi';
 import type { AgentRuntime } from '@pi-desktop/agent-domain';
 import {
   IpcChannels,
@@ -99,6 +104,7 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
   try {
     switch (cmd.method) {
       case 'app.getInfo': {
+        const auth = await readAuthStatus(agent);
         return okResult({
           name: 'Pi Agent Desktop',
           version: app.getVersion(),
@@ -107,6 +113,7 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
           piSdk: `${PI_SDK_PACKAGES.codingAgent}@${PI_SDK_PACKAGES.version}`,
           runtimeMode:
             process.env['PI_DESKTOP_FAKE_RUNTIME'] === '1' ? 'fake' : 'pi',
+          authProviders: describeAuthSources(auth),
         });
       }
       case 'project.open': {
@@ -167,6 +174,9 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
       case 'agent.listModels': {
         return okResult(await agent.listModels());
       }
+      case 'agent.authStatus': {
+        return okResult(await readAuthStatus(agent));
+      }
       default: {
         const _exhaustive: never = cmd;
         return errResult('UNHANDLED', `Unhandled command ${JSON.stringify(_exhaustive)}`);
@@ -199,3 +209,15 @@ app.on('before-quit', () => {
   void runtime?.dispose();
   runtime = null;
 });
+
+async function readAuthStatus(agent: AgentRuntime): Promise<ProviderAuthSummary[]> {
+  if (typeof agent.getAuthStatus === 'function') {
+    const rows = await agent.getAuthStatus();
+    return rows.map((r) => ({
+      providerId: r.providerId,
+      hasAuth: r.hasAuth,
+      source: (r.source as ProviderAuthSummary['source']) ?? 'none',
+    }));
+  }
+  return [];
+}

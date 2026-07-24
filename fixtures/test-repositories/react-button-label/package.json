@@ -1,9 +1,10 @@
 {
   "name": "react-button-label-fixture",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
+  "description": "Fixed eval fixture: rename primary button label and update tests (plan §13.2)",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test test/**/*.test.js"
   }
 }

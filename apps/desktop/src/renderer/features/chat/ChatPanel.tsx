@@ -60,6 +60,10 @@ export function ChatPanel() {
       });
     } catch (err) {
       console.error(err);
+      useAgentStreamStore.setState({
+        status: 'failed',
+        error: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setSending(false);
     }

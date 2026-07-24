@@ -41,6 +41,10 @@ export interface AgentRuntime {
   setModel(sessionId: string, model: ModelRef): Promise<void>;
   approve(requestId: string, decision: ApprovalDecision): Promise<void>;
   listModels(): Promise<Array<{ providerId: string; modelId: string; displayName: string }>>;
+  /** Optional: which providers currently have usable credentials (no secrets). */
+  getAuthStatus?(): Promise<
+    Array<{ providerId: string; hasAuth: boolean; source: string }>
+  >;
   subscribe(listener: AgentEventListener): () => void;
   dispose(): Promise<void>;
 }

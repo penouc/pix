@@ -44,11 +44,16 @@ pnpm dev
 
 | 命令 | 说明 |
 |------|------|
-| `pnpm dev` | 启动 Electron + Vite 开发模式 |
+| `pnpm dev` | 启动 Electron + Vite 开发模式（默认真实 Pi） |
+| `PI_DESKTOP_FAKE_RUNTIME=1 pnpm dev` | 离线 Fake Runtime |
 | `pnpm typecheck` | 全仓类型检查 |
 | `pnpm test` | Vitest |
+| `pnpm test:fixture` | 固定评测 fixture 基线测试 |
 | `pnpm lint` | ESLint |
 | `pnpm build` | 构建 packages + desktop |
+| `pnpm package:dir` | macOS arm64 目录安装包（electron-builder） |
+
+真模型调用：启动前导出 `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `XAI_API_KEY` 等；右侧 Auth 行显示已就绪 provider。
 
 ## 架构约束（摘要）
 

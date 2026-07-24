@@ -17,33 +17,42 @@
 
 | Item | Status | Evidence |
 |------|--------|----------|
-| Pi SDK loads in Electron Main (dev) | [~] | createSession smoke test + wired in main; full GUI path TBD |
-| Pi SDK loads in packaged Electron | [ ] | |
-| ESM/CJS / dynamic deps / resources | [~] | main externalizes `@earendil-works/*` |
+| Pi SDK loads in Electron Main (dev) | [~] | createSession smoke test + Main wiring; GUI real prompt needs API key |
+| Pi SDK loads in packaged Electron | [~] | `pnpm package:dir` produces `release/mac-arm64/Pi Agent Desktop.app` with Pi in asar/unpacked; GUI launch smoke not yet automated |
+| ESM/CJS / dynamic deps / resources | [~] | main externalizes `@earendil-works/*`; builder packs deps |
 | Session storage path controllable | [x] | `agentDir` under `app.getPath('userData')/pi-agent` |
-| Tool events for permission inputs | [~] | tool.requested includes name + inputSummary |
-| Abort kills bash process tree | [ ] | abort() + abortBash() called; tree verification pending |
+| Tool events for permission inputs | [~] | tool.requested includes name + inputSummary + risk heuristic |
+| Abort kills bash process tree | [~] | `killProcessTree` unit tests pass; Pi abort/abortBash on session; full agent-bash integration TBD |
 | No orphan processes on quit | [~] | dispose on before-quit |
-| Provider login + model list + real call | [ ] | listModels offline catalog ok; real call needs auth |
+| Provider login + model list + real call | [~] | env key hydrate + Auth status IPC; real LLM call needs user keys |
 | Version locked + upgrade steps | [x] | ADR-0002 |
 
 ## Route decision (SDK vs Pi RPC)
 
 | Option | Status |
 |--------|--------|
-| Continue in-process SDK | **Default / in progress** |
-| Pi RPC stdin/stdout sidecar | Backup if packaged native/ESM fails |
+| Continue in-process SDK | **Default / still preferred** — packaged dir build succeeded with Pi deps |
+| Pi RPC stdin/stdout sidecar | Backup if packaged runtime fails on GUI smoke |
 
-Decision: pending packaged build evidence.
+Decision: **continue SDK** pending manual GUI smoke of packaged app + one authenticated prompt.
 
 ## How to try
 
 ```bash
 pnpm -r --filter './packages/*' build
+# Real Pi (set at least one provider key):
+export OPENAI_API_KEY=...   # or ANTHROPIC_API_KEY / XAI_API_KEY / ...
 pnpm dev
-# Open a local project path → New session → Send message
-# Without Pi credentials, expect run.failed with auth-related message (still proves IPC + adapter).
+# Open fixtures/test-repositories/react-button-label (run setup-git.sh first for Git trust)
+# New session → send task from fixture README
 
 # Offline UI only:
 PI_DESKTOP_FAKE_RUNTIME=1 pnpm dev
+
+# Process-tree unit tests:
+pnpm test -- packages/agent-pi/src/process-tree.test.ts
+
+# Packaged macOS arm64 dir:
+pnpm package:dir
+# open apps/desktop/release/mac-arm64/Pi\ Agent\ Desktop.app
 ```

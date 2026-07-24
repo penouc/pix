@@ -5,3 +5,9 @@ export { createAgentRuntime } from './factory.js';
 export type { AgentRuntimeFactoryOptions } from './factory.js';
 export { PI_SDK_PACKAGES } from './versions.js';
 export { mapPiSessionEvent, extractTextContent } from './event-mapper.js';
+export { killProcessTree, isAlive, listDescendantPids } from './process-tree.js';
+export {
+  hydrateRuntimeAuthFromEnv,
+  describeAuthSources,
+  type ProviderAuthSummary,
+} from './credentials.js';

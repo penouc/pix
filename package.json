@@ -18,6 +18,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:fixture": "node --test fixtures/test-repositories/react-button-label/test/**/*.test.js",
+    "package:dir": "pnpm build && pnpm --filter @pi-desktop/desktop package:dir",
     "clean": "pnpm -r exec rm -rf dist node_modules && rm -rf node_modules"
   },
   "pnpm": {

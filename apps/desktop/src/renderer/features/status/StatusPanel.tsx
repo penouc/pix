@@ -73,12 +73,15 @@ export function StatusPanel() {
           <Row label="Electron" value={appInfo.data?.electron ?? '…'} />
           <Row label="Runtime" value={appInfo.data?.runtimeMode ?? '…'} />
           <Row label="Pi SDK" value={appInfo.data?.piSdk ?? '…'} />
+          <Row label="Auth" value={appInfo.data?.authProviders ?? '…'} />
         </section>
 
         <section className="rounded-xl border border-border bg-surface-raised p-3 text-xs leading-relaxed text-muted">
-          M1 uses real <code className="text-accent">PiAgentRuntime</code> by default. Set{' '}
-          <code className="text-accent">PI_DESKTOP_FAKE_RUNTIME=1</code> for offline Fake. Provider
-          login still required for model calls (Pi credentials under app userData).
+          默认 <code className="text-accent">PiAgentRuntime</code>。离线 UI：
+          <code className="text-accent"> PI_DESKTOP_FAKE_RUNTIME=1</code>。真模型调用请在启动环境中设置
+          对应 API Key（如 <code className="text-accent">OPENAI_API_KEY</code> /
+          <code className="text-accent">ANTHROPIC_API_KEY</code> /
+          <code className="text-accent">XAI_API_KEY</code>），Auth 行会显示已就绪 provider。
         </section>
       </div>
     </div>

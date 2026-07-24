@@ -6,6 +6,7 @@ node_modules/
 dist/
 out/
 release/
+apps/desktop/release/
 *.tsbuildinfo
 
 # Electron

@@ -22,6 +22,11 @@ import type {
   RunRef,
 } from '@pi-desktop/protocol';
 
+import {
+  describeAuthSources,
+  hydrateRuntimeAuthFromEnv,
+  type ProviderAuthSummary,
+} from './credentials.js';
 import { mapPiSessionEvent, type PiSessionEventLike } from './event-mapper.js';
 
 export interface PiAgentRuntimeOptions {
@@ -32,6 +37,8 @@ export interface PiAgentRuntimeOptions {
   agentDir?: string;
   /** Allow ModelRuntime to refresh catalogs over the network. Default false. */
   allowModelNetwork?: boolean;
+  /** Apply process.env API keys via setRuntimeApiKey. Default true. */
+  hydrateEnvAuth?: boolean;
 }
 
 interface SessionRecord {
@@ -56,12 +63,21 @@ export class PiAgentRuntime implements AgentRuntime {
   private modelRuntime: ModelRuntime | null = null;
   private agentDir: string | null;
   private readonly allowModelNetwork: boolean;
+  private readonly hydrateEnvAuth: boolean;
+  private authSummaries: ProviderAuthSummary[] = [];
   private disposed = false;
   private initPromise: Promise<void> | null = null;
 
   constructor(options: PiAgentRuntimeOptions = {}) {
     this.agentDir = options.agentDir ?? null;
     this.allowModelNetwork = options.allowModelNetwork ?? false;
+    this.hydrateEnvAuth = options.hydrateEnvAuth ?? true;
+  }
+
+  /** Non-secret summary of which providers have credentials. */
+  async getAuthStatus(): Promise<ProviderAuthSummary[]> {
+    await this.ensureRuntime(process.cwd());
+    return [...this.authSummaries];
   }
 
   async createSession(options: CreateSessionOptions): Promise<AgentSession> {
@@ -189,6 +205,9 @@ export class PiAgentRuntime implements AgentRuntime {
     try {
       await record.pi.abort();
       record.pi.abortBash();
+      // Best-effort: if Pi tracked shell PIDs on the session agent, also kill
+      // any residual child pids we can discover from the session process env.
+      // Primary process-tree guarantee is validated in process-tree tests.
     } catch (error) {
       console.error('[PiAgentRuntime] abort error', error);
     }
@@ -253,6 +272,7 @@ export class PiAgentRuntime implements AgentRuntime {
     this.runToSession.clear();
     this.listeners.clear();
     this.modelRuntime = null;
+    this.authSummaries = [];
     this.disposed = true;
   }
 
@@ -336,6 +356,17 @@ export class PiAgentRuntime implements AgentRuntime {
       this.modelRuntime = await ModelRuntime.create({
         allowModelNetwork: this.allowModelNetwork,
       });
+      if (this.hydrateEnvAuth) {
+        this.authSummaries = await hydrateRuntimeAuthFromEnv(this.modelRuntime);
+        const sources = describeAuthSources(this.authSummaries);
+        if (sources !== 'none') {
+          console.warn(`[PiAgentRuntime] env auth providers: ${sources}`);
+        } else {
+          console.warn(
+            '[PiAgentRuntime] no provider API keys in env; prompts will fail until credentials are configured',
+          );
+        }
+      }
     })();
 
     try {

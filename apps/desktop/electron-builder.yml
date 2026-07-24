@@ -1,0 +1,41 @@
+appId: dev.pi.agent.desktop
+productName: Pi Agent Desktop
+copyright: Copyright © Pi Desktop
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+
+# Keep native / large Pi deps outside asar where possible.
+asar: true
+asarUnpack:
+  - "**/*.node"
+  - "**/node_modules/@earendil-works/**"
+  - "**/node_modules/@silvia-odwyer/**"
+
+extraMetadata:
+  main: dist-electron/main/index.js
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: dir
+      arch:
+        - arm64
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+
+linux:
+  target:
+    - target: dir
+      arch:
+        - x64
+
+npmRebuild: false
+nodeGypRebuild: false

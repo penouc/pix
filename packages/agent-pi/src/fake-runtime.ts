@@ -152,6 +152,10 @@ export class FakeAgentRuntime implements AgentRuntime {
     ];
   }
 
+  async getAuthStatus() {
+    return [{ providerId: 'fake', hasAuth: true, source: 'runtime' }];
+  }
+
   subscribe(listener: AgentEventListener): () => void {
     this.listeners.add(listener);
     return () => {
