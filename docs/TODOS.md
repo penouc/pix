@@ -128,7 +128,7 @@ docs/（见 §6.1）                     [~] 见下表
 | agent-runtime-contract.md | [x] 摘要版 |
 | ipc-protocol.md | [x] 摘要版 |
 | security-model.md | [ ] |
-| data-model.md | [ ] |
+| data-model.md | [x] SQLite sessions 表 + migrations |
 | checkpoint-semantics.md | [ ] |
 | acceptance-tests.md | [x] fixture + packaged 路径 |
 | decisions/（Electron、Pi、Pierre…） | [~] 仅 ADR-0001 |
@@ -253,7 +253,7 @@ docs/（见 §6.1）                     [~] 见下表
 | ID | Todo | 状态 |
 |----|------|------|
 | M3-1 | 选择项目、最近项目、Git 检测、项目信任 | [~] Browse + recent 持久化 + Trust/Revoke UI；策略仍简化 |
-| M3-2 | Session 创建/恢复/重命名/归档 | [~] JSON SessionStore 创建/list/archive；Pi 运行时会话重启不恢复 |
+| M3-2 | Session 创建/恢复/重命名/归档 | [~] **SQLite** SessionRepository 创建/list/archive/rename；Pi 运行时会话重启不恢复 |
 | M3-3 | Pi Provider/Model；至少一个真实登录闭环 | [~] env key + 模型下拉；无登录 UX |
 | M3-4 | 密钥不进 Renderer / DB 明文 / 日志 | [~] key 不进 Renderer；env 仍在 Main 进程环境 |
 
@@ -365,7 +365,7 @@ docs/（见 §6.1）                     [~] 见下表
 ### 4.2 技术验证通过后（§18.1）
 
 - [~] Project、Workspace Trust、最近项目（Trust UI + recent 已有）  
-- [~] Session Repository（JSON 版）；SQLite migration 未做  
+- [x] Session Repository + SQLite migration（`@pi-desktop/database` + `node:sqlite`）  
 - [~] Provider/Model 选择（下拉 + env key）；安全凭据存储未做  
 - [~] Agent Chat、Tool Cards、Event Batching（delta 批处理已有）  
 - [ ] Permission Pipeline + Approval Dialog  
@@ -505,7 +505,7 @@ docs/（见 §6.1）                     [~] 见下表
 8. [~] tech-validation：继续 SDK；默认用 OpenCode Go 凭据（`~/.local/share/opencode/auth.json`）  
 9. [~] 已切入 §18.1 / M3 部分；M1 核心技术证据基本齐，packaged GUI 手测可选  
 
-**立即下一刀：** SQLite Session Repository；或 M5 Permission Pipeline 骨架。
+**立即下一刀：** M5 Permission Pipeline 骨架；或 Project 表迁入 SQLite。
 
 ---
 
@@ -544,6 +544,7 @@ docs/（见 §6.1）                     [~] 见下表
 | 2026-07-24 | 自动选鉴权模型、Browse 选目录、最近项目持久化、模型下拉、packaged asar 冒烟脚本、acceptance docs |
 | 2026-07-24 | Workspace Trust、SessionStore JSON 持久化、delta rAF 批处理、smoke:runtime headless |
 | 2026-07-24 | OpenCode Go 鉴权（auth.json）；`pnpm eval:fixture` 真改码 PASS（kimi-k2.7-code） |
+| 2026-07-24 | `@pi-desktop/database` SQLite SessionRepository（node:sqlite + migrations + JSON 迁移） |
 
 ---
 

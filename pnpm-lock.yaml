@@ -59,6 +59,9 @@ importers:
       '@pi-desktop/agent-pi':
         specifier: workspace:*
         version: link:../../packages/agent-pi
+      '@pi-desktop/database':
+        specifier: workspace:*
+        version: link:../../packages/database
       '@pi-desktop/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -151,6 +154,19 @@ importers:
       '@pi-desktop/agent-domain':
         specifier: workspace:*
         version: link:../agent-domain
+      '@pi-desktop/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.1
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
+
+  packages/database:
+    dependencies:
       '@pi-desktop/protocol':
         specifier: workspace:*
         version: link:../protocol

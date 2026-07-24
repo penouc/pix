@@ -47,3 +47,6 @@ pnpm-debug.log*
 # Pi / local agent state (never commit credentials)
 .pi-desktop/
 **/.pi-desktop/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

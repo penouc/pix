@@ -573,7 +573,7 @@ rememberable: boolean;
 
 ## 18.1 技术验证通过后的下一批任务
 - [~] 实现 Project、Workspace Trust 和最近项目。
-- [~] 实现 Session Repository 与 SQLite migration。（JSON 版有；SQLite 未做）
+- [x] 实现 Session Repository 与 SQLite migration。（`@pi-desktop/database`）
 - [~] 实现 Provider/Model 选择和安全凭据存储。（OpenCode Go + 下拉；Keychain 未做）
 - [~] 实现完整 Agent Chat、Tool Cards 和 Event Batching。
 - [ ] 实现 Permission Pipeline 和 Approval Dialog。

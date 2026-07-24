@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "pnpm --filter @pi-desktop/desktop dev",
     "build": "pnpm -r --filter './packages/*' build && pnpm --filter @pi-desktop/desktop build",
+    "build:packages": "pnpm -r --filter './packages/*' build",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
