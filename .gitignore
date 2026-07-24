@@ -42,3 +42,7 @@ tmp/
 npm-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Pi / local agent state (never commit credentials)
+.pi-desktop/
+**/.pi-desktop/

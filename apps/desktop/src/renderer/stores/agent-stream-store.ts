@@ -26,6 +26,8 @@ export interface RunUsage {
 
 interface AgentStreamState {
   activeRunId: string | null;
+  activeProjectId: string | null;
+  activeSessionId: string | null;
   status:
     | 'idle'
     | 'starting'
@@ -42,20 +44,36 @@ interface AgentStreamState {
   lastSequenceByRun: Record<string, number>;
   appendUserMessage: (text: string) => void;
   resetSessionView: () => void;
+  setScope: (projectId: string | null, sessionId: string | null) => void;
   applyEvent: (event: DesktopAgentEvent) => void;
   setStopping: (runId: string) => void;
 }
 
 function shouldAccept(
-  lastSequenceByRun: Record<string, number>,
+  state: Pick<
+    AgentStreamState,
+    'lastSequenceByRun' | 'activeRunId' | 'activeProjectId' | 'activeSessionId'
+  >,
   event: DesktopAgentEvent,
 ): boolean {
-  const last = lastSequenceByRun[event.runId] ?? -1;
+  // Scope filter (plan §8): only current project/session; allow new run.started anytime.
+  if (state.activeProjectId && event.projectId !== state.activeProjectId) return false;
+  if (state.activeSessionId && event.sessionId !== state.activeSessionId) return false;
+  if (
+    state.activeRunId &&
+    event.runId !== state.activeRunId &&
+    event.type !== 'run.started'
+  ) {
+    return false;
+  }
+  const last = state.lastSequenceByRun[event.runId] ?? -1;
   return event.sequence > last;
 }
 
 export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
   activeRunId: null,
+  activeProjectId: null,
+  activeSessionId: null,
   status: 'idle',
   messages: [],
   tools: [],
@@ -89,13 +107,17 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
     });
   },
 
+  setScope: (projectId, sessionId) => {
+    set({ activeProjectId: projectId, activeSessionId: sessionId });
+  },
+
   setStopping: (runId) => {
     set({ status: 'stopping', activeRunId: runId });
   },
 
   applyEvent: (event) => {
     const state = get();
-    if (!shouldAccept(state.lastSequenceByRun, event)) {
+    if (!shouldAccept(state, event)) {
       return;
     }
 
@@ -108,6 +130,8 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       case 'run.started':
         set({
           activeRunId: event.runId,
+          activeProjectId: event.projectId,
+          activeSessionId: event.sessionId,
           status: 'running',
           tools: [],
           usage: null,

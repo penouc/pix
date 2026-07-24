@@ -22,7 +22,26 @@ export default defineConfig({
           build: {
             outDir: 'dist-electron/main',
             rollupOptions: {
-              external: ['electron'],
+              // Keep Pi SDK + native deps out of the bundle (plan §7.2 packaging).
+              external: [
+                'electron',
+                /^@earendil-works\//,
+                /^@silvia-odwyer\//,
+                'diff',
+                'glob',
+                'jiti',
+                'yaml',
+                'chalk',
+                'ignore',
+                'semver',
+                'undici',
+                'typebox',
+                'minimatch',
+                'cross-spawn',
+                'highlight.js',
+                'hosted-git-info',
+                'proper-lockfile',
+              ],
             },
           },
         },

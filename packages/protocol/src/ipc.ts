@@ -34,6 +34,8 @@ export const AppInfoSchema = z.object({
   version: z.string(),
   platform: z.string(),
   electron: z.string(),
+  piSdk: z.string().optional(),
+  runtimeMode: z.enum(['pi', 'fake']).optional(),
 });
 export type AppInfo = z.infer<typeof AppInfoSchema>;
 

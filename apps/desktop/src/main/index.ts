@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createAgentRuntime } from '@pi-desktop/agent-pi';
+import { createAgentRuntime, PI_SDK_PACKAGES } from '@pi-desktop/agent-pi';
 import type { AgentRuntime } from '@pi-desktop/agent-domain';
 import {
   IpcChannels,
@@ -72,8 +72,17 @@ function broadcastEvent(event: unknown): void {
 
 function ensureRuntime(): AgentRuntime {
   if (!runtime) {
-    runtime = createAgentRuntime({ forceFake: true });
+    // Real Pi by default (M1). Set PI_DESKTOP_FAKE_RUNTIME=1 for offline UI.
+    const agentDir = path.join(app.getPath('userData'), 'pi-agent');
+    runtime = createAgentRuntime({
+      agentDir,
+      allowModelNetwork: false,
+      forceFake: process.env['PI_DESKTOP_FAKE_RUNTIME'] === '1',
+    });
     runtime.subscribe((event) => broadcastEvent(event));
+    console.warn(
+      `[main] AgentRuntime ready (Pi ${PI_SDK_PACKAGES.codingAgent}@${PI_SDK_PACKAGES.version}, agentDir=${agentDir})`,
+    );
   }
   return runtime;
 }
@@ -95,6 +104,9 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
           version: app.getVersion(),
           platform: process.platform,
           electron: process.versions.electron,
+          piSdk: `${PI_SDK_PACKAGES.codingAgent}@${PI_SDK_PACKAGES.version}`,
+          runtimeMode:
+            process.env['PI_DESKTOP_FAKE_RUNTIME'] === '1' ? 'fake' : 'pi',
         });
       }
       case 'project.open': {

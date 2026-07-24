@@ -71,11 +71,14 @@ export function StatusPanel() {
           <Row label="Version" value={appInfo.data?.version ?? '…'} />
           <Row label="Platform" value={appInfo.data?.platform ?? '…'} />
           <Row label="Electron" value={appInfo.data?.electron ?? '…'} />
+          <Row label="Runtime" value={appInfo.data?.runtimeMode ?? '…'} />
+          <Row label="Pi SDK" value={appInfo.data?.piSdk ?? '…'} />
         </section>
 
         <section className="rounded-xl border border-border bg-surface-raised p-3 text-xs leading-relaxed text-muted">
-          Next milestones: wire real Pi SDK in <code className="text-accent">agent-pi</code>, Project
-          trust UI, SQLite sessions, permission pipeline, and @pierre/diffs review.
+          M1 uses real <code className="text-accent">PiAgentRuntime</code> by default. Set{' '}
+          <code className="text-accent">PI_DESKTOP_FAKE_RUNTIME=1</code> for offline Fake. Provider
+          login still required for model calls (Pi credentials under app userData).
         </section>
       </div>
     </div>

@@ -56,7 +56,6 @@ export function ChatPanel() {
         params: {
           sessionId: session.id,
           text,
-          model: { providerId: 'fake', modelId: 'fake-demo' },
         },
       });
     } catch (err) {

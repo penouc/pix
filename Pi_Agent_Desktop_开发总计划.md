@@ -356,36 +356,36 @@ rememberable: boolean;
 - [x] 确认 macOS 优先、单 Agent、Git 项目优先。
 - [x] 冻结 MVP 主路径和非目标清单。
 - [x] 创建仓库、pnpm workspace、代码规范与 CI 基线。
-- [x] 建立 docs/、ADR、fixtures/test-repositories。
+- [ ] 建立 docs/、ADR、fixtures/test-repositories。（骨架有，§6.1 文档集与 fixtures 未齐）
 - [ ] 准备固定的真实任务评测集。
 
 > **完成门槛：** 仓库具备明确范围、可运行的空壳工程和可重复的验收输入。
 >
-> **进度（2026-07-24）：** monorepo、CI、docs、ADR、fixtures 骨架已落地；评测集仅有 `react-button-label` 占位。
+> **进度台账：** 见 [`docs/TODOS.md`](./docs/TODOS.md)。M0 **未关闭**。
 
 
 ## M1：Pi SDK + Electron 技术验证
 - [x] 初始化 Electron、React、TypeScript、Vite。
-- [ ] 在 Main Process 中创建 Pi Session。
-- [x] 打通 Renderer → Typed IPC → Pi → Event Stream。
-- [x] 支持发送消息、展示流式文本、Tool Event 和 Stop。
+- [ ] 在 Main Process 中创建 Pi Session。（适配层与 smoke 已通；GUI + 鉴权闭环待确认）
+- [ ] 打通 Renderer → Typed IPC → Pi → Event Stream。（已接线；真流依赖 Provider 登录）
+- [ ] 支持发送消息、展示流式文本、Tool Event 和 Stop。
 - [ ] 完成 dev 与 packaged build 验证。
 - [ ] 在测试仓库中完成一次真实代码修改和测试运行。
 
 > **完成门槛：** 不打开 Pi TUI，也能从桌面窗口完成一次真实编码任务。
 >
-> **进度（2026-07-24）：** Electron 壳 + Zod IPC + FakeAgentRuntime 流式演示已通；真实 Pi Session 与 packaged build 待做。
+> **进度台账：** 见 [`docs/TODOS.md`](./docs/TODOS.md)。已锁 Pi `0.82.0` 并实现 `PiAgentRuntime`；**M1 门槛仍未关闭**。
 
 
 ## M2：领域契约与状态机
 - [ ] 完成 AgentRuntime、PiAgentRuntime 和 FakeAgentRuntime。
 - [x] 定义 AgentRunState、DesktopAgentEvent 和 AgentError。
-- [x] 事件带齐作用域与顺序字段，处理重复和迟到事件。
-- [x] 完成 Runtime、IPC 和状态机契约测试。
-
-> **进度（2026-07-24）：** AgentRuntime 接口 + FakeAgentRuntime + 状态机/协议测试已完成；PiAgentRuntime（真实 SDK）待接入。
+- [ ] 事件带齐作用域与顺序字段，处理重复和迟到事件。（缺 project/session/run 过滤）
+- [ ] 完成 Runtime、IPC 和状态机契约测试。（仅有基础测试）
 
 > **完成门槛：** Renderer 不导入 Pi 类型；乱序、取消和失败状态可以确定性复现。
+>
+> **进度台账：** 见 [`docs/TODOS.md`](./docs/TODOS.md)。
 
 
 ## M3：Project、Session 与 Provider
@@ -558,18 +558,18 @@ rememberable: boolean;
 - [x] 创建 pi-desktop 仓库和 pnpm workspace。
 - [x] 配置 TypeScript、ESLint、Prettier、Vitest 和基础 CI。
 - [x] 创建 Electron Main、Preload、React Renderer 最小工程。
-- [x] 安装 shadcn/ui，建立基础主题 Token 和三栏工作台骨架。
-- [ ] 锁定 Pi SDK 版本并创建 agent-pi package。
+- [ ] 安装 shadcn/ui，建立基础主题 Token 和三栏工作台骨架。（仅有最小组件，非完整 shadcn 体系）
+- [x] 锁定 Pi SDK 版本并创建 agent-pi package。（`@earendil-works/*@0.82.0`，见 ADR-0002）
 - [x] 定义 AgentRuntime、DesktopAgentEvent、AgentRunState 和 AgentError。
 - [x] 定义 protocol package，建立 Typed IPC + Zod。
-- [ ] 在 Main Process 创建 Pi Session 并发送第一条消息。
-- [x] 把 message delta 和 tool events 显示到 Renderer。
+- [ ] 在 Main Process 创建 Pi Session 并发送第一条消息。（Session 创建已通；真模型消息待鉴权）
+- [ ] 把 message delta 和 tool events 显示到 Renderer。（映射已接；真流待鉴权）
 - [ ] 实现 Stop，并验证 Bash 子进程树被终止。
 - [ ] 准备测试 React 项目，要求 Agent 修改组件并运行测试。
 - [ ] 生成 packaged macOS build，验证 Pi SDK 仍能运行。
 - [ ] 记录技术验证结果，决定是否继续 SDK 路线或切换 Pi RPC 备用路线。
 
-> **说明：** `agent-pi` 包与 FakeAgentRuntime 已创建；Stop 在 Fake 路径可用，Bash 进程树终止需真实 Pi/Shell 集成后验证。
+> **执行台账：** 全部勾选状态以 [`docs/TODOS.md`](./docs/TODOS.md) 为准。
 
 ## 18.1 技术验证通过后的下一批任务
 - [ ] 实现 Project、Workspace Trust 和最近项目。

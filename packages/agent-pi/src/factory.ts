@@ -1,33 +1,34 @@
 import type { AgentRuntime } from '@pi-desktop/agent-domain';
 
 import { FakeAgentRuntime } from './fake-runtime.js';
+import { PiAgentRuntime, type PiAgentRuntimeOptions } from './pi-runtime.js';
 
-export interface AgentRuntimeFactoryOptions {
-  /** Use FakeAgentRuntime when true or when PI_DESKTOP_FAKE_RUNTIME=1. */
+export interface AgentRuntimeFactoryOptions extends PiAgentRuntimeOptions {
+  /**
+   * Force FakeAgentRuntime.
+   * Default: real Pi when available unless PI_DESKTOP_FAKE_RUNTIME=1.
+   */
   forceFake?: boolean;
 }
 
 /**
- * Create the desktop AgentRuntime.
+ * Single switch point for desktop AgentRuntime (plan §7.1).
  *
- * Real Pi SDK adapter will be wired here after M1 tech validation.
- * Default remains FakeAgentRuntime so UI/E2E work offline without model cost.
+ * - `PI_DESKTOP_FAKE_RUNTIME=1` → FakeAgentRuntime
+ * - `forceFake: true` → FakeAgentRuntime
+ * - otherwise → PiAgentRuntime (locked SDK 0.82.0)
  */
 export function createAgentRuntime(options: AgentRuntimeFactoryOptions = {}): AgentRuntime {
-  const useFake =
-    options.forceFake !== false &&
-    (options.forceFake === true ||
-      process.env['PI_DESKTOP_FAKE_RUNTIME'] !== '0');
+  const envFake =
+    process.env['PI_DESKTOP_FAKE_RUNTIME'] === '1' ||
+    process.env['PI_DESKTOP_FAKE_RUNTIME'] === 'true';
 
-  // Pi SDK integration lands once package name + version are locked (plan §7.1).
-  // Factory is the single switch point — PiAgentRuntime will replace the false branch.
-  if (useFake) {
+  if (options.forceFake === true || envFake) {
     return new FakeAgentRuntime();
   }
 
-  // Real adapter not yet implemented; fall back to fake with a clear warning.
-  console.warn(
-    '[agent-pi] PiAgentRuntime is not implemented yet; using FakeAgentRuntime. Set forceFake/PI_DESKTOP_FAKE_RUNTIME.',
-  );
-  return new FakeAgentRuntime();
+  return new PiAgentRuntime({
+    agentDir: options.agentDir,
+    allowModelNetwork: options.allowModelNetwork,
+  });
 }

@@ -1,5 +1,7 @@
 # Architecture
 
+> 执行进度与 todos：[`TODOS.md`](./TODOS.md) · 总纲：[`../Pi_Agent_Desktop_开发总计划.md`](../Pi_Agent_Desktop_开发总计划.md)
+
 ## Process boundaries
 
 ```text

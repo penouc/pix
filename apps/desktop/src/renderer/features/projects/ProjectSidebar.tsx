@@ -15,6 +15,7 @@ export function ProjectSidebar() {
   const setProject = useWorkspaceStore((s) => s.setProject);
   const setSession = useWorkspaceStore((s) => s.setSession);
   const resetSessionView = useAgentStreamStore((s) => s.resetSessionView);
+  const setScope = useAgentStreamStore((s) => s.setScope);
   const [pathInput, setPathInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +31,7 @@ export function ProjectSidebar() {
       });
       setProject(opened);
       resetSessionView();
+      setScope(opened.id, null);
       setPathInput(opened.path);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -48,11 +50,11 @@ export function ProjectSidebar() {
         params: {
           projectId: project.id,
           title: 'Coding session',
-          model: { providerId: 'fake', modelId: 'fake-demo' },
         },
       });
       setSession(created);
       resetSessionView();
+      setScope(project.id, created.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
