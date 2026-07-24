@@ -252,10 +252,10 @@ docs/（见 §6.1）                     [~] 见下表
 
 | ID | Todo | 状态 |
 |----|------|------|
-| M3-1 | 选择项目、最近项目、Git 检测、项目信任 | [~] Browse 选目录 + Git 检测 + recent 持久化；信任 UX 仍简化 |
-| M3-2 | Session 创建/恢复/重命名/归档 | [~] 仅内存 create |
-| M3-3 | Pi Provider/Model；至少一个真实登录闭环 | [ ] |
-| M3-4 | 密钥不进 Renderer / DB 明文 / 日志 | [ ] |
+| M3-1 | 选择项目、最近项目、Git 检测、项目信任 | [~] Browse + recent 持久化 + Trust/Revoke UI；策略仍简化 |
+| M3-2 | Session 创建/恢复/重命名/归档 | [~] JSON SessionStore 创建/list/archive；Pi 运行时会话重启不恢复 |
+| M3-3 | Pi Provider/Model；至少一个真实登录闭环 | [~] env key + 模型下拉；无登录 UX |
+| M3-4 | 密钥不进 Renderer / DB 明文 / 日志 | [~] key 不进 Renderer；env 仍在 Main 进程环境 |
 
 ---
 
@@ -267,7 +267,7 @@ docs/（见 §6.1）                     [~] 见下表
 |----|------|------|
 | M4-1 | Chat、Composer、流式消息、Tool Call 卡片 | [~] 最小可用 |
 | M4-2 | Stop、Retry、Follow-up Queue、错误恢复 | [~] 仅 Fake Stop |
-| M4-3 | TanStack Query + Zustand + **事件批处理** | [~] 有 Q/Z；无批处理 |
+| M4-3 | TanStack Query + Zustand + **事件批处理** | [~] Q/Z + message.delta rAF 批处理 |
 | M4-4 | 模型、上下文、Token、成本、运行状态展示 | [~] 右侧简陋面板 |
 
 ---
@@ -364,10 +364,10 @@ docs/（见 §6.1）                     [~] 见下表
 
 ### 4.2 技术验证通过后（§18.1）
 
-- [ ] Project、Workspace Trust、最近项目  
-- [ ] Session Repository + SQLite migration  
-- [ ] Provider/Model 选择 + 安全凭据存储  
-- [ ] 完整 Agent Chat、Tool Cards、Event Batching  
+- [~] Project、Workspace Trust、最近项目（Trust UI + recent 已有）  
+- [~] Session Repository（JSON 版）；SQLite migration 未做  
+- [~] Provider/Model 选择（下拉 + env key）；安全凭据存储未做  
+- [~] Agent Chat、Tool Cards、Event Batching（delta 批处理已有）  
 - [ ] Permission Pipeline + Approval Dialog  
 - [ ] @pierre/diffs 多文件 Review  
 - [ ] Checkpoint、Keep、Revert file/all  
@@ -503,9 +503,9 @@ docs/（见 §6.1）                     [~] 见下表
 6. [~] Fixture baseline + acceptance 脚本齐；真 Agent 改码未跑  
 7. [~] packaged dir + `node scripts/smoke-packaged.mjs` **通过**；GUI 手测仍建议  
 8. [~] tech-validation 倾向 SDK；GUI 真任务后可关 M1  
-9. [ ] 关闭 M1 后进入 §18.1 / M3  
+9. [~] 已切入 §18.1 / M3 部分（Trust + Session 元数据）；M1 真 LLM 仍待手测  
 
-**立即下一刀：** 设置 API Key → Browse 打开 fixture → New session → 真改码 → `ACCEPTANCE=1 npm run test:acceptance`。
+**立即下一刀：** API Key 真任务验收；随后 SQLite 替换 JSON SessionStore。
 
 ---
 
@@ -542,6 +542,7 @@ docs/（见 §6.1）                     [~] 见下表
 | 2026-07-24 | 锁定 Pi `@earendil-works/*@0.82.0`；实现 PiAgentRuntime + 事件映射 + Main 默认真 Pi；smoke/tests 绿；更新 M1 进度为部分完成 |
 | 2026-07-24 | process-tree 单测；env 凭据水合 + Auth IPC；react-button-label fixture；electron-builder mac-arm64 dir 打包成功 |
 | 2026-07-24 | 自动选鉴权模型、Browse 选目录、最近项目持久化、模型下拉、packaged asar 冒烟脚本、acceptance docs |
+| 2026-07-24 | Workspace Trust、SessionStore JSON 持久化、delta rAF 批处理、smoke:runtime headless |
 
 ---
 

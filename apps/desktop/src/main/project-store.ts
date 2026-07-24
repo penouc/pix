@@ -60,16 +60,33 @@ export class ProjectStore {
 
     const id = projectIdForPath(resolved);
     const existing = this.byId.get(id);
+    // Preserve explicit trust decision; otherwise Git repos start trusted for M1 convenience.
+    const trusted = existing ? existing.trusted : isGit;
     const summary: ProjectSummary = {
       id: existing?.id ?? id,
       path: resolved,
       name: path.basename(resolved) || resolved,
-      // M3 will introduce explicit trust UI; for M1 tech-verify we mark Git repos trusted.
-      trusted: isGit,
+      trusted,
       isGit,
       lastOpenedAt: Date.now(),
     };
     this.byId.set(summary.id, summary);
+    await this.persist();
+    return summary;
+  }
+
+  async setTrust(projectId: string, trusted: boolean): Promise<ProjectSummary> {
+    await this.init();
+    const existing = this.byId.get(projectId);
+    if (!existing) {
+      throw new Error(`Project ${projectId} not found`);
+    }
+    const summary: ProjectSummary = {
+      ...existing,
+      trusted,
+      lastOpenedAt: Date.now(),
+    };
+    this.byId.set(projectId, summary);
     await this.persist();
     return summary;
   }

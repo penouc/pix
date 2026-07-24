@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { FolderGit2, FolderOpen, Plus } from 'lucide-react';
+import { FolderGit2, FolderOpen, Plus, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import type { ProjectSummary, SessionSummary } from '@pi-desktop/protocol';
@@ -26,12 +26,23 @@ export function ProjectSidebar() {
     queryFn: () => invoke<ProjectSummary[]>({ method: 'project.listRecent' }),
   });
 
+  const sessions = useQuery({
+    queryKey: ['session.list', project?.id],
+    enabled: Boolean(project?.id),
+    queryFn: () =>
+      invoke<SessionSummary[]>({
+        method: 'session.list',
+        params: { projectId: project!.id },
+      }),
+  });
+
   useEffect(() => {
     if (project) setPathInput(project.path);
   }, [project]);
 
   async function applyProject(opened: ProjectSummary) {
     setProject(opened);
+    setSession(null);
     resetSessionView();
     setScope(opened.id, null);
     setPathInput(opened.path);
@@ -65,9 +76,25 @@ export function ProjectSidebar() {
       const opened = await invoke<ProjectSummary>({ method: 'project.pickFolder' });
       await applyProject(opened);
     } catch (err) {
-      if (err instanceof IpcError && err.code === 'CANCELLED') {
-        return;
-      }
+      if (err instanceof IpcError && err.code === 'CANCELLED') return;
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setTrust(trusted: boolean) {
+    if (!project) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await invoke<ProjectSummary>({
+        method: 'project.setTrust',
+        params: { projectId: project.id, trusted },
+      });
+      setProject(updated);
+      void recent.refetch();
+    } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
@@ -76,6 +103,10 @@ export function ProjectSidebar() {
 
   async function createSession() {
     if (!project) return;
+    if (!project.trusted) {
+      setError('Trust this workspace before creating a session.');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -89,6 +120,34 @@ export function ProjectSidebar() {
       setSession(created);
       resetSessionView();
       setScope(project.id, created.id);
+      void sessions.refetch();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function selectSession(item: SessionSummary) {
+    setSession(item);
+    resetSessionView();
+    setScope(item.projectId, item.id);
+  }
+
+  async function archiveSession(item: SessionSummary) {
+    setBusy(true);
+    setError(null);
+    try {
+      await invoke({
+        method: 'session.archive',
+        params: { sessionId: item.id, archived: true },
+      });
+      if (session?.id === item.id) {
+        setSession(null);
+        resetSessionView();
+        if (project) setScope(project.id, null);
+      }
+      void sessions.refetch();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -152,6 +211,7 @@ export function ProjectSidebar() {
                     onClick={() => void openProjectPath(item.path)}
                   >
                     {item.name}
+                    {!item.trusted ? ' · untrusted' : ''}
                   </button>
                 </li>
               ))}
@@ -160,10 +220,10 @@ export function ProjectSidebar() {
         ) : null}
 
         {project ? (
-          <section className="rounded-xl border border-border bg-surface-raised p-3">
+          <section className="space-y-2 rounded-xl border border-border bg-surface-raised p-3">
             <div className="flex items-start gap-2">
               <FolderGit2 className="mt-0.5 h-4 w-4 text-accent" />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">{project.name}</div>
                 <div className="mt-0.5 truncate text-xs text-muted" title={project.path}>
                   {project.path}
@@ -176,23 +236,77 @@ export function ProjectSidebar() {
                 </div>
               </div>
             </div>
+            {project.trusted ? (
+              <Button
+                className="w-full"
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => void setTrust(false)}
+              >
+                <ShieldAlert className="h-4 w-4" />
+                Revoke trust
+              </Button>
+            ) : (
+              <Button
+                className="w-full"
+                size="sm"
+                disabled={busy}
+                onClick={() => void setTrust(true)}
+              >
+                <ShieldCheck className="h-4 w-4" />
+                Trust workspace
+              </Button>
+            )}
           </section>
         ) : null}
 
         <section className="space-y-2">
-          <div className="text-xs font-medium text-muted">Session</div>
-          {session ? (
-            <div className="rounded-xl border border-border bg-background px-3 py-2 text-sm">
-              <div className="font-medium">{session.title}</div>
-              <div className="mt-0.5 font-mono text-[11px] text-muted">{session.id.slice(0, 8)}…</div>
-            </div>
+          <div className="text-xs font-medium text-muted">Sessions</div>
+          {sessions.data && sessions.data.length > 0 ? (
+            <ul className="space-y-1">
+              {sessions.data.map((item) => (
+                <li
+                  key={item.id}
+                  className={`flex items-center gap-1 rounded-lg border px-2 py-1.5 ${
+                    session?.id === item.id
+                      ? 'border-accent/40 bg-accent-soft'
+                      : 'border-border bg-background'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 truncate text-left text-xs"
+                    onClick={() => selectSession(item)}
+                  >
+                    {item.title}
+                  </button>
+                  <button
+                    type="button"
+                    className="text-[10px] text-muted hover:text-danger"
+                    title="Archive"
+                    disabled={busy}
+                    onClick={() => void archiveSession(item)}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
           ) : (
-            <div className="text-xs text-muted">No active session</div>
+            <div className="text-xs text-muted">No saved sessions</div>
           )}
-          <Button className="w-full" disabled={!project || busy} onClick={() => void createSession()}>
+          <Button
+            className="w-full"
+            disabled={!project || busy || !project.trusted}
+            onClick={() => void createSession()}
+          >
             <Plus className="h-4 w-4" />
             New session
           </Button>
+          {project && !project.trusted ? (
+            <div className="text-[11px] text-warning">Trust the workspace to create a session.</div>
+          ) : null}
         </section>
 
         {error ? (

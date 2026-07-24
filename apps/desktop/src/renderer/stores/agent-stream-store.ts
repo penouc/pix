@@ -56,7 +56,6 @@ function shouldAccept(
   >,
   event: DesktopAgentEvent,
 ): boolean {
-  // Scope filter (plan §8): only current project/session; allow new run.started anytime.
   if (state.activeProjectId && event.projectId !== state.activeProjectId) return false;
   if (state.activeSessionId && event.sessionId !== state.activeSessionId) return false;
   if (
@@ -68,6 +67,68 @@ function shouldAccept(
   }
   const last = state.lastSequenceByRun[event.runId] ?? -1;
   return event.sequence > last;
+}
+
+/** Pending message.delta chunks coalesced per animation frame (plan §14.1). */
+const pendingDeltas = new Map<string, { role: ChatMessage['role']; chunks: string[] }>();
+let deltaFlushHandle: number | null = null;
+let lastSequenceByRunBuffer: Record<string, number> = {};
+
+function scheduleDeltaFlush(get: () => AgentStreamState, set: (partial: Partial<AgentStreamState>) => void) {
+  if (deltaFlushHandle != null) return;
+  const raf =
+    typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame
+      : (cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16) as unknown as number;
+
+  deltaFlushHandle = raf(() => {
+    deltaFlushHandle = null;
+    if (pendingDeltas.size === 0) return;
+
+    const state = get();
+    let messages = state.messages;
+    for (const [messageId, pending] of pendingDeltas) {
+      const delta = pending.chunks.join('');
+      pending.chunks = [];
+      if (!delta) continue;
+      const existing = messages.find((m) => m.id === messageId);
+      if (existing) {
+        messages = messages.map((m) =>
+          m.id === messageId
+            ? { ...m, content: m.content + delta, streaming: true, role: pending.role }
+            : m,
+        );
+      } else {
+        messages = [
+          ...messages,
+          {
+            id: messageId,
+            role: pending.role,
+            content: delta,
+            streaming: true,
+          },
+        ];
+      }
+    }
+    pendingDeltas.clear();
+    set({
+      messages,
+      lastSequenceByRun: {
+        ...state.lastSequenceByRun,
+        ...lastSequenceByRunBuffer,
+      },
+    });
+    lastSequenceByRunBuffer = {};
+  }) as unknown as number;
+}
+
+function clearDeltaBatch() {
+  pendingDeltas.clear();
+  lastSequenceByRunBuffer = {};
+  if (deltaFlushHandle != null && typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(deltaFlushHandle);
+  }
+  deltaFlushHandle = null;
 }
 
 export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
@@ -96,6 +157,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
   },
 
   resetSessionView: () => {
+    clearDeltaBatch();
     set({
       activeRunId: null,
       status: 'idle',
@@ -128,6 +190,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
 
     switch (event.type) {
       case 'run.started':
+        clearDeltaBatch();
         set({
           activeRunId: event.runId,
           activeProjectId: event.projectId,
@@ -140,16 +203,16 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
         });
         break;
       case 'run.completed':
+        clearDeltaBatch();
         set({
           status: 'completed',
           activeRunId: event.runId,
           lastSequenceByRun,
-          messages: state.messages.map((m) =>
-            m.streaming ? { ...m, streaming: false } : m,
-          ),
+          messages: get().messages.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
         });
         break;
       case 'run.failed':
+        clearDeltaBatch();
         set({
           status: 'failed',
           activeRunId: event.runId,
@@ -158,50 +221,45 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
         });
         break;
       case 'run.cancelled':
+        clearDeltaBatch();
         set({
           status: 'cancelled',
           activeRunId: event.runId,
           lastSequenceByRun,
-          messages: state.messages.map((m) =>
-            m.streaming ? { ...m, streaming: false } : m,
-          ),
+          messages: get().messages.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
         });
         break;
       case 'message.delta': {
-        const existing = state.messages.find((m) => m.id === event.messageId);
-        if (existing) {
-          set({
-            lastSequenceByRun,
-            messages: state.messages.map((m) =>
-              m.id === event.messageId
-                ? { ...m, content: m.content + event.delta, streaming: true }
-                : m,
-            ),
-          });
-        } else {
-          set({
-            lastSequenceByRun,
-            messages: [
-              ...state.messages,
-              {
-                id: event.messageId,
-                role: event.role,
-                content: event.delta,
-                streaming: true,
-              },
-            ],
-          });
-        }
+        // Coalesce high-frequency token deltas onto animation frames.
+        const pending = pendingDeltas.get(event.messageId) ?? {
+          role: event.role,
+          chunks: [],
+        };
+        pending.role = event.role;
+        pending.chunks.push(event.delta);
+        pendingDeltas.set(event.messageId, pending);
+        lastSequenceByRunBuffer[event.runId] = event.sequence;
+        // Still advance sequence bookkeeping immediately so late/dupe events drop.
+        set({ lastSequenceByRun });
+        scheduleDeltaFlush(get, set);
         break;
       }
       case 'message.completed': {
-        const existing = state.messages.find((m) => m.id === event.messageId);
+        // Flush any pending deltas for this message first.
+        const pending = pendingDeltas.get(event.messageId);
+        if (pending) {
+          pendingDeltas.delete(event.messageId);
+        }
+        const buffered = pending?.chunks.join('') ?? '';
+        const current = get().messages.find((m) => m.id === event.messageId);
+        const content = event.content || (current ? current.content + buffered : buffered);
+        const existing = get().messages.find((m) => m.id === event.messageId);
         if (existing) {
           set({
             lastSequenceByRun,
-            messages: state.messages.map((m) =>
+            messages: get().messages.map((m) =>
               m.id === event.messageId
-                ? { ...m, content: event.content, streaming: false, role: event.role }
+                ? { ...m, content, streaming: false, role: event.role }
                 : m,
             ),
           });
@@ -209,11 +267,11 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
           set({
             lastSequenceByRun,
             messages: [
-              ...state.messages,
+              ...get().messages,
               {
                 id: event.messageId,
                 role: event.role,
-                content: event.content,
+                content,
                 streaming: false,
               },
             ],
@@ -238,7 +296,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       case 'tool.completed':
         set({
           lastSequenceByRun,
-          tools: state.tools.map((t) =>
+          tools: get().tools.map((t) =>
             t.id === event.toolCallId
               ? {
                   ...t,

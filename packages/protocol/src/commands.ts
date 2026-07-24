@@ -30,6 +30,24 @@ export const OpenProjectInputSchema = z.object({
 });
 export type OpenProjectInput = z.infer<typeof OpenProjectInputSchema>;
 
+export const SetProjectTrustInputSchema = z.object({
+  projectId: z.string().min(1),
+  trusted: z.boolean(),
+});
+export type SetProjectTrustInput = z.infer<typeof SetProjectTrustInputSchema>;
+
+export const RenameSessionInputSchema = z.object({
+  sessionId: z.string().min(1),
+  title: z.string().min(1).max(200),
+});
+export type RenameSessionInput = z.infer<typeof RenameSessionInputSchema>;
+
+export const ArchiveSessionInputSchema = z.object({
+  sessionId: z.string().min(1),
+  archived: z.boolean().default(true),
+});
+export type ArchiveSessionInput = z.infer<typeof ArchiveSessionInputSchema>;
+
 export const SetModelInputSchema = z.object({
   sessionId: z.string().min(1),
   model: ModelRefSchema,
@@ -56,8 +74,11 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('project.open'), params: OpenProjectInputSchema }),
   z.object({ method: z.literal('project.pickFolder'), params: z.object({}).optional() }),
   z.object({ method: z.literal('project.listRecent'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('project.setTrust'), params: SetProjectTrustInputSchema }),
   z.object({ method: z.literal('session.create'), params: CreateSessionInputSchema }),
   z.object({ method: z.literal('session.list'), params: z.object({ projectId: z.string().min(1) }) }),
+  z.object({ method: z.literal('session.rename'), params: RenameSessionInputSchema }),
+  z.object({ method: z.literal('session.archive'), params: ArchiveSessionInputSchema }),
   z.object({ method: z.literal('agent.sendMessage'), params: SendMessageInputSchema }),
   z.object({ method: z.literal('agent.abort'), params: AbortRunInputSchema }),
   z.object({ method: z.literal('agent.setModel'), params: SetModelInputSchema }),

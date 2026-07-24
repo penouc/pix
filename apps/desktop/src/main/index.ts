@@ -22,21 +22,27 @@ import {
 } from '@pi-desktop/protocol';
 
 import { ProjectStore } from './project-store.js';
+import { SessionStore } from './session-store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let mainWindow: BrowserWindow | null = null;
 let runtime: AgentRuntime | null = null;
 let projectStore: ProjectStore | null = null;
-/** Maps desktop session id -> project path for runtime create. */
-const sessionProjectPath = new Map<string, string>();
-const sessionRecords = new Map<string, SessionSummary>();
+let sessionStore: SessionStore | null = null;
 
 function getProjectStore(): ProjectStore {
   if (!projectStore) {
     projectStore = new ProjectStore(path.join(app.getPath('userData'), 'recent-projects.json'));
   }
   return projectStore;
+}
+
+function getSessionStore(): SessionStore {
+  if (!sessionStore) {
+    sessionStore = new SessionStore(path.join(app.getPath('userData'), 'sessions.json'));
+  }
+  return sessionStore;
 }
 
 function createWindow(): void {
@@ -85,7 +91,6 @@ function broadcastEvent(event: unknown): void {
 
 function ensureRuntime(): AgentRuntime {
   if (!runtime) {
-    // Real Pi by default (M1). Set PI_DESKTOP_FAKE_RUNTIME=1 for offline UI.
     const agentDir = path.join(app.getPath('userData'), 'pi-agent');
     runtime = createAgentRuntime({
       agentDir,
@@ -108,8 +113,10 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
 
   const cmd = parsed.data;
   const agent = ensureRuntime();
-  const store = getProjectStore();
-  await store.init();
+  const projects = getProjectStore();
+  const sessions = getSessionStore();
+  await projects.init();
+  await sessions.init();
 
   try {
     switch (cmd.method) {
@@ -127,7 +134,7 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
         });
       }
       case 'project.open': {
-        const project = await store.open(cmd.params.path);
+        const project = await projects.open(cmd.params.path);
         return okResult(project satisfies ProjectSummary);
       }
       case 'project.pickFolder': {
@@ -143,50 +150,71 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
         if (result.canceled || !result.filePaths[0]) {
           return errResult('CANCELLED', 'Folder picker cancelled');
         }
-        const project = await store.open(result.filePaths[0]);
+        const project = await projects.open(result.filePaths[0]);
         return okResult(project satisfies ProjectSummary);
       }
       case 'project.listRecent': {
-        return okResult(store.listRecent());
+        return okResult(projects.listRecent());
+      }
+      case 'project.setTrust': {
+        const project = await projects.setTrust(cmd.params.projectId, cmd.params.trusted);
+        return okResult(project);
       }
       case 'session.create': {
-        const project = store.get(cmd.params.projectId);
+        const project = projects.get(cmd.params.projectId);
         if (!project) {
           return errResult('PROJECT_NOT_FOUND', `Project ${cmd.params.projectId} not found`);
+        }
+        if (!project.trusted) {
+          return errResult(
+            'PROJECT_UNTRUSTED',
+            'Project is not trusted. Confirm Workspace Trust before creating a session.',
+          );
         }
         let model = cmd.params.model;
         if (!model && typeof agent.pickDefaultModel === 'function') {
           model = (await agent.pickDefaultModel()) ?? undefined;
         }
-        const session = await agent.createSession({
+        const runtimeSession = await agent.createSession({
           projectId: project.id,
           projectPath: project.path,
           title: cmd.params.title,
           model,
         });
-        const summary: SessionSummary = {
-          id: session.id,
-          projectId: session.projectId,
-          title: session.title,
-          createdAt: session.createdAt,
-          updatedAt: session.updatedAt,
+        const summary = await sessions.put({
+          id: runtimeSession.id,
+          projectId: runtimeSession.projectId,
+          title: runtimeSession.title,
+          createdAt: runtimeSession.createdAt,
+          updatedAt: runtimeSession.updatedAt,
           archived: false,
-        };
-        sessionRecords.set(session.id, summary);
-        sessionProjectPath.set(session.id, project.path);
-        return okResult(summary);
+        });
+        return okResult(summary satisfies SessionSummary);
       }
       case 'session.list': {
-        const list = [...sessionRecords.values()].filter(
-          (s) => s.projectId === cmd.params.projectId && !s.archived,
-        );
-        return okResult(list);
+        return okResult(sessions.listByProject(cmd.params.projectId));
+      }
+      case 'session.rename': {
+        const summary = await sessions.rename(cmd.params.sessionId, cmd.params.title);
+        return okResult(summary);
+      }
+      case 'session.archive': {
+        const summary = await sessions.archive(cmd.params.sessionId, cmd.params.archived);
+        return okResult(summary);
       }
       case 'agent.sendMessage': {
+        const meta = sessions.get(cmd.params.sessionId);
+        if (meta) {
+          const project = projects.get(meta.projectId);
+          if (project && !project.trusted) {
+            return errResult('PROJECT_UNTRUSTED', 'Project is not trusted.');
+          }
+        }
         const ref = await agent.sendMessage(cmd.params.sessionId, {
           text: cmd.params.text,
           model: cmd.params.model,
         });
+        await sessions.touch(cmd.params.sessionId);
         return okResult(ref);
       }
       case 'agent.abort': {
@@ -225,6 +253,7 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
 app.whenReady().then(() => {
   ipcMain.handle(IpcChannels.invoke, async (_event, raw: unknown) => handleInvoke(raw));
   void getProjectStore().init();
+  void getSessionStore().init();
   createWindow();
 
   app.on('activate', () => {

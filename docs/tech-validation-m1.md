@@ -52,6 +52,12 @@ PI_DESKTOP_FAKE_RUNTIME=1 pnpm dev
 # Process-tree unit tests:
 pnpm test -- packages/agent-pi/src/process-tree.test.ts
 
+# Headless runtime (Fake by default):
+pnpm smoke:runtime
+# Real Pi session create/list (no prompt unless SMOKE_PROMPT=1 + API key):
+pnpm smoke:runtime:pi
+# SMOKE_PROMPT=1 PI_DESKTOP_FAKE_RUNTIME=0 pnpm smoke:runtime:pi
+
 # Packaged macOS arm64 dir:
 pnpm package:dir
 # open apps/desktop/release/mac-arm64/Pi\ Agent\ Desktop.app

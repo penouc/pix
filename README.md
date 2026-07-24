@@ -53,6 +53,8 @@ pnpm dev
 | `pnpm build` | 构建 packages + desktop |
 | `pnpm package:dir` | macOS arm64 目录安装包（electron-builder） |
 | `pnpm smoke:packaged` | 检查已打包 app 的 asar / Pi 依赖 |
+| `pnpm smoke:runtime` | Headless Fake Runtime 流式冒烟 |
+| `pnpm smoke:runtime:pi` | Headless 真实 Pi createSession（需已 build packages） |
 
 真模型调用：启动前导出 `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `XAI_API_KEY` 等；右侧 Auth 行显示已就绪 provider。
 
