@@ -1,0 +1,74 @@
+import { describe, expect, it } from 'vitest';
+
+import type { DesktopAgentEvent } from '@pi-desktop/protocol';
+
+import { FakeAgentRuntime } from './fake-runtime.js';
+
+describe('FakeAgentRuntime', () => {
+  it('streams a full fake run', async () => {
+    const runtime = new FakeAgentRuntime();
+    const events: DesktopAgentEvent[] = [];
+    runtime.subscribe((e) => events.push(e));
+
+    const session = await runtime.createSession({
+      projectId: 'proj-1',
+      projectPath: '/tmp/demo',
+      title: 'Test',
+    });
+
+    const ref = await runtime.sendMessage(session.id, { text: 'hello agent' });
+    expect(ref.sessionId).toBe(session.id);
+
+    await waitFor(() => events.some((e) => e.type === 'run.completed'), 3000);
+
+    const types = events.map((e) => e.type);
+    expect(types[0]).toBe('run.started');
+    expect(types).toContain('tool.requested');
+    expect(types).toContain('message.delta');
+    expect(types).toContain('run.completed');
+
+    for (const event of events) {
+      expect(event.projectId).toBe('proj-1');
+      expect(event.sessionId).toBe(session.id);
+      expect(event.runId).toBe(ref.runId);
+      expect(event.sequence).toBeGreaterThan(0);
+    }
+
+    await runtime.dispose();
+  });
+
+  it('cancels an in-flight run', async () => {
+    const runtime = new FakeAgentRuntime();
+    const events: DesktopAgentEvent[] = [];
+    runtime.subscribe((e) => events.push(e));
+
+    const session = await runtime.createSession({
+      projectId: 'proj-1',
+      projectPath: '/tmp/demo',
+    });
+    const ref = await runtime.sendMessage(session.id, { text: 'long task' });
+    await runtime.abort(ref.runId);
+
+    await waitFor(() => events.some((e) => e.type === 'run.cancelled'), 1000);
+    expect(events.some((e) => e.type === 'run.completed')).toBe(false);
+    await runtime.dispose();
+  });
+});
+
+function waitFor(predicate: () => boolean, timeoutMs: number): Promise<void> {
+  const start = Date.now();
+  return new Promise((resolve, reject) => {
+    const tick = () => {
+      if (predicate()) {
+        resolve();
+        return;
+      }
+      if (Date.now() - start > timeoutMs) {
+        reject(new Error('waitFor timeout'));
+        return;
+      }
+      setTimeout(tick, 20);
+    };
+    tick();
+  });
+}

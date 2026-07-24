@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build
+dist/
+out/
+release/
+*.tsbuildinfo
+
+# Electron
+apps/desktop/dist-electron/
+apps/desktop/.vite/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Logs & coverage
+*.log
+logs/
+coverage/
+.nyc_output/
+
+# Test / temp
+tmp/
+.temp/
+*.local
+
+# Package managers
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*

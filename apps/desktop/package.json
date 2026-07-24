@@ -1,0 +1,40 @@
+{
+  "name": "@pi-desktop/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pi Agent Desktop — Electron shell",
+  "main": "dist-electron/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit && vite build",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@pi-desktop/agent-domain": "workspace:*",
+    "@pi-desktop/agent-pi": "workspace:*",
+    "@pi-desktop/protocol": "workspace:*",
+    "@tanstack/react-query": "^5.80.6",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.513.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tailwind-merge": "^3.3.0",
+    "zod": "3.25.56",
+    "zustand": "^5.0.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.8",
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.5",
+    "@vitejs/plugin-react": "^4.5.1",
+    "electron": "36.4.0",
+    "tailwindcss": "^4.1.8",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vite-plugin-electron": "^0.29.0",
+    "vite-plugin-electron-renderer": "^0.14.6"
+  }
+}
