@@ -20,12 +20,27 @@ interface SessionRow {
  */
 export class SqliteSessionRepository implements SessionRepository {
   private db: SqliteDatabase | null = null;
+  private readonly ownsDb: boolean;
   private ready = false;
+  private readonly dbPath: string | null;
 
-  constructor(private readonly dbPath: string) {}
+  constructor(dbOrPath: string | SqliteDatabase) {
+    if (typeof dbOrPath === 'string') {
+      this.dbPath = dbOrPath;
+      this.ownsDb = true;
+    } else {
+      this.db = dbOrPath;
+      this.dbPath = null;
+      this.ownsDb = false;
+      this.ready = true;
+    }
+  }
 
   async init(): Promise<void> {
     if (this.ready && this.db) return;
+    if (!this.dbPath) {
+      throw new Error('SqliteSessionRepository has no db path');
+    }
     this.db = openDatabase(this.dbPath);
     this.ready = true;
   }
@@ -126,11 +141,11 @@ export class SqliteSessionRepository implements SessionRepository {
   }
 
   close(): void {
-    if (this.db) {
+    if (this.db && this.ownsDb) {
       this.db.close();
-      this.db = null;
-      this.ready = false;
     }
+    this.db = null;
+    this.ready = false;
   }
 
   /**

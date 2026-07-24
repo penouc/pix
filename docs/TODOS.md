@@ -252,7 +252,7 @@ docs/（见 §6.1）                     [~] 见下表
 
 | ID | Todo | 状态 |
 |----|------|------|
-| M3-1 | 选择项目、最近项目、Git 检测、项目信任 | [~] Browse + recent 持久化 + Trust/Revoke UI；策略仍简化 |
+| M3-1 | 选择项目、最近项目、Git 检测、项目信任 | [x] Browse + Trust UI + **SQLite projects** 表 |
 | M3-2 | Session 创建/恢复/重命名/归档 | [~] **SQLite** SessionRepository 创建/list/archive/rename；Pi 运行时会话重启不恢复 |
 | M3-3 | Pi Provider/Model；至少一个真实登录闭环 | [~] env key + 模型下拉；无登录 UX |
 | M3-4 | 密钥不进 Renderer / DB 明文 / 日志 | [~] key 不进 Renderer；env 仍在 Main 进程环境 |
@@ -364,8 +364,8 @@ docs/（见 §6.1）                     [~] 见下表
 
 ### 4.2 技术验证通过后（§18.1）
 
-- [~] Project、Workspace Trust、最近项目（Trust UI + recent 已有）  
-- [x] Session Repository + SQLite migration（`@pi-desktop/database` + `node:sqlite`）  
+- [x] Project、Workspace Trust、最近项目（SQLite `projects` + Trust UI）  
+- [x] Session Repository + SQLite migration（同库 `sessions`）  
 - [~] Provider/Model 选择（下拉 + env key）；安全凭据存储未做  
 - [~] Agent Chat、Tool Cards、Event Batching（delta 批处理已有）  
 - [ ] Permission Pipeline + Approval Dialog  
@@ -505,7 +505,7 @@ docs/（见 §6.1）                     [~] 见下表
 8. [~] tech-validation：继续 SDK；默认用 OpenCode Go 凭据（`~/.local/share/opencode/auth.json`）  
 9. [~] 已切入 §18.1 / M3 部分；M1 核心技术证据基本齐，packaged GUI 手测可选  
 
-**立即下一刀：** M5 Permission Pipeline 骨架；或 Project 表迁入 SQLite。
+**立即下一刀：** M5 Permission Pipeline 骨架（Tool Normalizer / Risk Classifier / 审批对话框）。
 
 ---
 
@@ -545,6 +545,7 @@ docs/（见 §6.1）                     [~] 见下表
 | 2026-07-24 | Workspace Trust、SessionStore JSON 持久化、delta rAF 批处理、smoke:runtime headless |
 | 2026-07-24 | OpenCode Go 鉴权（auth.json）；`pnpm eval:fixture` 真改码 PASS（kimi-k2.7-code） |
 | 2026-07-24 | `@pi-desktop/database` SQLite SessionRepository（node:sqlite + migrations + JSON 迁移） |
+| 2026-07-24 | SQLite `projects` 表 + DesktopDatabase 单连接；JSON recent-projects 迁移 |
 
 ---
 

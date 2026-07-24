@@ -9,6 +9,7 @@ import {
   type ProviderAuthSummary,
 } from '@pi-desktop/agent-pi';
 import type { AgentRuntime } from '@pi-desktop/agent-domain';
+import { DesktopDatabase } from '@pi-desktop/database';
 import {
   IpcChannels,
   errResult,
@@ -21,54 +22,36 @@ import {
   type SessionSummary,
 } from '@pi-desktop/protocol';
 
-import {
-  SqliteSessionRepository,
-  type SessionRepository,
-} from '@pi-desktop/database';
-
-import { ProjectStore } from './project-store.js';
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let mainWindow: BrowserWindow | null = null;
 let runtime: AgentRuntime | null = null;
-let projectStore: ProjectStore | null = null;
-let sessionStore: SessionRepository | null = null;
-let sessionStoreInit: Promise<SessionRepository> | null = null;
+let desktopDb: DesktopDatabase | null = null;
+let desktopDbInit: Promise<DesktopDatabase> | null = null;
 
-function getProjectStore(): ProjectStore {
-  if (!projectStore) {
-    projectStore = new ProjectStore(path.join(app.getPath('userData'), 'recent-projects.json'));
-  }
-  return projectStore;
-}
+async function getDb(): Promise<DesktopDatabase> {
+  if (desktopDb) return desktopDb;
+  if (desktopDbInit) return desktopDbInit;
 
-async function getSessionStore(): Promise<SessionRepository> {
-  if (sessionStore) return sessionStore;
-  if (sessionStoreInit) return sessionStoreInit;
-
-  sessionStoreInit = (async () => {
+  desktopDbInit = (async () => {
     const userData = app.getPath('userData');
     const dbPath = path.join(userData, 'pi-desktop.sqlite');
-    const repo = new SqliteSessionRepository(dbPath);
-    await repo.init();
-
-    // One-time import from legacy JSON store (plan §10 migration).
-    const legacyJson = path.join(userData, 'sessions.json');
+    const db = DesktopDatabase.open(dbPath);
     try {
-      const imported = await repo.importFromJsonFile(legacyJson);
-      if (imported > 0) {
-        console.warn(`[main] migrated ${imported} session(s) from sessions.json → SQLite`);
+      const migrated = await db.migrateLegacyJson(userData);
+      if (migrated.sessions > 0 || migrated.projects > 0) {
+        console.warn(
+          `[main] migrated legacy JSON → SQLite (sessions=${migrated.sessions}, projects=${migrated.projects})`,
+        );
       }
     } catch (error) {
-      console.error('[main] session JSON migration failed', error);
+      console.error('[main] legacy JSON migration failed', error);
     }
-
-    sessionStore = repo;
-    return repo;
+    desktopDb = db;
+    return db;
   })();
 
-  return sessionStoreInit;
+  return desktopDbInit;
 }
 
 function createWindow(): void {
@@ -139,9 +122,9 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
 
   const cmd = parsed.data;
   const agent = ensureRuntime();
-  const projects = getProjectStore();
-  const sessions = await getSessionStore();
-  await projects.init();
+  const db = await getDb();
+  const projects = db.projects;
+  const sessions = db.sessions;
 
   try {
     switch (cmd.method) {
@@ -277,8 +260,7 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
 
 app.whenReady().then(() => {
   ipcMain.handle(IpcChannels.invoke, async (_event, raw: unknown) => handleInvoke(raw));
-  void getProjectStore().init();
-  void getSessionStore();
+  void getDb();
   createWindow();
 
   app.on('activate', () => {
@@ -293,9 +275,9 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   void runtime?.dispose();
   runtime = null;
-  sessionStore?.close();
-  sessionStore = null;
-  sessionStoreInit = null;
+  desktopDb?.close();
+  desktopDb = null;
+  desktopDbInit = null;
 });
 
 async function readAuthStatus(agent: AgentRuntime): Promise<ProviderAuthSummary[]> {

@@ -572,7 +572,7 @@ rememberable: boolean;
 > **执行台账：** 全部勾选状态以 [`docs/TODOS.md`](./docs/TODOS.md) 为准。
 
 ## 18.1 技术验证通过后的下一批任务
-- [~] 实现 Project、Workspace Trust 和最近项目。
+- [x] 实现 Project、Workspace Trust 和最近项目。（SQLite projects + Trust UI）
 - [x] 实现 Session Repository 与 SQLite migration。（`@pi-desktop/database`）
 - [~] 实现 Provider/Model 选择和安全凭据存储。（OpenCode Go + 下拉；Keychain 未做）
 - [~] 实现完整 Agent Chat、Tool Cards 和 Event Batching。

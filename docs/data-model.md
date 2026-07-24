@@ -7,19 +7,31 @@ Desktop-owned entities (plan §10). Pi owns its own session transcript / compact
 | Entity | Owner | Storage |
 |--------|-------|---------|
 | Pi Session messages | Pi | Pi SessionManager / agentDir |
-| Project | Desktop | JSON recent-projects (SQLite later) |
+| Project | Desktop | **SQLite** `projects` table |
 | Session metadata | Desktop | **SQLite** `sessions` table |
 | AgentRun / Approval / Checkpoint | Desktop | Planned SQLite tables |
 
 ## SQLite
 
 - Package: `@pi-desktop/database`
+- Entry: `DesktopDatabase` (single connection, shared by project + session repos)
 - Driver: Node built-in `node:sqlite` (`DatabaseSync`) — Main/Node only
 - Default path: `{userData}/pi-desktop.sqlite`
 - Migrations: `schema_migrations` + versioned SQL in `packages/database/src/migrations.ts`
 - WAL mode enabled
 
-### sessions
+### projects (migration v2)
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | TEXT PK | sha256(path)[:16] |
+| path | TEXT UNIQUE | absolute resolved path |
+| name | TEXT | basename |
+| trusted | INTEGER 0/1 | Workspace Trust |
+| is_git | INTEGER 0/1 | `.git` present |
+| last_opened_at | INTEGER | ms epoch |
+
+### sessions (migration v1)
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -32,8 +44,11 @@ Desktop-owned entities (plan §10). Pi owns its own session transcript / compact
 
 ## Legacy migration
 
-On first open, if `{userData}/sessions.json` exists, rows are imported once (skip existing ids).
+On first open, import once (skip existing ids):
+
+- `{userData}/sessions.json` → `sessions`
+- `{userData}/recent-projects.json` → `projects`
 
 ## Repository boundary
 
-Callers depend on `SessionRepository` interface, not on SQLite types — ready for driver swap if needed.
+Callers depend on `SessionRepository` / `ProjectRepository` (or `DesktopDatabase`), not on SQLite types.
