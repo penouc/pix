@@ -1,0 +1,9 @@
+{
+  "id": "failing-test",
+  "category": "debugging",
+  "prompt": "npm run test:target currently fails. Find and fix the defect in src/total.js so the target test passes. Do not change the test expectation or add unrelated behavior.",
+  "baselineCommand": "npm test",
+  "diagnosticCommand": "npm run test:target",
+  "acceptanceCommand": "npm run test:acceptance",
+  "resetCommand": "git reset --hard baseline && git clean -fd"
+}

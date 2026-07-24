@@ -2,6 +2,22 @@
 
 Source of truth for eval tasks: plan §13.2 / §19.
 
+## M0 deterministic fixture health
+
+The complete non-LLM fixture matrix is documented in
+[`fixtures/test-repositories/README.md`](../fixtures/test-repositories/README.md).
+Run this before an agent evaluation to verify task metadata and all passing
+baseline suites:
+
+```bash
+pnpm verify:fixtures
+```
+
+Each fixture's `task.json` contains the exact prompt, baseline command,
+acceptance command, and Git reset command. Copy a fixture before a run, invoke
+`bash setup-git.sh`, then use that metadata rather than changing the tracked
+baseline fixture.
+
 ## Fixture: react-button-label
 
 Path: `fixtures/test-repositories/react-button-label`

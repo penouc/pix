@@ -1,14 +1,16 @@
-import type {
-  ApprovalDecision,
-  DesktopAgentEvent,
-  ModelRef,
-  RunRef,
-} from '@pi-desktop/protocol';
+import type { ApprovalDecision, DesktopAgentEvent, ModelRef, RunRef } from '@pi-desktop/protocol';
 
 export interface CreateSessionOptions {
+  /**
+   * Desktop-owned identity used when rehydrating metadata from SQLite after an
+   * app restart. SDK session state itself remains in-memory.
+   */
+  id?: string;
   projectId: string;
   projectPath: string;
   title?: string;
+  createdAt?: number;
+  updatedAt?: number;
   model?: ModelRef;
 }
 
@@ -27,6 +29,20 @@ export interface AgentInput {
 
 export type AgentEventListener = (event: DesktopAgentEvent) => void;
 
+/** Main-owned, blocking hook invoked immediately before a write/edit tool executes. */
+export type BeforeWriteToolHandler = (input: {
+  runId: string;
+  toolName: 'write' | 'edit';
+  path: string;
+}) => Promise<void>;
+
+/** Main-owned hook invoked only after a write/edit tool succeeds. */
+export type AfterWriteToolHandler = (input: {
+  runId: string;
+  toolName: 'write' | 'edit';
+  path: string;
+}) => Promise<void>;
+
 /**
  * Desktop-owned AgentRuntime boundary (plan §7).
  * Pi SDK types must never leak past implementers of this interface.
@@ -39,6 +55,8 @@ export interface AgentRuntime {
   followUp(sessionId: string, input: AgentInput): Promise<void>;
   abort(runId: string): Promise<void>;
   setModel(sessionId: string, model: ModelRef): Promise<void>;
+  configureProvider?(providerId: string, apiKey: string): Promise<void>;
+  removeProviderConfiguration?(providerId: string): Promise<void>;
   approve(requestId: string, decision: ApprovalDecision): Promise<void>;
   listModels(): Promise<
     Array<{
@@ -49,11 +67,19 @@ export interface AgentRuntime {
     }>
   >;
   /** Optional: which providers currently have usable credentials (no secrets). */
-  getAuthStatus?(): Promise<
-    Array<{ providerId: string; hasAuth: boolean; source: string }>
-  >;
+  getAuthStatus?(): Promise<Array<{ providerId: string; hasAuth: boolean; source: string }>>;
   /** Optional: choose a default model when the session has none. */
   pickDefaultModel?(): Promise<ModelRef | null>;
+  /**
+   * Installs Main's checkpoint hook. Implementations must await it before a
+   * write/edit tool executes and must not expose SDK-specific event types.
+   */
+  setBeforeWriteToolHandler?(handler: BeforeWriteToolHandler): void;
+  /**
+   * Installs Main's post-write checkpoint hook. Implementations must invoke it
+   * only after a successful write/edit and must not expose SDK event types.
+   */
+  setAfterWriteToolHandler?(handler: AfterWriteToolHandler): void;
   subscribe(listener: AgentEventListener): () => void;
   dispose(): Promise<void>;
 }

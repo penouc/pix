@@ -14,8 +14,20 @@ export function StatusPanel() {
   const session = useWorkspaceStore((s) => s.session);
   const status = useAgentStreamStore((s) => s.status);
   const usage = useAgentStreamStore((s) => s.usage);
+  const model = useAgentStreamStore((s) => s.model);
+  const startedAt = useAgentStreamStore((s) => s.startedAt);
+  const tools = useAgentStreamStore((s) => s.tools);
   const activeRunId = useAgentStreamStore((s) => s.activeRunId);
   const [selectedModel, setSelectedModel] = useState('');
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (!startedAt || !['starting', 'running', 'waiting_for_approval', 'stopping'].includes(status)) {
+      return;
+    }
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [startedAt, status]);
 
   const appInfo = useQuery({
     queryKey: ['app.info'],
@@ -69,6 +81,8 @@ export function StatusPanel() {
           <SectionTitle>Runtime</SectionTitle>
           <Row label="Status" value={<Badge>{status}</Badge>} />
           <Row label="Run" value={activeRunId ? `${activeRunId.slice(0, 8)}…` : '—'} />
+          <Row label="Elapsed" value={startedAt ? formatElapsed(now - startedAt) : '—'} />
+          <Row label="Tools" value={tools.length || '—'} />
           <Row label="Input tokens" value={usage?.inputTokens ?? '—'} />
           <Row label="Output tokens" value={usage?.outputTokens ?? '—'} />
           <Row label="Cost" value={usage?.costUsd != null ? `$${usage.costUsd.toFixed(4)}` : '—'} />
@@ -79,10 +93,15 @@ export function StatusPanel() {
           <Row label="Project" value={project?.name ?? '—'} />
           <Row label="Trusted" value={project ? (project.trusted ? 'yes' : 'no') : '—'} />
           <Row label="Session" value={session?.title ?? '—'} />
+          <Row
+            label="Context"
+            value={usage?.totalTokens != null ? `${usage.totalTokens} tokens reported` : 'Not reported'}
+          />
         </section>
 
         <section className="space-y-2">
           <SectionTitle>Model</SectionTitle>
+          <Row label="Active" value={model ? `${model.providerId}/${model.modelId}` : 'Not reported'} />
           <select
             className="w-full rounded-lg border border-border bg-background px-2 py-2 text-xs outline-none focus:border-accent"
             disabled={!session || models.isLoading}
@@ -128,6 +147,11 @@ export function StatusPanel() {
       </div>
     </div>
   );
+}
+
+function formatElapsed(milliseconds: number): string {
+  const seconds = Math.max(0, Math.floor(milliseconds / 1_000));
+  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, '0')}s`;
 }
 
 function SectionTitle({ children }: { children: string }) {

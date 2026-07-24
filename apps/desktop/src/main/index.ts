@@ -17,10 +17,21 @@ import {
   parseDesktopAgentEvent,
   parseIpcCommand,
   type IpcResult,
+  type CheckpointRecoverySummary,
   type ModelInfo,
+  type ProviderSetting,
   type ProjectSummary,
   type SessionSummary,
 } from '@pi-desktop/protocol';
+
+import { getWorkingTreeDiff } from './git/git-diff-service.js';
+import {
+  captureCheckpointBaseline,
+  checkpointId,
+} from './checkpoints/checkpoint-baseline-service.js';
+import { CheckpointRecoveryService } from './checkpoints/checkpoint-recovery-service.js';
+import { WriteSnapshotCoordinator } from './checkpoints/write-snapshot-coordinator.js';
+import { ProviderSettingsStore } from './providers/provider-settings-store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -28,6 +39,26 @@ let mainWindow: BrowserWindow | null = null;
 let runtime: AgentRuntime | null = null;
 let desktopDb: DesktopDatabase | null = null;
 let desktopDbInit: Promise<DesktopDatabase> | null = null;
+let writeSnapshots: WriteSnapshotCoordinator | null = null;
+let checkpointRecovery: CheckpointRecoveryService | null = null;
+let providerSettings: ProviderSettingsStore | null = null;
+let persistedProviderKeysApplied = false;
+const RESOLVED_CHECKPOINT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+function getProviderSettings(): ProviderSettingsStore {
+  providerSettings ??= new ProviderSettingsStore(
+    path.join(app.getPath('userData'), 'provider-settings.enc'),
+  );
+  return providerSettings;
+}
+
+async function applyPersistedProviderKeys(agent: AgentRuntime): Promise<void> {
+  if (persistedProviderKeysApplied || !agent.configureProvider) return;
+  for (const { providerId, apiKey } of getProviderSettings().getApiKeys()) {
+    await agent.configureProvider(providerId, apiKey);
+  }
+  persistedProviderKeysApplied = true;
+}
 
 async function getDb(): Promise<DesktopDatabase> {
   if (desktopDb) return desktopDb;
@@ -52,6 +83,21 @@ async function getDb(): Promise<DesktopDatabase> {
   })();
 
   return desktopDbInit;
+}
+
+async function initializeCheckpointRecovery(): Promise<void> {
+  const db = await getDb();
+  checkpointRecovery ??= new CheckpointRecoveryService(db.checkpoints);
+  const recoverable = checkpointRecovery.listRecoverable();
+  if (recoverable.length > 0) {
+    console.warn(`[main] ${recoverable.length} unresolved checkpoint(s) available for recovery`);
+  }
+  const cleanup = await checkpointRecovery.cleanupResolved(
+    Date.now() - RESOLVED_CHECKPOINT_RETENTION_MS,
+  );
+  if (cleanup.deletedCheckpoints > 0) {
+    console.warn(`[main] removed ${cleanup.deletedCheckpoints} expired resolved checkpoint(s)`);
+  }
 }
 
 function createWindow(): void {
@@ -114,7 +160,34 @@ function ensureRuntime(): AgentRuntime {
   return runtime;
 }
 
-async function handleInvoke(raw: unknown): Promise<IpcResult> {
+/**
+ * Pi SDK sessions are intentionally in-memory. Rebuild the SDK-side session
+ * lazily from the SQLite record after a desktop restart, retaining the
+ * Desktop session id so all subsequent IPC/events keep the persisted scope.
+ */
+async function ensurePersistedRuntimeSession(
+  agent: AgentRuntime,
+  session: SessionSummary,
+  projectPath: string,
+): Promise<void> {
+  try {
+    await agent.resumeSession(session.id);
+    return;
+  } catch {
+    // This is expected after Main restarts; do not surface an internal SDK
+    // implementation detail to the renderer.
+  }
+  await agent.createSession({
+    id: session.id,
+    projectId: session.projectId,
+    projectPath,
+    title: session.title,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+  });
+}
+
+export async function handleInvoke(raw: unknown): Promise<IpcResult> {
   const parsed = parseIpcCommand(raw);
   if (!parsed.success) {
     return errResult('INVALID_COMMAND', parsed.error.message);
@@ -122,9 +195,11 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
 
   const cmd = parsed.data;
   const agent = ensureRuntime();
+  await applyPersistedProviderKeys(agent);
   const db = await getDb();
   const projects = db.projects;
   const sessions = db.sessions;
+  checkpointRecovery ??= new CheckpointRecoveryService(db.checkpoints);
 
   try {
     switch (cmd.method) {
@@ -136,8 +211,7 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
           platform: process.platform,
           electron: process.versions.electron,
           piSdk: `${PI_SDK_PACKAGES.codingAgent}@${PI_SDK_PACKAGES.version}`,
-          runtimeMode:
-            process.env['PI_DESKTOP_FAKE_RUNTIME'] === '1' ? 'fake' : 'pi',
+          runtimeMode: process.env['PI_DESKTOP_FAKE_RUNTIME'] === '1' ? 'fake' : 'pi',
           authProviders: describeAuthSources(auth),
         });
       }
@@ -168,6 +242,39 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
         const project = await projects.setTrust(cmd.params.projectId, cmd.params.trusted);
         return okResult(project);
       }
+      case 'git.getWorkingTreeDiff': {
+        const project = projects.get(cmd.params.projectId);
+        if (!project) {
+          return errResult('PROJECT_NOT_FOUND', `Project ${cmd.params.projectId} not found`);
+        }
+        if (!project.trusted) {
+          return errResult('PROJECT_UNTRUSTED', 'Trust the project before reviewing its diff.');
+        }
+        if (!project.isGit) {
+          return errResult('PROJECT_NOT_GIT', 'The selected project is not a Git repository.');
+        }
+        return okResult(await getWorkingTreeDiff(project.id, project.path));
+      }
+      case 'provider.list': {
+        return okResult(getProviderSettings().list() satisfies ProviderSetting[]);
+      }
+      case 'provider.saveApiKey': {
+        getProviderSettings().saveApiKey(cmd.params.providerId, cmd.params.apiKey);
+        await agent.configureProvider?.(cmd.params.providerId, cmd.params.apiKey);
+        return okResult({ configured: true });
+      }
+      case 'provider.remove': {
+        getProviderSettings().remove(cmd.params.providerId);
+        await agent.removeProviderConfiguration?.(cmd.params.providerId);
+        return okResult({ configured: false });
+      }
+      case 'settings.get': {
+        return okResult({ defaultModel: getProviderSettings().getDefaultModel() });
+      }
+      case 'settings.setDefaultModel': {
+        getProviderSettings().setDefaultModel(cmd.params.model);
+        return okResult({ defaultModel: cmd.params.model });
+      }
       case 'session.create': {
         const project = projects.get(cmd.params.projectId);
         if (!project) {
@@ -179,7 +286,7 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
             'Project is not trusted. Confirm Workspace Trust before creating a session.',
           );
         }
-        let model = cmd.params.model;
+        let model = cmd.params.model ?? getProviderSettings().getDefaultModel();
         if (!model && typeof agent.pickDefaultModel === 'function') {
           model = (await agent.pickDefaultModel()) ?? undefined;
         }
@@ -212,18 +319,74 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
       }
       case 'agent.sendMessage': {
         const meta = sessions.get(cmd.params.sessionId);
-        if (meta) {
-          const project = projects.get(meta.projectId);
-          if (project && !project.trusted) {
-            return errResult('PROJECT_UNTRUSTED', 'Project is not trusted.');
-          }
+        if (!meta) {
+          return errResult('SESSION_NOT_FOUND', `Session ${cmd.params.sessionId} not found`);
         }
-        const ref = await agent.sendMessage(cmd.params.sessionId, {
+        const project = projects.get(meta.projectId);
+        if (!project) {
+          return errResult('PROJECT_NOT_FOUND', `Project ${meta.projectId} not found`);
+        }
+        if (!project.trusted) {
+          return errResult('PROJECT_UNTRUSTED', 'Project is not trusted.');
+        }
+        await ensurePersistedRuntimeSession(agent, meta, project.path);
+        const baseline = await captureCheckpointBaseline(project.path);
+        const checkpoint = await db.checkpoints.createBaseline({
+          ...baseline,
+          id: checkpointId(),
+          projectId: project.id,
+          sessionId: meta.id,
+        });
+        writeSnapshots ??= new WriteSnapshotCoordinator(db.checkpoints);
+        agent.setBeforeWriteToolHandler?.(({ runId, path: toolPath }) =>
+          writeSnapshots!.snapshotBeforeWrite(runId, toolPath).then(() => undefined),
+        );
+        agent.setAfterWriteToolHandler?.(({ runId, path: toolPath }) =>
+          writeSnapshots!.recordExpectedStateAfterWrite(runId, toolPath),
+        );
+        let ref;
+        try {
+          ref = await agent.sendMessage(cmd.params.sessionId, {
+            text: cmd.params.text,
+            model: cmd.params.model,
+          });
+        } catch (error) {
+          await db.checkpoints.discard(checkpoint.id);
+          throw error;
+        }
+        writeSnapshots.associateRun(ref.runId, checkpoint.id, project.path);
+        await db.checkpoints.attachRun({
+          checkpointId: checkpoint.id,
+          runId: ref.runId,
+          projectId: project.id,
+          sessionId: meta.id,
+        });
+        await sessions.touch(cmd.params.sessionId);
+        return okResult(ref);
+      }
+      case 'agent.steer': {
+        await agent.steer(cmd.params.runId, { text: cmd.params.text });
+        return okResult({ ok: true });
+      }
+      case 'agent.followUp': {
+        const meta = sessions.get(cmd.params.sessionId);
+        if (!meta) {
+          return errResult('SESSION_NOT_FOUND', `Session ${cmd.params.sessionId} not found`);
+        }
+        const project = projects.get(meta.projectId);
+        if (!project) {
+          return errResult('PROJECT_NOT_FOUND', `Project ${meta.projectId} not found`);
+        }
+        if (!project.trusted) {
+          return errResult('PROJECT_UNTRUSTED', 'Project is not trusted.');
+        }
+        await ensurePersistedRuntimeSession(agent, meta, project.path);
+        await agent.followUp(cmd.params.sessionId, {
           text: cmd.params.text,
           model: cmd.params.model,
         });
         await sessions.touch(cmd.params.sessionId);
-        return okResult(ref);
+        return okResult({ ok: true });
       }
       case 'agent.abort': {
         await agent.abort(cmd.params.runId);
@@ -243,6 +406,40 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
       case 'agent.authStatus': {
         return okResult(await readAuthStatus(agent));
       }
+      case 'checkpoint.listRecoverable': {
+        return okResult(
+          checkpointRecovery.listRecoverable().flatMap((checkpoint) =>
+            checkpoint.runId
+              ? [
+                  {
+                    runId: checkpoint.runId,
+                    projectId: checkpoint.projectId,
+                    sessionId: checkpoint.sessionId,
+                    workspacePath: checkpoint.workspacePath,
+                    createdAt: checkpoint.createdAt,
+                  } satisfies CheckpointRecoverySummary,
+                ]
+              : [],
+          ),
+        );
+      }
+      case 'checkpoint.review': {
+        return okResult(await checkpointRecovery.review(cmd.params.runId));
+      }
+      case 'checkpoint.keep': {
+        await checkpointRecovery.keep(cmd.params.runId);
+        return okResult({ outcome: 'kept' });
+      }
+      case 'checkpoint.continue': {
+        await checkpointRecovery.continue(cmd.params.runId);
+        return okResult({ outcome: 'continued' });
+      }
+      case 'checkpoint.revertFile': {
+        return okResult(await checkpointRecovery.revertFile(cmd.params.runId, cmd.params.path));
+      }
+      case 'checkpoint.revertAll': {
+        return okResult(await checkpointRecovery.revertAll(cmd.params.runId));
+      }
       default: {
         const _exhaustive: never = cmd;
         return errResult('UNHANDLED', `Unhandled command ${JSON.stringify(_exhaustive)}`);
@@ -260,7 +457,9 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
 
 app.whenReady().then(() => {
   ipcMain.handle(IpcChannels.invoke, async (_event, raw: unknown) => handleInvoke(raw));
-  void getDb();
+  void initializeCheckpointRecovery().catch((error) => {
+    console.error('[main] checkpoint recovery initialization failed', error);
+  });
   createWindow();
 
   app.on('activate', () => {
@@ -278,6 +477,8 @@ app.on('before-quit', () => {
   desktopDb?.close();
   desktopDb = null;
   desktopDbInit = null;
+  providerSettings = null;
+  persistedProviderKeysApplied = false;
 });
 
 async function readAuthStatus(agent: AgentRuntime): Promise<ProviderAuthSummary[]> {

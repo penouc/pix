@@ -1,0 +1,10 @@
+{
+  "name": "fixture-failing-test",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/baseline.test.js",
+    "test:target": "node --test test/total.test.js",
+    "test:acceptance": "node --test test/acceptance.test.js"
+  }
+}

@@ -21,7 +21,8 @@
     "@earendil-works/pi-ai": "0.82.0",
     "@earendil-works/pi-coding-agent": "0.82.0",
     "@pi-desktop/agent-domain": "workspace:*",
-    "@pi-desktop/protocol": "workspace:*"
+    "@pi-desktop/protocol": "workspace:*",
+    "@pi-desktop/security": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

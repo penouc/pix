@@ -20,6 +20,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:fixture": "node --test fixtures/test-repositories/react-button-label/test/button.test.js",
+    "verify:fixtures": "node scripts/verify-fixtures.mjs",
     "smoke:packaged": "node scripts/smoke-packaged.mjs",
     "smoke:runtime": "pnpm -r --filter './packages/*' build && PI_DESKTOP_FAKE_RUNTIME=1 SMOKE_PROMPT=1 node scripts/smoke-pi-runtime.mjs",
     "smoke:runtime:pi": "pnpm -r --filter './packages/*' build && PI_DESKTOP_FAKE_RUNTIME=0 node scripts/smoke-pi-runtime.mjs",
@@ -28,7 +29,10 @@
     "clean": "pnpm -r exec rm -rf dist node_modules && rm -rf node_modules"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["electron", "esbuild"]
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { IpcCommandSchema } from './commands.js';
+import { IpcCommandSchema, ModelRefSchema } from './commands.js';
 import { DesktopAgentEventSchema } from './events.js';
 
 export const IpcSuccessSchema = z.object({
@@ -18,8 +18,7 @@ export const IpcFailureSchema = z.object({
 
 export const IpcResultSchema = z.discriminatedUnion('ok', [IpcSuccessSchema, IpcFailureSchema]);
 export type IpcResult<T = unknown> =
-  | { ok: true; data: T }
-  | { ok: false; error: { code: string; message: string } };
+  { ok: true; data: T } | { ok: false; error: { code: string; message: string } };
 
 export function okResult<T>(data: T): IpcResult<T> {
   return { ok: true, data };
@@ -50,6 +49,22 @@ export const ProjectSummarySchema = z.object({
 });
 export type ProjectSummary = z.infer<typeof ProjectSummarySchema>;
 
+export const ChangedFileSchema = z.object({
+  path: z.string(),
+  previousPath: z.string().optional(),
+  status: z.enum(['added', 'modified', 'deleted', 'renamed']),
+  binary: z.boolean(),
+});
+export type ChangedFile = z.infer<typeof ChangedFileSchema>;
+
+export const WorkingTreeDiffSchema = z.object({
+  projectId: z.string(),
+  patch: z.string(),
+  truncated: z.boolean(),
+  files: z.array(ChangedFileSchema),
+});
+export type WorkingTreeDiff = z.infer<typeof WorkingTreeDiffSchema>;
+
 export const SessionSummarySchema = z.object({
   id: z.string(),
   projectId: z.string(),
@@ -66,6 +81,15 @@ export const RunRefSchema = z.object({
 });
 export type RunRef = z.infer<typeof RunRefSchema>;
 
+export const CheckpointRecoverySummarySchema = z.object({
+  runId: z.string(),
+  projectId: z.string(),
+  sessionId: z.string(),
+  workspacePath: z.string(),
+  createdAt: z.number().int().nonnegative(),
+});
+export type CheckpointRecoverySummary = z.infer<typeof CheckpointRecoverySummarySchema>;
+
 export const ModelInfoSchema = z.object({
   providerId: z.string(),
   modelId: z.string(),
@@ -73,6 +97,17 @@ export const ModelInfoSchema = z.object({
   hasAuth: z.boolean().optional(),
 });
 export type ModelInfo = z.infer<typeof ModelInfoSchema>;
+
+export const ProviderSettingSchema = z.object({
+  providerId: z.string(),
+  configured: z.boolean(),
+});
+export type ProviderSetting = z.infer<typeof ProviderSettingSchema>;
+
+export const SettingsSchema = z.object({
+  defaultModel: ModelRefSchema.optional(),
+});
+export type Settings = z.infer<typeof SettingsSchema>;
 
 /** Validate inbound invoke payload from Renderer. */
 export function parseIpcCommand(raw: unknown) {

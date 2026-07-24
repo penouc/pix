@@ -1,0 +1,9 @@
+{
+  "id": "ts-type-error",
+  "category": "typescript",
+  "prompt": "Fix the TypeScript error in src/formatUser.ts. formatUser must accept a User and return the user's displayName. Keep the existing API and do not change unrelated files.",
+  "baselineCommand": "npm test",
+  "diagnosticCommand": "npm run typecheck",
+  "acceptanceCommand": "npm run test:acceptance",
+  "resetCommand": "git reset --hard baseline && git clean -fd"
+}

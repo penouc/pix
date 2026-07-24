@@ -1,7 +1,7 @@
-import { LoaderCircle, Square, SendHorizontal } from 'lucide-react';
+import { LoaderCircle, RotateCcw, Square, SendHorizontal } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import type { RunRef } from '@pi-desktop/protocol';
+import type { ApprovalDecision, RunRef } from '@pi-desktop/protocol';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,10 @@ export function ChatPanel() {
   const status = useAgentStreamStore((s) => s.status);
   const activeRunId = useAgentStreamStore((s) => s.activeRunId);
   const usage = useAgentStreamStore((s) => s.usage);
+  const approval = useAgentStreamStore((s) => s.approval);
   const error = useAgentStreamStore((s) => s.error);
+  const errorRetryable = useAgentStreamStore((s) => s.errorRetryable);
+  const lastUserText = useAgentStreamStore((s) => s.lastUserText);
   const appendUserMessage = useAgentStreamStore((s) => s.appendUserMessage);
   const setStopping = useAgentStreamStore((s) => s.setStopping);
   const applyEvent = useAgentStreamStore((s) => s.applyEvent);
@@ -45,25 +48,53 @@ export function ChatPanel() {
     status === 'stopping';
 
   async function send() {
-    if (!session || !draft.trim() || running) return;
+    if (!session || !draft.trim()) return;
     const text = draft.trim();
     setDraft('');
     appendUserMessage(text);
     setSending(true);
-    useAgentStreamStore.setState({ status: 'starting', error: null });
     try {
-      await invoke<RunRef>({
-        method: 'agent.sendMessage',
-        params: {
-          sessionId: session.id,
-          text,
-        },
-      });
+      if (running) {
+        await invoke({
+          method: 'agent.followUp',
+          params: { sessionId: session.id, text },
+        });
+      } else {
+        useAgentStreamStore.setState({ status: 'starting', error: null, errorRetryable: false });
+        await invoke<RunRef>({
+          method: 'agent.sendMessage',
+          params: {
+            sessionId: session.id,
+            text,
+          },
+        });
+      }
     } catch (err) {
       console.error(err);
       useAgentStreamStore.setState({
         status: 'failed',
         error: err instanceof Error ? err.message : String(err),
+        errorRetryable: true,
+      });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function retry() {
+    if (!session || !lastUserText || running) return;
+    setSending(true);
+    useAgentStreamStore.setState({ status: 'starting', error: null, errorRetryable: false });
+    try {
+      await invoke<RunRef>({
+        method: 'agent.sendMessage',
+        params: { sessionId: session.id, text: lastUserText },
+      });
+    } catch (err) {
+      useAgentStreamStore.setState({
+        status: 'failed',
+        error: err instanceof Error ? err.message : String(err),
+        errorRetryable: true,
       });
     } finally {
       setSending(false);
@@ -80,6 +111,21 @@ export function ChatPanel() {
     }
   }
 
+  async function resolveApproval(decision: ApprovalDecision) {
+    if (!approval) return;
+    try {
+      await invoke({
+        method: 'agent.resolveApproval',
+        params: { requestId: approval.requestId, decision },
+      });
+    } catch (err) {
+      console.error(err);
+      useAgentStreamStore.setState({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex items-center justify-between border-b border-border px-5 py-3">
@@ -91,9 +137,7 @@ export function ChatPanel() {
         </div>
         <div className="flex items-center gap-2">
           <Badge className={statusColor(status)}>{status}</Badge>
-          {usage?.totalTokens != null ? (
-            <Badge>{usage.totalTokens} tokens</Badge>
-          ) : null}
+          {usage?.totalTokens != null ? <Badge>{usage.totalTokens} tokens</Badge> : null}
         </div>
       </header>
 
@@ -125,7 +169,9 @@ export function ChatPanel() {
             </div>
             <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground">
               {message.content}
-              {message.streaming ? <span className="ml-0.5 inline-block animate-pulse">▍</span> : null}
+              {message.streaming ? (
+                <span className="ml-0.5 inline-block animate-pulse">▍</span>
+              ) : null}
             </pre>
           </article>
         ))}
@@ -146,9 +192,50 @@ export function ChatPanel() {
           </div>
         ))}
 
+        {approval ? (
+          <section className="rounded-xl border border-warning/40 bg-warning/10 p-4">
+            <div className="text-sm font-medium text-foreground">Approval required</div>
+            <div className="mt-1 font-mono text-xs text-foreground">{approval.summary}</div>
+            {approval.command ? (
+              <pre className="mt-2 overflow-auto rounded-md bg-background/70 p-2 text-xs text-foreground">
+                {approval.command}
+              </pre>
+            ) : null}
+            {approval.reasons.length > 0 ? (
+              <ul className="mt-2 list-inside list-disc text-xs text-muted">
+                {approval.reasons.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button variant="danger" onClick={() => void resolveApproval('deny')}>
+                Deny
+              </Button>
+              <Button onClick={() => void resolveApproval('allow-once')}>Allow once</Button>
+              {approval.rememberable ? (
+                <>
+                  <Button variant="secondary" onClick={() => void resolveApproval('allow-session')}>
+                    Allow session
+                  </Button>
+                  <Button variant="secondary" onClick={() => void resolveApproval('allow-project')}>
+                    Allow project
+                  </Button>
+                </>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+
         {error ? (
-          <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
-            {error}
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+            <span>{error}</span>
+            {errorRetryable && lastUserText ? (
+              <Button size="sm" variant="secondary" disabled={sending || running} onClick={() => void retry()}>
+                <RotateCcw className="h-3.5 w-3.5" />
+                Retry
+              </Button>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -175,12 +262,18 @@ export function ChatPanel() {
             </Button>
           ) : (
             <Button disabled={!session || !draft.trim() || sending} onClick={() => void send()}>
-              {sending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
-              Send
+              {sending ? (
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+              ) : (
+                <SendHorizontal className="h-4 w-4" />
+              )}
+              {running ? 'Queue follow-up' : 'Send'}
             </Button>
           )}
         </div>
-        <div className="mt-2 text-[11px] text-muted">⌘/Ctrl + Enter to send · Fake runtime for M1</div>
+        <div className="mt-2 text-[11px] text-muted">
+          ⌘/Ctrl + Enter to send · while running, messages queue as Pi follow-ups
+        </div>
       </footer>
     </div>
   );

@@ -45,4 +45,45 @@ describe('PiAgentRuntime session create (no provider call)', () => {
       await rm(root, { recursive: true, force: true });
     }
   }, 30_000);
+
+  it('rehydrates SQLite-owned session metadata with its original desktop id', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'pi-desktop-rehydrate-'));
+    try {
+      await writeFile(path.join(root, 'README.md'), '# fixture\n', 'utf8');
+      const metadata = {
+        id: 'persisted-session-id',
+        projectId: 'persisted-project',
+        projectPath: root,
+        title: 'Restored session',
+        createdAt: 1_700_000_000_000,
+        updatedAt: 1_700_000_000_100,
+      };
+      const first = new PiAgentRuntime({
+        agentDir: path.join(root, 'agent-one'),
+        allowModelNetwork: false,
+        hydrateEnvAuth: false,
+      });
+      const created = await first.createSession(metadata);
+      expect(created).toMatchObject({
+        id: metadata.id,
+        projectId: metadata.projectId,
+        title: metadata.title,
+        createdAt: metadata.createdAt,
+        updatedAt: metadata.updatedAt,
+      });
+      await first.dispose();
+
+      const restarted = new PiAgentRuntime({
+        agentDir: path.join(root, 'agent-two'),
+        allowModelNetwork: false,
+        hydrateEnvAuth: false,
+      });
+      const restored = await restarted.createSession(metadata);
+      expect(restored).toEqual(created);
+      expect(await restarted.resumeSession(metadata.id)).toEqual(created);
+      await restarted.dispose();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 30_000);
 });

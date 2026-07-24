@@ -1,0 +1,8 @@
+{
+  "id": "form-validation",
+  "category": "form-validation",
+  "prompt": "Change validateSignup in src/validateSignup.js so password is required and must contain at least 8 characters. Return \"Password must be at least 8 characters\" for short non-empty passwords. Keep the existing email validation and add/update tests as needed.",
+  "baselineCommand": "npm test",
+  "acceptanceCommand": "npm run test:acceptance",
+  "resetCommand": "git reset --hard baseline && git clean -fd"
+}

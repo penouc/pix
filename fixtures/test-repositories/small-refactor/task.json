@@ -1,0 +1,8 @@
+{
+  "id": "small-refactor",
+  "category": "multi-file-refactor",
+  "prompt": "Extract the duplicate name-normalization logic from src/greeting.js and src/label.js into src/normalizeName.js. Both existing exports must keep their behavior. Add/update tests as needed and do not change public function names.",
+  "baselineCommand": "npm test",
+  "acceptanceCommand": "npm run test:acceptance",
+  "resetCommand": "git reset --hard baseline && git clean -fd"
+}

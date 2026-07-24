@@ -1,0 +1,8 @@
+{
+  "id": "query-loading-error",
+  "category": "query-state",
+  "prompt": "Update src/profileView.js so renderProfileView handles the existing query states. Return \"Loading profile...\" while isLoading is true, return \"Could not load profile\" when error is present, and preserve the successful profile greeting. Add or update tests only as needed.",
+  "baselineCommand": "npm test",
+  "acceptanceCommand": "npm run test:acceptance",
+  "resetCommand": "git reset --hard baseline && git clean -fd"
+}

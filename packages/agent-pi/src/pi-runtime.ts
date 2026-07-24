@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import {
   createAgentSession,
+  DefaultResourceLoader,
   ModelRuntime,
   SessionManager,
   type AgentSession as PiAgentSession,
@@ -12,15 +13,13 @@ import type {
   AgentInput,
   AgentRuntime,
   AgentSession,
+  AfterWriteToolHandler,
+  BeforeWriteToolHandler,
   CreateSessionOptions,
 } from '@pi-desktop/agent-domain';
 import { DomainError, agentError } from '@pi-desktop/agent-domain';
-import type {
-  ApprovalDecision,
-  DesktopAgentEvent,
-  ModelRef,
-  RunRef,
-} from '@pi-desktop/protocol';
+import type { ApprovalDecision, DesktopAgentEvent, ModelRef, RunRef } from '@pi-desktop/protocol';
+import { PermissionPipeline } from '@pi-desktop/security';
 
 import {
   describeAuthSources,
@@ -28,6 +27,14 @@ import {
   type ProviderAuthSummary,
 } from './credentials.js';
 import { mapPiSessionEvent, type PiSessionEventLike } from './event-mapper.js';
+import { PermissionController } from './permission-controller.js';
+
+export function writeToolPath(toolName: string, input: unknown): string | undefined {
+  if (toolName !== 'write' && toolName !== 'edit') return undefined;
+  if (!input || typeof input !== 'object') return undefined;
+  const value = (input as { path?: unknown }).path;
+  return typeof value === 'string' ? value : undefined;
+}
 
 export interface PiAgentRuntimeOptions {
   /**
@@ -65,6 +72,9 @@ export class PiAgentRuntime implements AgentRuntime {
   private readonly allowModelNetwork: boolean;
   private readonly hydrateEnvAuth: boolean;
   private authSummaries: ProviderAuthSummary[] = [];
+  private permissionPipeline: PermissionPipeline | null = null;
+  private beforeWriteToolHandler: BeforeWriteToolHandler | null = null;
+  private afterWriteToolHandler: AfterWriteToolHandler | null = null;
   private disposed = false;
   private initPromise: Promise<void> | null = null;
 
@@ -85,15 +95,80 @@ export class PiAgentRuntime implements AgentRuntime {
     await this.ensureRuntime(options.projectPath);
 
     const now = Date.now();
-    const desktopId = randomUUID();
+    const desktopId = options.id ?? randomUUID();
 
     let piSession: PiAgentSession;
+    const recordHolder: { value?: SessionRecord } = {};
     try {
+      const resourceLoader = new DefaultResourceLoader({
+        cwd: options.projectPath,
+        agentDir: this.agentDir!,
+        extensionFactories: [
+          {
+            name: 'pi-desktop-permissions',
+            factory: (pi) => {
+              const permissions = new PermissionController({
+                pipeline: this.permissionPipeline!,
+                getScope: () => {
+                  const current = recordHolder.value;
+                  if (!current?.activeRunId) return null;
+                  return {
+                    context: {
+                      projectId: current.desktop.projectId,
+                      sessionId: current.desktop.id,
+                      runId: current.activeRunId,
+                      workspaceRoot: current.projectPath,
+                      projectTrusted: true,
+                    },
+                    nextEventScope: () => ({
+                      projectId: current.desktop.projectId,
+                      sessionId: current.desktop.id,
+                      runId: current.activeRunId!,
+                      sequence: ++current.sequence,
+                      timestamp: Date.now(),
+                    }),
+                  };
+                },
+                emit: (event) => this.emit(event),
+              });
+              pi.on('tool_call', async (event) => {
+                await permissions.authorize({
+                  toolCallId: event.toolCallId,
+                  toolName: event.toolName,
+                  input: event.input,
+                });
+                const toolPath = writeToolPath(event.toolName, event.input);
+                const activeRunId = recordHolder.value?.activeRunId;
+                if (toolPath && activeRunId && this.beforeWriteToolHandler) {
+                  await this.beforeWriteToolHandler({
+                    runId: activeRunId,
+                    toolName: event.toolName as 'write' | 'edit',
+                    path: toolPath,
+                  });
+                }
+              });
+              pi.on('tool_result', async (event) => {
+                const toolPath = writeToolPath(event.toolName, event.input);
+                const activeRunId = recordHolder.value?.activeRunId;
+                if (toolPath && activeRunId && !event.isError && this.afterWriteToolHandler) {
+                  await this.afterWriteToolHandler({
+                    runId: activeRunId,
+                    toolName: event.toolName as 'write' | 'edit',
+                    path: toolPath,
+                  });
+                }
+              });
+            },
+          },
+        ],
+      });
+      await resourceLoader.reload();
       const result = await createAgentSession({
         cwd: options.projectPath,
         agentDir: this.agentDir!,
         modelRuntime: this.modelRuntime!,
         sessionManager: SessionManager.inMemory(),
+        resourceLoader,
       });
       piSession = result.session;
     } catch (error) {
@@ -118,8 +193,8 @@ export class PiAgentRuntime implements AgentRuntime {
       id: desktopId,
       projectId: options.projectId,
       title: options.title ?? (path.basename(options.projectPath) || 'Session'),
-      createdAt: now,
-      updatedAt: now,
+      createdAt: options.createdAt ?? now,
+      updatedAt: options.updatedAt ?? now,
     };
 
     const record: SessionRecord = {
@@ -132,6 +207,7 @@ export class PiAgentRuntime implements AgentRuntime {
       abortedRunIds: new Set(),
       currentMessageId: null,
     };
+    recordHolder.value = record;
 
     record.unsubscribePi = piSession.subscribe((event) => {
       this.onPiEvent(record, event as PiSessionEventLike);
@@ -262,9 +338,31 @@ export class PiAgentRuntime implements AgentRuntime {
     record.desktop.updatedAt = Date.now();
   }
 
-  async approve(_requestId: string, _decision: ApprovalDecision): Promise<void> {
+  async configureProvider(providerId: string, apiKey: string): Promise<void> {
     this.assertAlive();
-    // M5 will connect approvals to Pi tool hooks.
+    await this.ensureRuntime(process.cwd());
+    await this.modelRuntime!.setRuntimeApiKey(providerId, apiKey);
+    this.authSummaries = this.authSummaries.map((summary) =>
+      summary.providerId === providerId
+        ? { ...summary, hasAuth: true, source: 'runtime' }
+        : summary,
+    );
+  }
+
+  async removeProviderConfiguration(providerId: string): Promise<void> {
+    this.assertAlive();
+    await this.ensureRuntime(process.cwd());
+    await this.modelRuntime!.setRuntimeApiKey(providerId, '');
+    this.authSummaries = this.authSummaries.map((summary) =>
+      summary.providerId === providerId ? { ...summary, hasAuth: false, source: 'none' } : summary,
+    );
+  }
+
+  async approve(requestId: string, decision: ApprovalDecision): Promise<void> {
+    this.assertAlive();
+    if (!this.permissionPipeline?.resolve(requestId, decision)) {
+      throw new DomainError(agentError('APPROVAL_NOT_FOUND', 'Approval request was not found.'));
+    }
   }
 
   async listModels(): Promise<
@@ -272,16 +370,16 @@ export class PiAgentRuntime implements AgentRuntime {
   > {
     this.assertAlive();
     await this.ensureRuntime(process.cwd());
-    const authSet = new Set(
-      this.authSummaries.filter((s) => s.hasAuth).map((s) => s.providerId),
-    );
+    const authSet = new Set(this.authSummaries.filter((s) => s.hasAuth).map((s) => s.providerId));
     return this.modelRuntime!.getModels().map((m) => {
       const providerId = String(m.provider);
       return {
         providerId,
         modelId: String(m.id),
         displayName: String(m.name ?? m.id),
-        hasAuth: authSet.has(providerId) || this.modelRuntime!.getProviderAuthStatus(providerId)?.configured,
+        hasAuth:
+          authSet.has(providerId) ||
+          this.modelRuntime!.getProviderAuthStatus(providerId)?.configured,
       };
     });
   }
@@ -294,6 +392,14 @@ export class PiAgentRuntime implements AgentRuntime {
     const chosen = withAuth ?? models[0];
     if (!chosen) return null;
     return { providerId: chosen.providerId, modelId: chosen.modelId };
+  }
+
+  setBeforeWriteToolHandler(handler: BeforeWriteToolHandler): void {
+    this.beforeWriteToolHandler = handler;
+  }
+
+  setAfterWriteToolHandler(handler: AfterWriteToolHandler): void {
+    this.afterWriteToolHandler = handler;
   }
 
   subscribe(listener: AgentEventListener): () => void {
@@ -321,6 +427,7 @@ export class PiAgentRuntime implements AgentRuntime {
     this.listeners.clear();
     this.modelRuntime = null;
     this.authSummaries = [];
+    this.permissionPipeline = null;
     this.disposed = true;
   }
 
@@ -415,6 +522,9 @@ export class PiAgentRuntime implements AgentRuntime {
           );
         }
       }
+      this.permissionPipeline = new PermissionPipeline({
+        auditFilePath: path.join(this.agentDir!, 'security-audit.jsonl'),
+      });
     })();
 
     try {

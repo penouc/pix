@@ -1,0 +1,8 @@
+{
+  "id": "react-button-label",
+  "category": "copy-change",
+  "prompt": "In this project, rename the primary button label from \"Submit\" to \"Continue\". Update src/Button.jsx (default prop + PRIMARY_LABEL) and any tests so npm test passes. Do not change unrelated files.",
+  "baselineCommand": "npm test",
+  "acceptanceCommand": "npm run test:acceptance",
+  "resetCommand": "git reset --hard main && git clean -fd"
+}

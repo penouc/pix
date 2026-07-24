@@ -8,12 +8,7 @@ import type {
   CreateSessionOptions,
 } from '@pi-desktop/agent-domain';
 import { DomainError, agentError } from '@pi-desktop/agent-domain';
-import type {
-  ApprovalDecision,
-  DesktopAgentEvent,
-  ModelRef,
-  RunRef,
-} from '@pi-desktop/protocol';
+import type { ApprovalDecision, DesktopAgentEvent, ModelRef, RunRef } from '@pi-desktop/protocol';
 
 interface SessionRecord extends AgentSession {
   projectPath: string;
@@ -46,12 +41,12 @@ export class FakeAgentRuntime implements AgentRuntime {
     this.assertAlive();
     const now = Date.now();
     const session: SessionRecord = {
-      id: randomUUID(),
+      id: options.id ?? randomUUID(),
       projectId: options.projectId,
       projectPath: options.projectPath,
       title: options.title ?? 'New session',
-      createdAt: now,
-      updatedAt: now,
+      createdAt: options.createdAt ?? now,
+      updatedAt: options.updatedAt ?? now,
       model: options.model,
     };
     this.sessions.set(session.id, session);
@@ -132,6 +127,14 @@ export class FakeAgentRuntime implements AgentRuntime {
     session.updatedAt = Date.now();
   }
 
+  async configureProvider(_providerId: string, _apiKey: string): Promise<void> {
+    this.assertAlive();
+  }
+
+  async removeProviderConfiguration(_providerId: string): Promise<void> {
+    this.assertAlive();
+  }
+
   async approve(_requestId: string, _decision: ApprovalDecision): Promise<void> {
     this.assertAlive();
     // Fake runtime does not pause for approvals yet.
@@ -178,7 +181,11 @@ export class FakeAgentRuntime implements AgentRuntime {
     this.disposed = true;
   }
 
-  private async simulateRun(run: ActiveRun, session: SessionRecord, userText: string): Promise<void> {
+  private async simulateRun(
+    run: ActiveRun,
+    session: SessionRecord,
+    userText: string,
+  ): Promise<void> {
     let sequence = 0;
     const next = () => {
       sequence += 1;

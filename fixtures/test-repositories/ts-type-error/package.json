@@ -1,0 +1,10 @@
+{
+  "name": "fixture-ts-type-error",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/baseline.test.js",
+    "typecheck": "tsc --noEmit",
+    "test:acceptance": "node --test test/acceptance.test.js"
+  }
+}

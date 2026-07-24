@@ -1,4 +1,4 @@
-import type { DesktopAgentEvent } from '@pi-desktop/protocol';
+import type { DesktopAgentEvent, RiskLevel } from '@pi-desktop/protocol';
 import { create } from 'zustand';
 
 export interface ChatMessage {
@@ -24,6 +24,17 @@ export interface RunUsage {
   costUsd?: number;
 }
 
+export interface ApprovalRequest {
+  requestId: string;
+  toolName: string;
+  summary: string;
+  command?: string;
+  affectedPaths: string[];
+  riskLevel: RiskLevel;
+  reasons: string[];
+  rememberable: boolean;
+}
+
 interface AgentStreamState {
   activeRunId: string | null;
   activeProjectId: string | null;
@@ -40,6 +51,11 @@ interface AgentStreamState {
   messages: ChatMessage[];
   tools: ToolCallCard[];
   usage: RunUsage | null;
+  model: { providerId: string; modelId: string } | null;
+  startedAt: number | null;
+  lastUserText: string | null;
+  errorRetryable: boolean;
+  approval: ApprovalRequest | null;
   error: string | null;
   lastSequenceByRun: Record<string, number>;
   appendUserMessage: (text: string) => void;
@@ -58,11 +74,7 @@ function shouldAccept(
 ): boolean {
   if (state.activeProjectId && event.projectId !== state.activeProjectId) return false;
   if (state.activeSessionId && event.sessionId !== state.activeSessionId) return false;
-  if (
-    state.activeRunId &&
-    event.runId !== state.activeRunId &&
-    event.type !== 'run.started'
-  ) {
+  if (state.activeRunId && event.runId !== state.activeRunId && event.type !== 'run.started') {
     return false;
   }
   const last = state.lastSequenceByRun[event.runId] ?? -1;
@@ -74,7 +86,10 @@ const pendingDeltas = new Map<string, { role: ChatMessage['role']; chunks: strin
 let deltaFlushHandle: number | null = null;
 let lastSequenceByRunBuffer: Record<string, number> = {};
 
-function scheduleDeltaFlush(get: () => AgentStreamState, set: (partial: Partial<AgentStreamState>) => void) {
+function scheduleDeltaFlush(
+  get: () => AgentStreamState,
+  set: (partial: Partial<AgentStreamState>) => void,
+) {
   if (deltaFlushHandle != null) return;
   const raf =
     typeof requestAnimationFrame === 'function'
@@ -139,11 +154,17 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
   messages: [],
   tools: [],
   usage: null,
+  model: null,
+  startedAt: null,
+  lastUserText: null,
+  errorRetryable: false,
+  approval: null,
   error: null,
   lastSequenceByRun: {},
 
   appendUserMessage: (text) => {
     set((state) => ({
+      lastUserText: text,
       messages: [
         ...state.messages,
         {
@@ -164,6 +185,11 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       messages: [],
       tools: [],
       usage: null,
+      model: null,
+      startedAt: null,
+      lastUserText: null,
+      errorRetryable: false,
+      approval: null,
       error: null,
       lastSequenceByRun: {},
     });
@@ -198,7 +224,11 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
           status: 'running',
           tools: [],
           usage: null,
+          model: event.model ?? null,
+          startedAt: event.timestamp,
+          approval: null,
           error: null,
+          errorRetryable: false,
           lastSequenceByRun,
         });
         break;
@@ -217,6 +247,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
           status: 'failed',
           activeRunId: event.runId,
           error: event.error.message,
+          errorRetryable: event.error.retryable,
           lastSequenceByRun,
         });
         break;
@@ -258,9 +289,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
           set({
             lastSequenceByRun,
             messages: get().messages.map((m) =>
-              m.id === event.messageId
-                ? { ...m, content, streaming: false, role: event.role }
-                : m,
+              m.id === event.messageId ? { ...m, content, streaming: false, role: event.role } : m,
             ),
           });
         } else {
@@ -316,12 +345,23 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
           status: 'waiting_for_approval',
           activeRunId: event.runId,
           lastSequenceByRun,
+          approval: {
+            requestId: event.requestId,
+            toolName: event.toolName,
+            summary: event.summary,
+            command: event.command,
+            affectedPaths: event.affectedPaths,
+            riskLevel: event.riskLevel,
+            reasons: event.reasons,
+            rememberable: event.rememberable,
+          },
         });
         break;
       case 'approval.resolved':
         set({
           status: 'running',
           lastSequenceByRun,
+          approval: null,
         });
         break;
       case 'usage.updated':

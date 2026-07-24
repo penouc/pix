@@ -1,0 +1,9 @@
+{
+  "name": "fixture-small-refactor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/baseline.test.js",
+    "test:acceptance": "node --test test/acceptance.test.js"
+  }
+}

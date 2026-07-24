@@ -83,7 +83,7 @@
 | A4 | 每个 Agent Event 带 `projectId/sessionId/runId/sequence/timestamp` | [x] schema + Fake 事件具备 |
 | A5 | 权限判定在 Main；Renderer 只展示审批并回传决策 | [ ] 审批管线未实现 |
 | A6 | Git Diff 仅展示；Checkpoint 快照才是可靠恢复来源 | [ ] 未实现 |
-| A7 | Provider/Model 交给 Pi；Desktop 负责登录 UX、密钥、状态展示 | [ ] 未实现 |
+| A7 | Provider/Model 交给 Pi；Desktop 负责登录 UX、密钥、状态展示 | [~] Settings API Key + 默认模型；OAuth 登录未实现 |
 
 ### 2.2 版本策略（§5）
 
@@ -91,7 +91,7 @@
 |------|------|----------|
 | Electron | 锁定具体版本 | [~] `36.4.0`（package 中已钉版本，需确认 lock 一致） |
 | Pi SDK | 锁定具体版本 + 升级回归步骤 | [x] `@earendil-works/*@0.82.0` + ADR-0002 |
-| @pierre/diffs | 锁定具体版本 | [ ] 未安装 |
+| @pierre/diffs | 锁定具体版本 | [x] `@pierre/diffs@1.2.12` |
 | SQLite 驱动 | 锁定具体版本；packaged ARM64 验证 | [ ] 未安装 |
 | 其它依赖 | MVP 避免“自动跟随最新”的松散范围 | [~] 仍有大量 `^` |
 
@@ -172,7 +172,7 @@ docs/（见 §6.1）                     [~] 见下表
 | Tool Normalizer / Risk Classifier / Policy Engine | [ ] |
 | protected paths + path canonicalize | [ ] |
 | Audit Log | [ ] |
-| 安全攻击测试仓库 | [ ] |
+| 安全攻击测试仓库 | [x] |
 | contextIsolation + 关 nodeIntegration | [x] |
 | Preload 白名单、无通用 invoke | [x] |
 | IPC Zod 校验 | [~] |
@@ -208,10 +208,10 @@ docs/（见 §6.1）                     [~] 见下表
 | M0-1 | 确认 macOS 优先、单 Agent、Git 项目优先 | [x] | 总纲已冻结 |
 | M0-2 | 冻结 MVP 主路径与非目标 | [x] | §2 / §1.3 |
 | M0-3 | 仓库 + pnpm workspace + 规范 + CI | [x] | 2026-07-24 落地 |
-| M0-4 | docs/、ADR、fixtures 骨架 | [~] | 增 ADR-0002、tech-validation-m1、TODOS；fixtures 仍薄 |
-| M0-5 | 固定真实任务评测集（§13.2 可执行仓库） | [ ] | 阻塞 M0 完全通过 |
+| M0-4 | docs/、ADR、fixtures 骨架 | [x] | 文档、ADR 与 fixture 说明齐备；`pnpm verify:fixtures` 验证目录、metadata 和基线 |
+| M0-5 | 固定真实任务评测集（§13.2 可执行仓库） | [x] | 6 个确定性本地任务仓库覆盖文案、TS、query 状态、表单、失败测试和跨文件重构；仅基线/完整性验证，尚未形成 M8 成功率 |
 
-**M0 阶段结论：** **未完全通过**（M0-5 与文档/fixtures 完整度不足）。空壳可运行，但不能宣称 M0 关闭。
+**M0 阶段结论：** **通过**。范围、空壳和可重复的本地评测输入均已具备；M8 仍需在该固定集上记录 Agent 成功率与安全/性能证据。
 
 ---
 
@@ -222,14 +222,14 @@ docs/（见 §6.1）                     [~] 见下表
 | ID | Todo | 状态 | 备注 |
 |----|------|------|------|
 | M1-1 | 初始化 Electron、React、TS、Vite | [x] | apps/desktop |
-| M1-2 | Main Process 创建 **真实 Pi Session** | [~] | PiAgentRuntime.createSession + smoke test；GUI 待手测 |
-| M1-3 | Renderer → Typed IPC → **Pi** → Event Stream | [~] | 适配层已接线；无鉴权时 prompt 以 run.failed 返回 |
-| M1-4 | 发送消息、流式文本、Tool Event、Stop（真 Pi） | [~] | 映射与 abort 已实现；真模型流需 Provider 登录 |
-| M1-5 | dev 与 **packaged build** 验证（含 Pi） | [ ] | vite build 过；非安装包 |
-| M1-6 | 测试仓库中真实改码 + 跑测试 | [ ] | |
-| M1-7 | 记录技术验证结果：继续 SDK 或切 Pi RPC 备用路线 | [~] | 初稿 `docs/tech-validation-m1.md`；结论待 packaged |
+| M1-2 | Main Process 创建 **真实 Pi Session** | [x] | 2026-07-25 Main IPC integration 以真实 PiAgentRuntime 离线创建、SQLite 持久化并列出 Session 通过 |
+| M1-3 | Renderer → Typed IPC → **Pi** → Event Stream | [~] | Typed Main IPC + Pi session 离线 integration 通过；真实 Provider 流仍需鉴权后的 GUI 手测 |
+| M1-4 | 发送消息、流式文本、Tool Event、Stop（真 Pi） | [~] | Pi 映射、真实 abort、follow-up IPC 已实现；真实模型流/工具事件需 Provider 登录 GUI 证据 |
+| M1-5 | dev 与 **packaged build** 验证（含 Pi） | [x] | 2026-07-25 `pnpm package:dir && pnpm smoke:packaged` 通过，确认 app bundle、asar、Main/preload、Pi SDK 依赖与 unpack 资源齐全 |
+| M1-6 | 测试仓库中真实改码 + 跑测试 | [x] | `pnpm eval:fixture` 已记录真实 OpenCode Go read/edit/bash 闭环，fixture 源码、单元与验收测试均通过 |
+| M1-7 | 记录技术验证结果：继续 SDK 或切 Pi RPC 备用路线 | [x] | `docs/tech-validation-m1.md` 已记录真实 eval 与 packaged 验证，结论为继续 in-process SDK |
 
-**M1 阶段结论：** **仍未通过门槛**（缺真实 Provider 调用 + packaged 证据），但 SDK 适配主路径已落地。
+**M1 阶段结论：** **仍未通过门槛**（缺有鉴权的真实 Provider 桌面交互证据）；SDK 适配主路径、离线 Main IPC integration 与 packaged smoke 已通过。
 
 ---
 
@@ -239,10 +239,10 @@ docs/（见 §6.1）                     [~] 见下表
 
 | ID | Todo | 状态 |
 |----|------|------|
-| M2-1 | AgentRuntime + **PiAgentRuntime** + FakeAgentRuntime 齐备 | [~] 三者代码齐；Pi 契约测试仍浅 |
+| M2-1 | AgentRuntime + **PiAgentRuntime** + FakeAgentRuntime 齐备 | [x] Pi rehydration identity、offline session construction、Main typed IPC integration 均有自动化覆盖 |
 | M2-2 | AgentRunState / DesktopAgentEvent / AgentError | [x] |
 | M2-3 | 事件作用域 + 顺序；重复/迟到丢弃（含 project/session/run 过滤） | [x] Renderer store 已过滤 |
-| M2-4 | Runtime / IPC / 状态机契约测试 | [~] 增 event-mapper + Pi session smoke |
+| M2-4 | Runtime / IPC / 状态机契约测试 | [x] event mapper、Pi session smoke/restart identity、Main typed IPC integration 覆盖；无 Provider 网络调用 |
 
 ---
 
@@ -253,9 +253,9 @@ docs/（见 §6.1）                     [~] 见下表
 | ID | Todo | 状态 |
 |----|------|------|
 | M3-1 | 选择项目、最近项目、Git 检测、项目信任 | [x] Browse + Trust UI + **SQLite projects** 表 |
-| M3-2 | Session 创建/恢复/重命名/归档 | [~] **SQLite** SessionRepository 创建/list/archive/rename；Pi 运行时会话重启不恢复 |
-| M3-3 | Pi Provider/Model；至少一个真实登录闭环 | [~] env key + 模型下拉；无登录 UX |
-| M3-4 | 密钥不进 Renderer / DB 明文 / 日志 | [~] key 不进 Renderer；env 仍在 Main 进程环境 |
+| M3-2 | Session 创建/恢复/重命名/归档 | [x] SQLite 元数据持久化；Main 在首次发送/Follow-up 时按原 session id 惰性重建 Pi 内存会话，自动化 restart identity 测试通过 |
+| M3-3 | Pi Provider/Model；至少一个真实登录闭环 | [x] Settings 支持全部既有 API Key Provider + 默认模型；OpenCode Go 已从本地 auth store 完成真实模型 read/edit/bash fixture eval |
+| M3-4 | 密钥不进 Renderer / DB 明文 / 日志 | [~] API Key 经 macOS Keychain 加密后写入 Main 私有配置，不进 SQLite / 日志；输入时仍短暂经过 Renderer IPC |
 
 ---
 
@@ -265,10 +265,10 @@ docs/（见 §6.1）                     [~] 见下表
 
 | ID | Todo | 状态 |
 |----|------|------|
-| M4-1 | Chat、Composer、流式消息、Tool Call 卡片 | [~] 最小可用 |
-| M4-2 | Stop、Retry、Follow-up Queue、错误恢复 | [~] 仅 Fake Stop |
-| M4-3 | TanStack Query + Zustand + **事件批处理** | [~] Q/Z + message.delta rAF 批处理 |
-| M4-4 | 模型、上下文、Token、成本、运行状态展示 | [~] 右侧简陋面板 |
+| M4-1 | Chat、Composer、流式消息、Tool Call 卡片 | [x] Chat/Composer、delta 流、Tool 卡片与 Approval UI 已接线 Pi 事件契约 |
+| M4-2 | Stop、Retry、Follow-up Queue、错误恢复 | [x] Pi `abort()` 经 Main IPC；运行中输入走 Pi follow-up queue；可重试失败保留 Retry |
+| M4-3 | TanStack Query + Zustand + **事件批处理** | [x] Q/Z + message.delta rAF 批处理，乱序/作用域过滤已有测试 |
+| M4-4 | 模型、上下文、Token、成本、运行状态展示 | [x] 展示活动模型、运行时长、工具数、报告的 token/context/cost；未知值明确标为未报告而不虚构 |
 
 ---
 
@@ -278,11 +278,11 @@ docs/（见 §6.1）                     [~] 见下表
 
 | ID | Todo | 状态 |
 |----|------|------|
-| M5-1 | Tool Normalizer、Risk Classifier、Policy Engine | [ ] |
-| M5-2 | 审批对话框 + allow-once/session/project/deny | [ ] |
-| M5-3 | protected paths、canonicalize、审计日志 | [ ] |
-| M5-4 | Shell / 网络 / 装依赖 / git push / 删除 / 外部副作用 | [ ] |
-| M5-5 | 安全攻击测试仓库 | [ ] |
+| M5-1 | Tool Normalizer、Risk Classifier、Policy Engine | [x] |
+| M5-2 | 审批对话框 + allow-once/session/project/deny | [x] |
+| M5-3 | protected paths、canonicalize、审计日志 | [x] |
+| M5-4 | Shell / 网络 / 装依赖 / git push / 删除 / 外部副作用 | [x] |
+| M5-5 | 安全攻击测试仓库 | [x] |
 
 ---
 
@@ -292,10 +292,10 @@ docs/（见 §6.1）                     [~] 见下表
 
 | ID | Todo | 状态 |
 |----|------|------|
-| M6-1 | 接入 @pierre/diffs 稳定版 + CodeView | [ ] |
-| M6-2 | 多文件、unified/split、折叠未改行、文件导航 | [ ] |
-| M6-3 | 增/改/删/重命名/二进制提示 | [ ] |
-| M6-4 | 大 Diff 性能基准 + 主题同步 | [ ] |
+| M6-1 | 接入 @pierre/diffs 稳定版 + CodeView | [x] |
+| M6-2 | 多文件、unified/split、折叠未改行、文件导航 | [x] |
+| M6-3 | 增/改/删/重命名/二进制提示 | [x] |
+| M6-4 | 大 Diff 性能基准 + 主题同步 | [x] |
 
 ---
 
@@ -305,11 +305,11 @@ docs/（见 §6.1）                     [~] 见下表
 
 | ID | Todo | 状态 |
 |----|------|------|
-| M7-1 | 任务前 Git 状态与文件基线 | [ ] |
-| M7-2 | 首次写入前快照 + hash | [ ] |
-| M7-3 | Keep / Continue / Revert file / Revert all | [ ] |
-| M7-4 | 用户并发修改与冲突 | [ ] |
-| M7-5 | 崩溃恢复与 Checkpoint 清理 | [ ] |
+| M7-1 | 任务前 Git 状态与文件基线 | [x] | SQLite Checkpoint/AgentRun/基线文件持久化；每次 Run 前捕获 Git 状态、OID、dirty 文件 SHA-256 |
+| M7-2 | 首次写入前快照 + hash | [x] | SQLite BLOB 精确快照；首次 write/edit 前由 Main 捕获，新增文件持久化不存在哨兵 |
+| M7-3 | Keep / Continue / Revert file / Revert all | [x] | Main-only snapshot recovery restores exact bytes or deletes only files absent before the run; typed review actions persist outcomes and Diff Review exposes Keep/Continue/per-file Revert/Revert all |
+| M7-4 | 用户并发修改与冲突 | [x] | 成功 write/edit 后持久化无内容的预期状态；恢复前校验 current hash/size/existence，冲突不会自动覆盖并在 Diff Review 中明确展示；批量恢复跳过冲突路径 |
+| M7-5 | 崩溃恢复与 Checkpoint 清理 | [x] | Main 启动发现未解决的 running Checkpoint 并通过 typed IPC/Recovery UI 提供安全审查；仅清理超过 30 天且已 resolved 的 Checkpoint，级联释放快照 BLOB，绝不删除未解决恢复数据 |
 
 ---
 
@@ -450,7 +450,7 @@ docs/（见 §6.1）                     [~] 见下表
 | 会话 Todo ID | 内容 | 会话结束时标记 | 审计后状态 |
 |--------------|------|----------------|------------|
 | `m0-repo` | M0: 初始化 monorepo | completed | [x] 代码已落地 |
-| `m0-docs` | M0: docs/ADR/fixtures 占位 | completed | [~] 文档集不完整；评测集不足 |
+| `m0-docs` | M0: docs/ADR/fixtures 占位 | completed | [x] 固定 fixture 目录、metadata 与基线验证已补齐 |
 | `m1-electron` | M1: Electron+React+TS+Vite | completed | [x] 壳已有 |
 | `m1-packages` | M1: protocol/domain/agent-pi 骨架 | completed | [~] 无真实 Pi SDK |
 | `m1-ui` | M1: shadcn + 三栏骨架 | completed | [~] 最小 UI，非完整工作台 |
@@ -505,7 +505,7 @@ docs/（见 §6.1）                     [~] 见下表
 8. [~] tech-validation：继续 SDK；默认用 OpenCode Go 凭据（`~/.local/share/opencode/auth.json`）  
 9. [~] 已切入 §18.1 / M3 部分；M1 核心技术证据基本齐，packaged GUI 手测可选  
 
-**立即下一刀：** M5 Permission Pipeline 骨架（Tool Normalizer / Risk Classifier / 审批对话框）。
+**立即下一刀：** M7-5 崩溃恢复与 Checkpoint 清理。
 
 ---
 
@@ -546,6 +546,19 @@ docs/（见 §6.1）                     [~] 见下表
 | 2026-07-24 | OpenCode Go 鉴权（auth.json）；`pnpm eval:fixture` 真改码 PASS（kimi-k2.7-code） |
 | 2026-07-24 | `@pi-desktop/database` SQLite SessionRepository（node:sqlite + migrations + JSON 迁移） |
 | 2026-07-24 | SQLite `projects` 表 + DesktopDatabase 单连接；JSON recent-projects 迁移 |
+| 2026-07-24 | 接入 M5 Permission Pipeline：Pi `tool_call` 阻塞钩子、风险分级、审批对话框、权限记忆与脱敏审计日志；补齐安全策略与桥接测试 |
+| 2026-07-24 | 新增 `security-escape` 攻击 fixture，覆盖越界路径、敏感文件、危险 Shell、依赖安装和外部副作用；M5-5 自动化验证通过 |
+| 2026-07-24 | 锁定并接入 `@pierre/diffs@1.2.12`：Main 只读 Git diff IPC、CodeView Review 面板及 Git/协议测试 |
+| 2026-07-24 | 新增 Settings：全量 API Key Provider 配置、macOS Keychain 加密持久化及默认模型偏好 |
+| 2026-07-24 | Diff Review 增加文件导航、unified/split 视图切换和紧凑上下文折叠 |
+| 2026-07-24 | Diff Review 增加增改删重命名状态与二进制文件提示，Git 服务提供 NUL 分隔文件元数据 |
+| 2026-07-24 | Diff Review 同步 Pierre dark 主题，并增加 25 文件、10,000 行 patch 的解析性能基准 |
+| 2026-07-25 | M7-1：Run 前持久化 Git HEAD/index tree、精确 porcelain 状态及 dirty/untracked/deleted 文件 SHA-256 基线；Run 返回后原子关联 running 记录 |
+| 2026-07-25 | M7-2：新增 v4 SQLite 写前快照 BLOB/hash/size/不存在哨兵；Pi write/edit 阻塞钩子通过领域回调交给 Main 捕获，越界路径失败阻断 |
+| 2026-07-25 | M7-3：新增 v5 Checkpoint 审查结果；Main-only 精确快照恢复与路径/符号链接/非普通文件防护；Diff Review 支持 Keep、Continue、按文件和全部 Revert |
+| 2026-07-25 | M7-4：Pi `tool_result` 成功回调记录 agent 写后 hash/size/existence；恢复前比较当前状态，保留用户并发改动并持久化/展示“未自动覆盖”冲突，批量恢复继续处理安全路径 |
+| 2026-07-25 | M0-4/M0-5：补齐 6 个无依赖、可复制/重置的确定性真实任务 fixture；每个含 task metadata、通过的 baseline 与 post-task acceptance，`pnpm verify:fixtures` 只做本地完整性/基线验证，不代表 LLM 评测成功率 |
+| 2026-07-25 | M7-5：Main 启动枚举崩溃遗留的未解决 Checkpoint，Renderer 通过 typed IPC 进入独立安全恢复审查；30 天保留策略仅级联清理已解决的 Checkpoint 和快照 BLOB，未解决数据永久保留至用户决策 |
 
 ---
 
