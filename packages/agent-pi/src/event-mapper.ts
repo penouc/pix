@@ -34,12 +34,10 @@ export function mapPiSessionEvent(
 
   switch (event.type) {
     case 'agent_start':
-      return [
-        {
-          type: 'run.started',
-          ...base(),
-        },
-      ];
+      // Desktop may already emit run.started when accepting the prompt.
+      // Returning another run.started is harmless if sequence advances, but UI
+      // treats a second run.started as a new run — skip to avoid flicker.
+      return [];
 
     case 'message_update': {
       const assistantEvent = event['assistantMessageEvent'] as

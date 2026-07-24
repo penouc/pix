@@ -50,6 +50,7 @@ export function ChatPanel() {
     setDraft('');
     appendUserMessage(text);
     setSending(true);
+    useAgentStreamStore.setState({ status: 'starting', error: null });
     try {
       await invoke<RunRef>({
         method: 'agent.sendMessage',

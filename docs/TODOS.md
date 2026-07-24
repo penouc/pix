@@ -130,7 +130,7 @@ docs/（见 §6.1）                     [~] 见下表
 | security-model.md | [ ] |
 | data-model.md | [ ] |
 | checkpoint-semantics.md | [ ] |
-| acceptance-tests.md | [ ] |
+| acceptance-tests.md | [x] fixture + packaged 路径 |
 | decisions/（Electron、Pi、Pierre…） | [~] 仅 ADR-0001 |
 | **TODOS.md（本文件）** | [x] 2026-07-24 创建 |
 
@@ -252,7 +252,7 @@ docs/（见 §6.1）                     [~] 见下表
 
 | ID | Todo | 状态 |
 |----|------|------|
-| M3-1 | 选择项目、最近项目、Git 检测、项目信任 | [~] 打开路径 + Git 检测雏形；无信任 UX / 最近项目持久化 |
+| M3-1 | 选择项目、最近项目、Git 检测、项目信任 | [~] Browse 选目录 + Git 检测 + recent 持久化；信任 UX 仍简化 |
 | M3-2 | Session 创建/恢复/重命名/归档 | [~] 仅内存 create |
 | M3-3 | Pi Provider/Model；至少一个真实登录闭环 | [ ] |
 | M3-4 | 密钥不进 Renderer / DB 明文 / 日志 | [ ] |
@@ -498,14 +498,14 @@ docs/（见 §6.1）                     [~] 见下表
 1. [x] 对齐文档与 TODOS  
 2. [x] 锁定 Pi SDK 0.82.0 + ADR  
 3. [x] `PiAgentRuntime` + Main createSession 接线  
-4. [~] 第一条真实消息（env key 水合 + Auth 面板；**GUI 真 prompt 待用户密钥**）  
+4. [~] 第一条真实消息（自动选鉴权模型 + run.started 即时反馈；**真 LLM 仍需用户密钥**）  
 5. [~] Abort / 进程树：`killProcessTree` 单测通过；Pi abortBash 已调  
-6. [~] Fixture `react-button-label` 可跑 baseline 测试；真 Agent 改码未跑  
-7. [~] electron-builder mac-arm64 **dir** 打包成功；packaged GUI 手测 / Pi 加载未自动化  
-8. [~] tech-validation 日志更新；倾向继续 SDK  
+6. [~] Fixture baseline + acceptance 脚本齐；真 Agent 改码未跑  
+7. [~] packaged dir + `node scripts/smoke-packaged.mjs` **通过**；GUI 手测仍建议  
+8. [~] tech-validation 倾向 SDK；GUI 真任务后可关 M1  
 9. [ ] 关闭 M1 后进入 §18.1 / M3  
 
-**立即下一刀：** 设置 `OPENAI_API_KEY`（或其它）→ `pnpm dev` → 打开 fixture → 真改码任务 → 手测 packaged app。
+**立即下一刀：** 设置 API Key → Browse 打开 fixture → New session → 真改码 → `ACCEPTANCE=1 npm run test:acceptance`。
 
 ---
 
@@ -541,6 +541,7 @@ docs/（见 §6.1）                     [~] 见下表
 | 2026-07-24 | 通读总纲全文后创建本文件；归档会话 todos；纠正 Fake≠Pi 的进度误标；定义 M1 有序队列 |
 | 2026-07-24 | 锁定 Pi `@earendil-works/*@0.82.0`；实现 PiAgentRuntime + 事件映射 + Main 默认真 Pi；smoke/tests 绿；更新 M1 进度为部分完成 |
 | 2026-07-24 | process-tree 单测；env 凭据水合 + Auth IPC；react-button-label fixture；electron-builder mac-arm64 dir 打包成功 |
+| 2026-07-24 | 自动选鉴权模型、Browse 选目录、最近项目持久化、模型下拉、packaged asar 冒烟脚本、acceptance docs |
 
 ---
 

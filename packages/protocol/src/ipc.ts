@@ -70,6 +70,7 @@ export const ModelInfoSchema = z.object({
   providerId: z.string(),
   modelId: z.string(),
   displayName: z.string(),
+  hasAuth: z.boolean().optional(),
 });
 export type ModelInfo = z.infer<typeof ModelInfoSchema>;
 

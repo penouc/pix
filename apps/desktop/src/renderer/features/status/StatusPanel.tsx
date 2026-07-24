@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 
 import type { AppInfo, ModelInfo } from '@pi-desktop/protocol';
 
@@ -14,6 +15,7 @@ export function StatusPanel() {
   const status = useAgentStreamStore((s) => s.status);
   const usage = useAgentStreamStore((s) => s.usage);
   const activeRunId = useAgentStreamStore((s) => s.activeRunId);
+  const [selectedModel, setSelectedModel] = useState('');
 
   const appInfo = useQuery({
     queryKey: ['app.info'],
@@ -24,6 +26,36 @@ export function StatusPanel() {
     queryKey: ['agent.models'],
     queryFn: () => invoke<ModelInfo[]>({ method: 'agent.listModels' }),
   });
+
+  useEffect(() => {
+    if (!models.data?.length || selectedModel) return;
+    const preferred =
+      models.data.find((m) => m.hasAuth) ?? models.data[0];
+    if (preferred) {
+      setSelectedModel(`${preferred.providerId}/${preferred.modelId}`);
+    }
+  }, [models.data, selectedModel]);
+
+  async function onModelChange(value: string) {
+    setSelectedModel(value);
+    if (!session || !value.includes('/')) return;
+    const [providerId, ...rest] = value.split('/');
+    const modelId = rest.join('/');
+    if (!providerId || !modelId) return;
+    try {
+      await invoke({
+        method: 'agent.setModel',
+        params: {
+          sessionId: session.id,
+          model: { providerId, modelId },
+        },
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  const authModels = models.data?.filter((m) => m.hasAuth) ?? [];
 
   return (
     <div className="flex h-full flex-col">
@@ -50,19 +82,31 @@ export function StatusPanel() {
         </section>
 
         <section className="space-y-2">
-          <SectionTitle>Models (fake)</SectionTitle>
-          {models.isLoading ? <div className="text-xs text-muted">Loading…</div> : null}
-          {models.data?.map((model) => (
-            <div
-              key={`${model.providerId}/${model.modelId}`}
-              className="rounded-lg border border-border bg-background px-3 py-2"
-            >
-              <div className="font-medium">{model.displayName}</div>
-              <div className="font-mono text-[11px] text-muted">
-                {model.providerId}/{model.modelId}
-              </div>
-            </div>
-          ))}
+          <SectionTitle>Model</SectionTitle>
+          <select
+            className="w-full rounded-lg border border-border bg-background px-2 py-2 text-xs outline-none focus:border-accent"
+            disabled={!session || models.isLoading}
+            value={selectedModel}
+            onChange={(e) => void onModelChange(e.target.value)}
+          >
+            {!models.data?.length ? (
+              <option value="">No models</option>
+            ) : (
+              models.data.slice(0, 80).map((model) => {
+                const value = `${model.providerId}/${model.modelId}`;
+                return (
+                  <option key={value} value={value}>
+                    {model.hasAuth ? '● ' : '○ '}
+                    {model.displayName} ({model.providerId})
+                  </option>
+                );
+              })
+            )}
+          </select>
+          <div className="text-[11px] text-muted">
+            ● = provider has auth ({authModels.length} ready)
+            {!session ? ' · create a session to apply' : ''}
+          </div>
         </section>
 
         <section className="space-y-2">
@@ -78,10 +122,8 @@ export function StatusPanel() {
 
         <section className="rounded-xl border border-border bg-surface-raised p-3 text-xs leading-relaxed text-muted">
           默认 <code className="text-accent">PiAgentRuntime</code>。离线 UI：
-          <code className="text-accent"> PI_DESKTOP_FAKE_RUNTIME=1</code>。真模型调用请在启动环境中设置
-          对应 API Key（如 <code className="text-accent">OPENAI_API_KEY</code> /
-          <code className="text-accent">ANTHROPIC_API_KEY</code> /
-          <code className="text-accent">XAI_API_KEY</code>），Auth 行会显示已就绪 provider。
+          <code className="text-accent"> PI_DESKTOP_FAKE_RUNTIME=1</code>。真模型调用请设置
+          API Key 环境变量；Auth 行与模型列表 ● 标记表示就绪。
         </section>
       </div>
     </div>
@@ -89,14 +131,18 @@ export function StatusPanel() {
 }
 
 function SectionTitle({ children }: { children: string }) {
-  return <div className="text-[11px] font-semibold tracking-[0.12em] text-muted uppercase">{children}</div>;
+  return (
+    <div className="text-[11px] font-semibold tracking-[0.12em] text-muted uppercase">
+      {children}
+    </div>
+  );
 }
 
 function Row({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3">
       <span className="text-muted">{label}</span>
-      <span className="text-right text-foreground">{value}</span>
+      <span className="max-w-[60%] truncate text-right text-foreground">{value}</span>
     </div>
   );
 }

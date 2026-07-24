@@ -161,6 +161,21 @@ export class PiAgentRuntime implements AgentRuntime {
 
     if (input.model) {
       await this.applyModel(record.pi, input.model);
+    } else if (!record.pi.model) {
+      const fallback = await this.pickDefaultModel();
+      if (fallback) {
+        await this.applyModel(record.pi, fallback);
+      }
+    }
+
+    if (!record.pi.model) {
+      throw new DomainError(
+        agentError(
+          'NO_MODEL',
+          'No model selected and no authenticated provider available. Set OPENAI_API_KEY / ANTHROPIC_API_KEY / XAI_API_KEY (or another supported key) and retry.',
+          { retryable: true },
+        ),
+      );
     }
 
     const runId = randomUUID();
@@ -169,6 +184,20 @@ export class PiAgentRuntime implements AgentRuntime {
     record.currentMessageId = null;
     this.runToSession.set(runId, sessionId);
     record.desktop.updatedAt = Date.now();
+
+    // Emit run.started early so UI leaves idle even before Pi agent_start.
+    this.emit({
+      type: 'run.started',
+      projectId: record.desktop.projectId,
+      sessionId: record.desktop.id,
+      runId,
+      sequence: ++record.sequence,
+      timestamp: Date.now(),
+      model: {
+        providerId: String(record.pi.model.provider),
+        modelId: String(record.pi.model.id),
+      },
+    });
 
     void this.runPrompt(record, runId, input.text.trim());
     return { runId, sessionId };
@@ -238,14 +267,33 @@ export class PiAgentRuntime implements AgentRuntime {
     // M5 will connect approvals to Pi tool hooks.
   }
 
-  async listModels(): Promise<Array<{ providerId: string; modelId: string; displayName: string }>> {
+  async listModels(): Promise<
+    Array<{ providerId: string; modelId: string; displayName: string; hasAuth?: boolean }>
+  > {
     this.assertAlive();
     await this.ensureRuntime(process.cwd());
-    return this.modelRuntime!.getModels().map((m) => ({
-      providerId: String(m.provider),
-      modelId: String(m.id),
-      displayName: String(m.name ?? m.id),
-    }));
+    const authSet = new Set(
+      this.authSummaries.filter((s) => s.hasAuth).map((s) => s.providerId),
+    );
+    return this.modelRuntime!.getModels().map((m) => {
+      const providerId = String(m.provider);
+      return {
+        providerId,
+        modelId: String(m.id),
+        displayName: String(m.name ?? m.id),
+        hasAuth: authSet.has(providerId) || this.modelRuntime!.getProviderAuthStatus(providerId)?.configured,
+      };
+    });
+  }
+
+  async pickDefaultModel(): Promise<ModelRef | null> {
+    this.assertAlive();
+    await this.ensureRuntime(process.cwd());
+    const models = await this.listModels();
+    const withAuth = models.find((m) => m.hasAuth);
+    const chosen = withAuth ?? models[0];
+    if (!chosen) return null;
+    return { providerId: chosen.providerId, modelId: chosen.modelId };
   }
 
   subscribe(listener: AgentEventListener): () => void {

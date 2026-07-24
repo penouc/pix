@@ -10,9 +10,35 @@ function projectIdForPath(projectPath: string): string {
 
 export class ProjectStore {
   private readonly byId = new Map<string, ProjectSummary>();
+  private persistPath: string | null = null;
+  private loaded = false;
+
+  constructor(persistPath?: string) {
+    this.persistPath = persistPath ?? null;
+  }
+
+  /** Load recent projects from disk (best-effort). */
+  async init(): Promise<void> {
+    if (this.loaded || !this.persistPath) {
+      this.loaded = true;
+      return;
+    }
+    try {
+      const raw = await fs.readFile(this.persistPath, 'utf8');
+      const parsed = JSON.parse(raw) as { projects?: ProjectSummary[] };
+      for (const project of parsed.projects ?? []) {
+        if (project?.id && project.path) {
+          this.byId.set(project.id, project);
+        }
+      }
+    } catch {
+      // missing or corrupt — start empty
+    }
+    this.loaded = true;
+  }
 
   listRecent(): ProjectSummary[] {
-    return [...this.byId.values()].sort((a, b) => b.lastOpenedAt - a.lastOpenedAt);
+    return [...this.byId.values()].sort((a, b) => b.lastOpenedAt - a.lastOpenedAt).slice(0, 20);
   }
 
   get(id: string): ProjectSummary | undefined {
@@ -20,6 +46,7 @@ export class ProjectStore {
   }
 
   async open(rawPath: string): Promise<ProjectSummary> {
+    await this.init();
     const resolved = path.resolve(rawPath);
     const stat = await fs.stat(resolved);
     if (!stat.isDirectory()) {
@@ -43,6 +70,7 @@ export class ProjectStore {
       lastOpenedAt: Date.now(),
     };
     this.byId.set(summary.id, summary);
+    await this.persist();
     return summary;
   }
 
@@ -59,5 +87,19 @@ export class ProjectStore {
     };
     this.byId.set(id, summary);
     return summary;
+  }
+
+  private async persist(): Promise<void> {
+    if (!this.persistPath) return;
+    try {
+      await fs.mkdir(path.dirname(this.persistPath), { recursive: true });
+      await fs.writeFile(
+        this.persistPath,
+        JSON.stringify({ projects: this.listRecent() }, null, 2),
+        'utf8',
+      );
+    } catch (error) {
+      console.error('[ProjectStore] persist failed', error);
+    }
   }
 }

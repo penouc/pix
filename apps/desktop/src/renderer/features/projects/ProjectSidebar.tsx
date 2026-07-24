@@ -1,11 +1,12 @@
+import { useQuery } from '@tanstack/react-query';
 import { FolderGit2, FolderOpen, Plus } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import type { ProjectSummary, SessionSummary } from '@pi-desktop/protocol';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { invoke } from '@/lib/ipc';
+import { invoke, IpcError } from '@/lib/ipc';
 import { useAgentStreamStore } from '@/stores/agent-stream-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 
@@ -20,20 +21,53 @@ export function ProjectSidebar() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function openProject() {
-    const path = pathInput.trim() || processCwdFallback();
+  const recent = useQuery({
+    queryKey: ['project.listRecent'],
+    queryFn: () => invoke<ProjectSummary[]>({ method: 'project.listRecent' }),
+  });
+
+  useEffect(() => {
+    if (project) setPathInput(project.path);
+  }, [project]);
+
+  async function applyProject(opened: ProjectSummary) {
+    setProject(opened);
+    resetSessionView();
+    setScope(opened.id, null);
+    setPathInput(opened.path);
+    void recent.refetch();
+  }
+
+  async function openProjectPath(path: string) {
+    if (!path.trim()) {
+      setError('Enter a project path or use Browse');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       const opened = await invoke<ProjectSummary>({
         method: 'project.open',
-        params: { path },
+        params: { path: path.trim() },
       });
-      setProject(opened);
-      resetSessionView();
-      setScope(opened.id, null);
-      setPathInput(opened.path);
+      await applyProject(opened);
     } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function browseFolder() {
+    setBusy(true);
+    setError(null);
+    try {
+      const opened = await invoke<ProjectSummary>({ method: 'project.pickFolder' });
+      await applyProject(opened);
+    } catch (err) {
+      if (err instanceof IpcError && err.code === 'CANCELLED') {
+        return;
+      }
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
@@ -80,14 +114,50 @@ export function ProjectSidebar() {
             value={pathInput}
             onChange={(e) => setPathInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') void openProject();
+              if (e.key === 'Enter') void openProjectPath(pathInput);
             }}
           />
-          <Button className="w-full" variant="secondary" disabled={busy} onClick={() => void openProject()}>
-            <FolderOpen className="h-4 w-4" />
-            Open project
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              className="flex-1"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => void browseFolder()}
+            >
+              <FolderOpen className="h-4 w-4" />
+              Browse
+            </Button>
+            <Button
+              className="flex-1"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => void openProjectPath(pathInput)}
+            >
+              Open
+            </Button>
+          </div>
         </section>
+
+        {recent.data && recent.data.length > 0 ? (
+          <section className="space-y-2">
+            <div className="text-xs font-medium text-muted">Recent</div>
+            <ul className="space-y-1">
+              {recent.data.slice(0, 6).map((item) => (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    className="w-full truncate rounded-lg border border-transparent px-2 py-1.5 text-left text-xs text-muted hover:border-border hover:bg-surface-raised hover:text-foreground"
+                    title={item.path}
+                    disabled={busy}
+                    onClick={() => void openProjectPath(item.path)}
+                  >
+                    {item.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         {project ? (
           <section className="rounded-xl border border-border bg-surface-raised p-3">
@@ -133,9 +203,4 @@ export function ProjectSidebar() {
       </div>
     </div>
   );
-}
-
-function processCwdFallback(): string {
-  // Renderer has no process.cwd; default to empty and let Main validate.
-  return '';
 }

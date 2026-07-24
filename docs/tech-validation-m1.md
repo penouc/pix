@@ -18,7 +18,7 @@
 | Item | Status | Evidence |
 |------|--------|----------|
 | Pi SDK loads in Electron Main (dev) | [~] | createSession smoke test + Main wiring; GUI real prompt needs API key |
-| Pi SDK loads in packaged Electron | [~] | `pnpm package:dir` produces `release/mac-arm64/Pi Agent Desktop.app` with Pi in asar/unpacked; GUI launch smoke not yet automated |
+| Pi SDK loads in packaged Electron | [~] | `pnpm package:dir` + `node scripts/smoke-packaged.mjs` verifies bundle/asar/Pi unpack; interactive GUI launch still manual |
 | ESM/CJS / dynamic deps / resources | [~] | main externalizes `@earendil-works/*`; builder packs deps |
 | Session storage path controllable | [x] | `agentDir` under `app.getPath('userData')/pi-agent` |
 | Tool events for permission inputs | [~] | tool.requested includes name + inputSummary + risk heuristic |

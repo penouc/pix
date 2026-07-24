@@ -143,17 +143,23 @@ export class FakeAgentRuntime implements AgentRuntime {
         providerId: 'fake',
         modelId: 'fake-demo',
         displayName: 'Fake Demo Model',
+        hasAuth: true,
       },
       {
         providerId: 'fake',
         modelId: 'fake-fast',
         displayName: 'Fake Fast Model',
+        hasAuth: true,
       },
     ];
   }
 
   async getAuthStatus() {
     return [{ providerId: 'fake', hasAuth: true, source: 'runtime' }];
+  }
+
+  async pickDefaultModel() {
+    return { providerId: 'fake', modelId: 'fake-demo' };
   }
 
   subscribe(listener: AgentEventListener): () => void {

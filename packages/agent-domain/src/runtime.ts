@@ -40,11 +40,20 @@ export interface AgentRuntime {
   abort(runId: string): Promise<void>;
   setModel(sessionId: string, model: ModelRef): Promise<void>;
   approve(requestId: string, decision: ApprovalDecision): Promise<void>;
-  listModels(): Promise<Array<{ providerId: string; modelId: string; displayName: string }>>;
+  listModels(): Promise<
+    Array<{
+      providerId: string;
+      modelId: string;
+      displayName: string;
+      hasAuth?: boolean;
+    }>
+  >;
   /** Optional: which providers currently have usable credentials (no secrets). */
   getAuthStatus?(): Promise<
     Array<{ providerId: string; hasAuth: boolean; source: string }>
   >;
+  /** Optional: choose a default model when the session has none. */
+  pickDefaultModel?(): Promise<ModelRef | null>;
   subscribe(listener: AgentEventListener): () => void;
   dispose(): Promise<void>;
 }

@@ -54,6 +54,7 @@ export type ResolveApprovalInput = z.infer<typeof ResolveApprovalInputSchema>;
 export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('app.getInfo'), params: z.object({}).optional() }),
   z.object({ method: z.literal('project.open'), params: OpenProjectInputSchema }),
+  z.object({ method: z.literal('project.pickFolder'), params: z.object({}).optional() }),
   z.object({ method: z.literal('project.listRecent'), params: z.object({}).optional() }),
   z.object({ method: z.literal('session.create'), params: CreateSessionInputSchema }),
   z.object({ method: z.literal('session.list'), params: z.object({ projectId: z.string().min(1) }) }),

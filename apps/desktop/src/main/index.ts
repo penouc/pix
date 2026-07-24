@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,6 +16,7 @@ import {
   parseDesktopAgentEvent,
   parseIpcCommand,
   type IpcResult,
+  type ModelInfo,
   type ProjectSummary,
   type SessionSummary,
 } from '@pi-desktop/protocol';
@@ -26,10 +27,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let mainWindow: BrowserWindow | null = null;
 let runtime: AgentRuntime | null = null;
-const projectStore = new ProjectStore();
+let projectStore: ProjectStore | null = null;
 /** Maps desktop session id -> project path for runtime create. */
 const sessionProjectPath = new Map<string, string>();
 const sessionRecords = new Map<string, SessionSummary>();
+
+function getProjectStore(): ProjectStore {
+  if (!projectStore) {
+    projectStore = new ProjectStore(path.join(app.getPath('userData'), 'recent-projects.json'));
+  }
+  return projectStore;
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -100,6 +108,8 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
 
   const cmd = parsed.data;
   const agent = ensureRuntime();
+  const store = getProjectStore();
+  await store.init();
 
   try {
     switch (cmd.method) {
@@ -117,22 +127,42 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
         });
       }
       case 'project.open': {
-        const project = await projectStore.open(cmd.params.path);
+        const project = await store.open(cmd.params.path);
+        return okResult(project satisfies ProjectSummary);
+      }
+      case 'project.pickFolder': {
+        const result = mainWindow
+          ? await dialog.showOpenDialog(mainWindow, {
+              properties: ['openDirectory', 'createDirectory'],
+              title: 'Open project folder',
+            })
+          : await dialog.showOpenDialog({
+              properties: ['openDirectory', 'createDirectory'],
+              title: 'Open project folder',
+            });
+        if (result.canceled || !result.filePaths[0]) {
+          return errResult('CANCELLED', 'Folder picker cancelled');
+        }
+        const project = await store.open(result.filePaths[0]);
         return okResult(project satisfies ProjectSummary);
       }
       case 'project.listRecent': {
-        return okResult(projectStore.listRecent());
+        return okResult(store.listRecent());
       }
       case 'session.create': {
-        const project = projectStore.get(cmd.params.projectId);
+        const project = store.get(cmd.params.projectId);
         if (!project) {
           return errResult('PROJECT_NOT_FOUND', `Project ${cmd.params.projectId} not found`);
+        }
+        let model = cmd.params.model;
+        if (!model && typeof agent.pickDefaultModel === 'function') {
+          model = (await agent.pickDefaultModel()) ?? undefined;
         }
         const session = await agent.createSession({
           projectId: project.id,
           projectPath: project.path,
           title: cmd.params.title,
-          model: cmd.params.model,
+          model,
         });
         const summary: SessionSummary = {
           id: session.id,
@@ -172,7 +202,7 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
         return okResult({ ok: true });
       }
       case 'agent.listModels': {
-        return okResult(await agent.listModels());
+        return okResult((await agent.listModels()) as ModelInfo[]);
       }
       case 'agent.authStatus': {
         return okResult(await readAuthStatus(agent));
@@ -194,6 +224,7 @@ async function handleInvoke(raw: unknown): Promise<IpcResult> {
 
 app.whenReady().then(() => {
   ipcMain.handle(IpcChannels.invoke, async (_event, raw: unknown) => handleInvoke(raw));
+  void getProjectStore().init();
   createWindow();
 
   app.on('activate', () => {

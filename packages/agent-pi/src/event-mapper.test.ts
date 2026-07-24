@@ -25,13 +25,10 @@ function makeCtx(): MapContext & { seq: number; messageId: string | null } {
 }
 
 describe('mapPiSessionEvent', () => {
-  it('maps agent_start to run.started', () => {
+  it('skips agent_start (desktop emits run.started itself)', () => {
     const ctx = makeCtx();
     const events = mapPiSessionEvent({ type: 'agent_start' }, ctx);
-    expect(events).toHaveLength(1);
-    expect(events[0]?.type).toBe('run.started');
-    expect(events[0]?.projectId).toBe('p1');
-    expect(events[0]?.sequence).toBe(1);
+    expect(events).toEqual([]);
   });
 
   it('maps text_delta to message.delta', () => {

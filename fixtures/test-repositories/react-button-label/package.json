@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Fixed eval fixture: rename primary button label and update tests (plan §13.2)",
   "scripts": {
-    "test": "node --test test/**/*.test.js"
+    "test": "node --test test/button.test.js",
+    "test:acceptance": "ACCEPTANCE=1 node --test test/acceptance.expected.test.js"
   }
 }
