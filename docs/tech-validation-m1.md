@@ -40,25 +40,29 @@ Decision: **continue SDK**. Evidence: headless `pnpm eval:fixture` with `opencod
 
 ```bash
 pnpm -r --filter './packages/*' build
-# Real Pi (set at least one provider key):
-export OPENAI_API_KEY=...   # or ANTHROPIC_API_KEY / XAI_API_KEY / ...
-pnpm dev
-# Open fixtures/test-repositories/react-button-label (run setup-git.sh first for Git trust)
-# New session → send task from fixture README
 
-# Offline UI only:
+# Real Pi — OpenCode Go (auto-reads ~/.local/share/opencode/auth.json):
+pnpm dev
+# Browse → fixture → Trust → New session → opencode-go model → send task
+
+# Offline UI:
 PI_DESKTOP_FAKE_RUNTIME=1 pnpm dev
 
-# Process-tree unit tests:
-pnpm test -- packages/agent-pi/src/process-tree.test.ts
+# Headless real coding eval (default opencode-go/kimi-k2.7-code):
+pnpm eval:fixture
 
-# Headless runtime (Fake by default):
+# Headless Fake smoke:
 pnpm smoke:runtime
-# Real Pi session create/list (no prompt unless SMOKE_PROMPT=1 + API key):
-pnpm smoke:runtime:pi
-# SMOKE_PROMPT=1 PI_DESKTOP_FAKE_RUNTIME=0 pnpm smoke:runtime:pi
 
-# Packaged macOS arm64 dir:
-pnpm package:dir
-# open apps/desktop/release/mac-arm64/Pi\ Agent\ Desktop.app
+# Packaged:
+pnpm package:dir && pnpm smoke:packaged
 ```
+
+## Fixture eval result (2026-07-24)
+
+| Field | Value |
+|-------|--------|
+| Model | `opencode-go/kimi-k2.7-code` |
+| Tools | read, edit, bash |
+| Outcome | **PASS** — source + unit + acceptance |
+| Report | [`eval-reports/react-button-label-latest.md`](./eval-reports/react-button-label-latest.md) |

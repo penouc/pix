@@ -562,20 +562,20 @@ rememberable: boolean;
 - [x] 锁定 Pi SDK 版本并创建 agent-pi package。（`@earendil-works/*@0.82.0`，见 ADR-0002）
 - [x] 定义 AgentRuntime、DesktopAgentEvent、AgentRunState 和 AgentError。
 - [x] 定义 protocol package，建立 Typed IPC + Zod。
-- [ ] 在 Main Process 创建 Pi Session 并发送第一条消息。（Session 创建已通；真模型消息待鉴权）
-- [ ] 把 message delta 和 tool events 显示到 Renderer。（映射已接；真流待鉴权）
-- [ ] 实现 Stop，并验证 Bash 子进程树被终止。
-- [ ] 准备测试 React 项目，要求 Agent 修改组件并运行测试。
-- [ ] 生成 packaged macOS build，验证 Pi SDK 仍能运行。
-- [ ] 记录技术验证结果，决定是否继续 SDK 路线或切换 Pi RPC 备用路线。
+- [x] 在 Main Process 创建 Pi Session 并发送第一条消息。（含 OpenCode Go 真模型）
+- [x] 把 message delta 和 tool events 显示到 Renderer。（真流已在 eval 验证）
+- [ ] 实现 Stop，并验证 Bash 子进程树被终止。（abort API + 单测有；端到端待补）
+- [x] 准备测试 React 项目，要求 Agent 修改组件并运行测试。（`pnpm eval:fixture` PASS）
+- [~] 生成 packaged macOS build，验证 Pi SDK 仍能运行。（dir 包 + asar smoke 过）
+- [x] 记录技术验证结果，决定是否继续 SDK 路线或切换 Pi RPC 备用路线。（继续 SDK）
 
 > **执行台账：** 全部勾选状态以 [`docs/TODOS.md`](./docs/TODOS.md) 为准。
 
 ## 18.1 技术验证通过后的下一批任务
-- [ ] 实现 Project、Workspace Trust 和最近项目。
-- [ ] 实现 Session Repository 与 SQLite migration。
-- [ ] 实现 Provider/Model 选择和安全凭据存储。
-- [ ] 实现完整 Agent Chat、Tool Cards 和 Event Batching。
+- [~] 实现 Project、Workspace Trust 和最近项目。
+- [~] 实现 Session Repository 与 SQLite migration。（JSON 版有；SQLite 未做）
+- [~] 实现 Provider/Model 选择和安全凭据存储。（OpenCode Go + 下拉；Keychain 未做）
+- [~] 实现完整 Agent Chat、Tool Cards 和 Event Batching。
 - [ ] 实现 Permission Pipeline 和 Approval Dialog。
 - [ ] 接入 @pierre/diffs，完成多文件 Review。
 - [ ] 实现 Checkpoint、Keep、Revert file 和 Revert all。
