@@ -16,6 +16,7 @@ import type {
   AfterWriteToolHandler,
   BeforeWriteToolHandler,
   CreateSessionOptions,
+  ModelCatalogEntry,
 } from '@pi-desktop/agent-domain';
 import { DomainError, agentError } from '@pi-desktop/agent-domain';
 import type { ApprovalDecision, DesktopAgentEvent, ModelRef, RunRef } from '@pi-desktop/protocol';
@@ -415,14 +416,25 @@ export class PiAgentRuntime implements AgentRuntime {
     }
   }
 
-  async listModels(): Promise<
-    Array<{ providerId: string; modelId: string; displayName: string; hasAuth?: boolean }>
-  > {
+  async listModels(): Promise<ModelCatalogEntry[]> {
     this.assertAlive();
     await this.ensureRuntime(process.cwd());
     const authSet = new Set(this.authSummaries.filter((s) => s.hasAuth).map((s) => s.providerId));
     return this.modelRuntime!.getModels().map((m) => {
       const providerId = String(m.provider);
+      const record = m as {
+        contextWindow?: number;
+        maxTokens?: number;
+        reasoning?: boolean;
+        cost?: { input?: number; output?: number };
+      };
+      /*
+       * Capability and price come from Pi's bundled models.dev catalogue, which
+       * carries exactly what models.dev publishes — context window, max output,
+       * reasoning support, and USD per million tokens. Passing it through means
+       * the picker can show it without fetching anything or estimating anything;
+       * a field the catalogue omits stays undefined rather than becoming 0.
+       */
       return {
         providerId,
         modelId: String(m.id),
@@ -430,6 +442,17 @@ export class PiAgentRuntime implements AgentRuntime {
         hasAuth:
           authSet.has(providerId) ||
           this.modelRuntime!.getProviderAuthStatus(providerId)?.configured,
+        ...(typeof record.contextWindow === 'number' && record.contextWindow > 0
+          ? { contextWindow: record.contextWindow }
+          : {}),
+        ...(typeof record.maxTokens === 'number' && record.maxTokens > 0
+          ? { maxOutputTokens: record.maxTokens }
+          : {}),
+        ...(typeof record.reasoning === 'boolean' ? { reasoning: record.reasoning } : {}),
+        ...(typeof record.cost?.input === 'number' ? { inputCostPerMTok: record.cost.input } : {}),
+        ...(typeof record.cost?.output === 'number'
+          ? { outputCostPerMTok: record.cost.output }
+          : {}),
       };
     });
   }

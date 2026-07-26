@@ -39,6 +39,20 @@ describe('PiAgentRuntime session create (no provider call)', () => {
       const models = await runtime.listModels();
       // Built-in catalog should expose at least one model definition offline.
       expect(Array.isArray(models)).toBe(true);
+      expect(models.length).toBeGreaterThan(0);
+
+      /*
+       * Capability and price must survive the mapping out of Pi's catalogue.
+       * Without this the fields silently came through as `undefined` and the
+       * picker just showed nothing extra — a failure with no symptom.
+       */
+      const priced = models.filter(
+        (model) =>
+          typeof model.contextWindow === 'number' && typeof model.inputCostPerMTok === 'number',
+      );
+      expect(priced.length).toBeGreaterThan(0);
+      // A context window is a token count, not a byte count — guard the units.
+      expect(priced[0]!.contextWindow!).toBeGreaterThan(1000);
 
       await runtime.dispose();
     } finally {

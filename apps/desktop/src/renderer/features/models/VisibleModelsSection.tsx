@@ -143,11 +143,11 @@ export function VisibleModelsSection() {
                       >
                         {on ? <Check className="h-3 w-3" /> : null}
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-[12.5px]">
-                        {model.displayName}
-                      </span>
-                      <span className="flex-none font-mono text-[10.5px] text-muted">
-                        {model.modelId}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[12.5px]">{model.displayName}</span>
+                        <span className="block truncate font-mono text-[10.5px] text-muted">
+                          {describeModel(model)}
+                        </span>
                       </span>
                     </button>
                   );
@@ -164,4 +164,25 @@ export function VisibleModelsSection() {
       </p>
     </>
   );
+}
+
+/**
+ * Context window, price and reasoning support, from Pi's bundled models.dev
+ * catalogue. Only what the catalogue actually reports — a missing number is left
+ * out rather than shown as free or unlimited.
+ */
+function describeModel(model: ModelInfo): string {
+  const parts: string[] = [model.modelId];
+  if (model.contextWindow) parts.push(`${formatTokenCount(model.contextWindow)} ctx`);
+  if (model.inputCostPerMTok != null && model.outputCostPerMTok != null) {
+    parts.push(`$${model.inputCostPerMTok}/$${model.outputCostPerMTok} per Mtok`);
+  }
+  if (model.reasoning) parts.push('reasoning');
+  return parts.join(' · ');
+}
+
+function formatTokenCount(tokens: number): string {
+  if (tokens >= 1_000_000) return `${Math.round(tokens / 100_000) / 10}M`;
+  if (tokens >= 1_000) return `${Math.round(tokens / 1_000)}K`;
+  return String(tokens);
 }

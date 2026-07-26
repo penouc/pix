@@ -121,6 +121,19 @@ export const ModelInfoSchema = z.object({
   modelId: z.string(),
   displayName: z.string(),
   hasAuth: z.boolean().optional(),
+  /*
+   * Capability and price, straight from Pi's bundled models.dev catalogue — the
+   * same numbers models.dev publishes, already local, so nothing is fetched and
+   * nothing is guessed. Every field is optional because a provider may report
+   * none of it, and an absent value must read as "not reported" rather than 0.
+   */
+  contextWindow: z.number().int().positive().optional(),
+  maxOutputTokens: z.number().int().positive().optional(),
+  reasoning: z.boolean().optional(),
+  /** USD per million input tokens. */
+  inputCostPerMTok: z.number().nonnegative().optional(),
+  /** USD per million output tokens. */
+  outputCostPerMTok: z.number().nonnegative().optional(),
 });
 export type ModelInfo = z.infer<typeof ModelInfoSchema>;
 

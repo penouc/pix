@@ -47,6 +47,25 @@ export type AfterWriteToolHandler = (input: {
  * Desktop-owned AgentRuntime boundary (plan §7).
  * Pi SDK types must never leak past implementers of this interface.
  */
+/**
+ * One model as the catalogue knows it. The capability and price fields come from
+ * Pi's bundled models.dev data and are optional throughout: a catalogue that
+ * omits a number must not be reported as zero.
+ */
+export interface ModelCatalogEntry {
+  providerId: string;
+  modelId: string;
+  displayName: string;
+  hasAuth?: boolean;
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  reasoning?: boolean;
+  /** USD per million input tokens. */
+  inputCostPerMTok?: number;
+  /** USD per million output tokens. */
+  outputCostPerMTok?: number;
+}
+
 export interface AgentRuntime {
   createSession(options: CreateSessionOptions): Promise<AgentSession>;
   resumeSession(sessionId: string): Promise<AgentSession>;
@@ -79,14 +98,7 @@ export interface AgentRuntime {
   }): Promise<number>;
   removeProviderConfiguration?(providerId: string): Promise<void>;
   approve(requestId: string, decision: ApprovalDecision): Promise<void>;
-  listModels(): Promise<
-    Array<{
-      providerId: string;
-      modelId: string;
-      displayName: string;
-      hasAuth?: boolean;
-    }>
-  >;
+  listModels(): Promise<ModelCatalogEntry[]>;
   /** Optional: which providers currently have usable credentials (no secrets). */
   getAuthStatus?(): Promise<Array<{ providerId: string; hasAuth: boolean; source: string }>>;
   /** Optional: choose a default model when the session has none. */
