@@ -9,11 +9,11 @@
  * Usage:
  *   node scripts/verify-packaged.mjs [--app-path <path>]
  *
- * Uninstall guide:
- *   1. Delete the .app bundle (if copied to /Applications).
- *   2. Remove user data: rm -rf ~/Library/Application\ Support/Pi\ Agent\ Desktop
- *   3. Remove logs:      rm -rf ~/Library/Logs/Pi\ Agent\ Desktop
- *   4. No LaunchAgents or kernel extensions are installed.
+ * Uninstall guide: printed by this script rather than written here. Electron
+ * derives the user-data directory from package.json `name`, not `productName`,
+ * so a hand-written path drifts from reality — this guide used to name
+ * "Pi Agent Desktop" while the app actually wrote to "@pi-desktop/desktop",
+ * which would have left the database and the encrypted provider keys behind.
  */
 import { createRequire } from 'node:module';
 import { existsSync, readdirSync, statSync } from 'node:fs';
@@ -67,6 +67,8 @@ pass(`app.asar present (${(statSync(asarPath).size / 1024 / 1024).toFixed(1)} MB
 section('asar contents');
 const require = createRequire(import.meta.url);
 let asarFiles;
+/** Kept for later so the uninstall section can read the packaged manifest. */
+let asarModule = null;
 try {
   let asar;
   try {
@@ -74,6 +76,7 @@ try {
   } catch {
     asar = require('@electron/asar');
   }
+  asarModule = asar;
   asarFiles = asar.listPackage(asarPath).map(String);
 } catch {
   const asarBin = path.join(root, 'node_modules/.pnpm/node_modules/.bin/asar');
@@ -169,6 +172,28 @@ if (existsSync(dmgDir)) {
   }
 } else {
   console.log('  –  release/ dir not found; no DMG check');
+}
+
+// ── Uninstall paths, derived from the bundle so they cannot be wrong
+section('Uninstall paths (derived)');
+{
+  // Electron keys userData off `name`; `productName` only names the bundle.
+  let appName = null;
+  try {
+    const raw = asarModule
+      ? asarModule.extractFile(asarPath, 'package.json').toString('utf8')
+      : null;
+    if (raw) appName = JSON.parse(raw).name ?? null;
+  } catch {
+    appName = null;
+  }
+  if (!appName) {
+    fail('could not read app name from the packaged package.json');
+  } else {
+    pass(`user data:  ~/Library/Application Support/${appName}`);
+    pass(`logs:       ~/Library/Logs/${appName}`);
+    console.log('  –  no LaunchAgents and no kernel extensions are installed');
+  }
 }
 
 // ── Result

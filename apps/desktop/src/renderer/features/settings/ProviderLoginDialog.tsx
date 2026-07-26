@@ -235,7 +235,7 @@ export function ProviderLoginDialog({
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-border bg-surface px-5 py-3">
-          <Button variant={phase === 'done' ? 'primary' : 'secondary'} onClick={close}>
+          <Button variant={phase === 'done' ? 'default' : 'secondary'} onClick={close}>
             {phase === 'done' ? 'Done' : 'Cancel'}
           </Button>
         </div>

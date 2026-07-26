@@ -1,6 +1,11 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 
-import { ensureContentIndex, openDatabase, type SqliteDatabase } from './sqlite-connection.js';
+import {
+  ensureContentIndex,
+  openDatabase,
+  type ContentIndexMode,
+  type SqliteDatabase,
+} from './sqlite-connection.js';
 import { SqliteIndexRepository, toMatchQuery } from './sqlite-index-repository.js';
 
 /*
@@ -9,7 +14,10 @@ import { SqliteIndexRepository, toMatchQuery } from './sqlite-index-repository.j
  * Node build has FTS5, so a suite that only ran the available path passed here
  * and failed at launch. `like` is what the app actually uses today.
  */
-const MODES = ['like', ...(ensureContentIndex(openDatabase(':memory:')) === 'fts5' ? ['fts5'] : [])] as const;
+const MODES: ContentIndexMode[] = [
+  'like',
+  ...(ensureContentIndex(openDatabase(':memory:')) === 'fts5' ? (['fts5'] as const) : []),
+];
 
 describe.each(MODES)('SqliteIndexRepository (%s)', (mode) => {
   let db: SqliteDatabase;

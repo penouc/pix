@@ -35,8 +35,10 @@ mac:
   identity: null
   hardenedRuntime: false
   gatekeeperAssess: false
-  # Uninstall: delete ~/Library/Application Support/Pi Agent Desktop
-  # and remove the .app bundle from /Applications.
+  # Uninstall: remove the .app bundle from /Applications, then the user data.
+  # NB the data directory is keyed off package.json `name`, not productName, so
+  # it is ~/Library/Application Support/@pi-desktop/desktop — not "Pi Agent
+  # Desktop". `node scripts/verify-packaged.mjs` prints the real paths.
 
 dmg:
   title: Pi Agent Desktop

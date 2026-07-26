@@ -366,7 +366,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                   className="flex items-center justify-between rounded-xl border border-border bg-surface px-3 py-2.5"
                 >
                   <span className="text-sm text-foreground">
-                    {PROVIDERS.find((p) => p.id === id)?.label ?? id}
+                    {available.find((entry) => entry.id === id)?.name ?? id}
                   </span>
                   <Button variant="ghost" size="sm" onClick={() => void removeKey(id)}>
                     Remove
