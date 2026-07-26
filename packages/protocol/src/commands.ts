@@ -131,6 +131,23 @@ export const IndexSearchInputSchema = z.object({
 });
 export type IndexSearchInput = z.infer<typeof IndexSearchInputSchema>;
 
+export const ProviderLoginInputSchema = z.object({
+  providerId: z.string().min(1),
+  /** Which auth method to run; `oauth` is the subscription login. */
+  type: z.enum(['oauth', 'apiKey']).default('oauth'),
+});
+export type ProviderLoginInput = z.infer<typeof ProviderLoginInputSchema>;
+
+export const ProviderLoginIdInputSchema = z.object({
+  loginId: z.string().min(1),
+});
+export type ProviderLoginIdInput = z.infer<typeof ProviderLoginIdInputSchema>;
+
+export const ProviderLoginSubmitInputSchema = ProviderLoginIdInputSchema.extend({
+  value: z.string().max(10_000),
+});
+export type ProviderLoginSubmitInput = z.infer<typeof ProviderLoginSubmitInputSchema>;
+
 export const SetVisibleModelsInputSchema = z.object({
   /** `provider/model` keys. Empty restores "offer every runnable model". */
   keys: z.array(z.string().min(1)).max(500),
@@ -310,6 +327,11 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('git.getWorkingTreeDiff'), params: GetWorkingTreeDiffInputSchema }),
   z.object({ method: z.literal('provider.list'), params: z.object({}).optional() }),
   z.object({ method: z.literal('provider.listAvailable'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('provider.login'), params: ProviderLoginInputSchema }),
+  z.object({ method: z.literal('provider.loginStatus'), params: ProviderLoginIdInputSchema }),
+  z.object({ method: z.literal('provider.loginSubmit'), params: ProviderLoginSubmitInputSchema }),
+  z.object({ method: z.literal('provider.loginCancel'), params: ProviderLoginIdInputSchema }),
+  z.object({ method: z.literal('provider.logout'), params: RemoveProviderInputSchema }),
   z.object({ method: z.literal('provider.saveApiKey'), params: SaveProviderApiKeyInputSchema }),
   z.object({ method: z.literal('provider.remove'), params: RemoveProviderInputSchema }),
   z.object({ method: z.literal('settings.get'), params: z.object({}).optional() }),

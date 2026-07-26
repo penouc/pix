@@ -7,6 +7,7 @@ import type { ProviderCatalogEntry, ProviderSetting, Settings } from '@pi-deskto
 import { Button } from '@/components/ui/button';
 import { useOfferedModels } from '@/features/models/use-offered-models';
 import { VisibleModelsSection } from '@/features/models/VisibleModelsSection';
+import { ProviderLoginDialog } from '@/features/settings/ProviderLoginDialog';
 import { invoke } from '@/lib/ipc';
 
 interface SettingsPanelProps {
@@ -46,6 +47,27 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
     queryFn: () => invoke<ProviderCatalogEntry[]>({ method: 'provider.listAvailable' }),
   });
   const available = catalog.data ?? [];
+  const [login, setLogin] = useState<{ loginId: string; providerName: string } | null>(null);
+  const [startingLogin, setStartingLogin] = useState(false);
+
+  /** Kick off a subscription login and hand the rest to the dialog. */
+  async function beginLogin(entry: ProviderCatalogEntry) {
+    setStartingLogin(true);
+    setNotice(null);
+    try {
+      const started = await invoke<{ loginId: string }>({
+        method: 'provider.login',
+        params: { providerId: entry.id, type: 'oauth' },
+      });
+      setLogin({ loginId: started.loginId, providerName: entry.name });
+    } catch (err) {
+      setNoticeType('err');
+      setNotice(err instanceof Error ? err.message : String(err));
+    } finally {
+      setStartingLogin(false);
+    }
+  }
+
   const chosen = available.find((entry) => entry.id === providerId);
 
   useEffect(() => {
@@ -122,7 +144,9 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const chatgptConfigured = configured.has('openai');
 
   return (
-    <div className="h-full overflow-auto">
+    // `relative` so the login dialog's overlay covers this panel rather than
+    // escaping to the window and sitting over the sidebar.
+    <div className="relative h-full overflow-auto">
       <div className="mx-auto max-w-2xl px-8 py-7 space-y-8">
         {/* Header */}
         <header className="flex items-start justify-between">
@@ -301,18 +325,22 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
             </Button>
           </div>
           {chosen?.oauthLabel ? (
-            /*
-             * Stated rather than offered. Pi supports a subscription login for
-             * this provider, but the desktop app has only wired the API-key path
-             * — the OAuth flow needs an interaction bridge (Pi asks for a code or
-             * a browser round-trip through its AuthInteraction callbacks). A
-             * button that did nothing would be worse than saying so.
-             */
-            <p className="mt-3 rounded-xl border border-border bg-surface px-3 py-2 text-xs leading-relaxed text-muted">
-              <span className="font-semibold">{chosen.oauthLabel}</span> is also supported by the
-              Pi SDK{chosen.oauthLoginLabel ? ` (“${chosen.oauthLoginLabel}”)` : ''}, but this app
-              has not wired subscription login yet — use an API key for now.
-            </p>
+            <div className="mt-3 flex items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-semibold">{chosen.oauthLabel}</div>
+                <div className="mt-0.5 text-[11px] leading-relaxed text-muted">
+                  Sign in with your subscription instead of an API key.
+                </div>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={startingLogin}
+                onClick={() => void beginLogin(chosen)}
+              >
+                {chosen.oauthLoginLabel ?? 'Sign in'}
+              </Button>
+            </div>
           ) : null}
 
           {notice ? (
@@ -384,6 +412,14 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           </select>
         </section>
       </div>
+
+      {login ? (
+        <ProviderLoginDialog
+          loginId={login.loginId}
+          providerName={login.providerName}
+          onClose={() => setLogin(null)}
+        />
+      ) : null}
     </div>
   );
 }

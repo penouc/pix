@@ -35,6 +35,7 @@ import {
 import { CheckpointRecoveryService } from './checkpoints/checkpoint-recovery-service.js';
 import { WriteSnapshotCoordinator } from './checkpoints/write-snapshot-coordinator.js';
 import { ProviderSettingsStore } from './providers/provider-settings-store.js';
+import { ProviderLoginService } from './providers/provider-login-service.js';
 import { DesktopLogger } from './observability/logger.js';
 import { RunMetricsStore } from './observability/run-metrics-store.js';
 import { NotificationService } from './observability/notification-service.js';
@@ -72,6 +73,24 @@ let terminalService: TerminalService | null = null;
 let automationStore: AutomationStore | null = null;
 let automationScheduler: AutomationScheduler | null = null;
 let notifications: NotificationService | null = null;
+let providerLogins: ProviderLoginService | null = null;
+
+function getProviderLogins(): ProviderLoginService {
+  providerLogins ??= new ProviderLoginService({
+    runtime: () => ensureRuntime(),
+    openExternal: (url) => {
+      // Second check on a URL that came from a network response. Pi already
+      // requires https for a verification URI; this is the boundary that hands
+      // it to the OS, so it verifies too rather than trusting upstream.
+      if (!isExternallyOpenable(url)) {
+        console.warn('[main] refused to open a non-http(s) login url');
+        return;
+      }
+      void shell.openExternal(url);
+    },
+  });
+  return providerLogins;
+}
 
 /**
  * Titles waiting to be applied, keyed by session. A task is created before its
@@ -868,6 +887,54 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       }
       case 'agent.listModels': {
         return okResult((await agent.listModels()) as ModelInfo[]);
+      }
+      case 'provider.login': {
+        const providers = agent.listProviders ? await agent.listProviders() : [];
+        const entry = providers.find((provider) => provider.id === cmd.params.providerId);
+        if (!entry) return errResult('PROVIDER_UNKNOWN', 'That provider is not in the catalogue.');
+        // Only offer what the provider actually declares, so a login can never be
+        // started against a method the SDK would reject anyway.
+        if (cmd.params.type === 'oauth' && !entry.oauthLabel) {
+          return errResult('PROVIDER_NO_OAUTH', `${entry.name} has no subscription login.`);
+        }
+        try {
+          return okResult(
+            getProviderLogins().start({
+              providerId: cmd.params.providerId,
+              type: cmd.params.type,
+            }),
+          );
+        } catch (error) {
+          return errResult(
+            'LOGIN_UNAVAILABLE',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      }
+      case 'provider.loginStatus': {
+        const state = getProviderLogins().status(cmd.params.loginId);
+        if (!state) return errResult('LOGIN_UNKNOWN', 'That login is no longer active.');
+        return okResult(state);
+      }
+      case 'provider.loginSubmit': {
+        const ok = getProviderLogins().submit(cmd.params.loginId, cmd.params.value);
+        if (!ok) return errResult('LOGIN_NOT_WAITING', 'That login is not waiting for input.');
+        return okResult({ ok: true });
+      }
+      case 'provider.loginCancel': {
+        getProviderLogins().cancel(cmd.params.loginId);
+        getProviderLogins().forget(cmd.params.loginId);
+        return okResult({ ok: true });
+      }
+      case 'provider.logout': {
+        if (!agent.logoutProvider) {
+          return errResult('LOGOUT_UNAVAILABLE', 'This runtime cannot sign out of providers.');
+        }
+        await agent.logoutProvider(cmd.params.providerId);
+        // A stored API key would otherwise be re-applied on the next start and
+        // silently undo the sign-out.
+        getProviderSettings().remove(cmd.params.providerId);
+        return okResult({ ok: true });
       }
       case 'provider.listAvailable': {
         // Straight from Pi's registry — the Settings list used to be sixteen

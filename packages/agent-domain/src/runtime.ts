@@ -86,6 +86,27 @@ export interface ProviderCatalogEntry {
   modelCount: number;
 }
 
+/** What a login flow needs the user to see. Mirrors Pi's AuthEvent. */
+export type ProviderLoginNotice =
+  | { kind: 'info'; message: string; links?: Array<{ url: string; label?: string }> }
+  | { kind: 'auth_url'; url: string; instructions?: string }
+  | {
+      kind: 'device_code';
+      userCode: string;
+      verificationUri: string;
+      intervalSeconds?: number;
+      expiresInSeconds?: number;
+    }
+  | { kind: 'progress'; message: string };
+
+/** What a login flow needs the user to answer. Mirrors Pi's AuthPrompt. */
+export interface ProviderLoginQuestion {
+  message: string;
+  kind: 'text' | 'password' | 'manual_code' | 'select';
+  placeholder?: string;
+  options?: Array<{ id: string; label: string; description?: string }>;
+}
+
 export interface AgentRuntime {
   createSession(options: CreateSessionOptions): Promise<AgentSession>;
   resumeSession(sessionId: string): Promise<AgentSession>;
@@ -121,6 +142,23 @@ export interface AgentRuntime {
   listModels(): Promise<ModelCatalogEntry[]>;
   /** Optional: every provider Pi knows, with its declared auth methods. */
   listProviders?(): Promise<ProviderCatalogEntry[]>;
+  /**
+   * Optional: run a provider login (subscription/OAuth or interactive api-key).
+   *
+   * Resolves when the credential has been stored by the SDK and rejects on
+   * failure or cancellation. It deliberately returns nothing — the credential is
+   * the SDK's to keep, and passing it back would put a live token on a code path
+   * that has no reason to hold one.
+   */
+  loginProvider?(input: {
+    providerId: string;
+    type: 'oauth' | 'apiKey';
+    notify: (notice: ProviderLoginNotice) => void;
+    ask: (question: ProviderLoginQuestion) => Promise<string>;
+    signal?: AbortSignal;
+  }): Promise<void>;
+  /** Optional: forget a stored credential for this provider. */
+  logoutProvider?(providerId: string): Promise<void>;
   /** Optional: which providers currently have usable credentials (no secrets). */
   getAuthStatus?(): Promise<Array<{ providerId: string; hasAuth: boolean; source: string }>>;
   /** Optional: choose a default model when the session has none. */

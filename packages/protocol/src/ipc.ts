@@ -137,6 +137,42 @@ export const ModelInfoSchema = z.object({
 });
 export type ModelInfo = z.infer<typeof ModelInfoSchema>;
 
+/**
+ * State of an in-flight provider login, polled by the Renderer.
+ *
+ * Never carries a token: the SDK stores the credential itself, so the only thing
+ * crossing IPC is what the user has to see or answer.
+ */
+export const ProviderLoginStateSchema = z.object({
+  loginId: z.string(),
+  providerId: z.string(),
+  phase: z.enum([
+    'starting',
+    /** A code to type into the browser page we opened. */
+    'device_code',
+    /** A URL to authorise at. */
+    'auth_url',
+    /** The flow needs an answer (a pasted code, a choice). */
+    'question',
+    /** Talking to the provider; nothing for the user to do. */
+    'working',
+    'done',
+    'failed',
+    'cancelled',
+  ]),
+  /** Progress text, instructions, or the failure reason. */
+  message: z.string().optional(),
+  userCode: z.string().optional(),
+  verificationUri: z.string().optional(),
+  expiresAt: z.number().int().nonnegative().optional(),
+  questionKind: z.enum(['text', 'password', 'manual_code', 'select']).optional(),
+  placeholder: z.string().optional(),
+  options: z
+    .array(z.object({ id: z.string(), label: z.string(), description: z.string().optional() }))
+    .optional(),
+});
+export type ProviderLoginState = z.infer<typeof ProviderLoginStateSchema>;
+
 /** One provider from Pi's registry, with the auth methods it declares. */
 export const ProviderCatalogEntrySchema = z.object({
   id: z.string(),

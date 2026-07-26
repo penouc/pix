@@ -18,6 +18,8 @@ import type {
   CreateSessionOptions,
   ModelCatalogEntry,
   ProviderCatalogEntry,
+  ProviderLoginNotice,
+  ProviderLoginQuestion,
 } from '@pi-desktop/agent-domain';
 import { DomainError, agentError } from '@pi-desktop/agent-domain';
 import type { ApprovalDecision, DesktopAgentEvent, ModelRef, RunRef } from '@pi-desktop/protocol';
@@ -497,6 +499,106 @@ export class PiAgentRuntime implements AgentRuntime {
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /**
+   * Run a provider login through Pi's own flow.
+   *
+   * Pi drives it: its `login` calls back with what the user must see (a device
+   * code, an authorisation URL) and occasionally with something to answer (a
+   * pasted code). This adapts those callbacks to plain functions the desktop can
+   * bridge, and returns nothing — `Models.login` persists the credential in the
+   * SDK's own CredentialStore, so no token passes through this layer at all.
+   */
+  async loginProvider(input: {
+    providerId: string;
+    type: 'oauth' | 'apiKey';
+    notify: (notice: ProviderLoginNotice) => void;
+    ask: (question: ProviderLoginQuestion) => Promise<string>;
+    signal?: AbortSignal;
+  }): Promise<void> {
+    this.assertAlive();
+    await this.ensureRuntime(process.cwd());
+
+    await this.modelRuntime!.login(input.providerId, input.type === 'oauth' ? 'oauth' : 'api_key', {
+      ...(input.signal ? { signal: input.signal } : {}),
+      notify: (event) => {
+        switch (event.type) {
+          case 'device_code':
+            input.notify({
+              kind: 'device_code',
+              userCode: event.userCode,
+              verificationUri: event.verificationUri,
+              ...(event.intervalSeconds ? { intervalSeconds: event.intervalSeconds } : {}),
+              ...(event.expiresInSeconds ? { expiresInSeconds: event.expiresInSeconds } : {}),
+            });
+            return;
+          case 'auth_url':
+            input.notify({
+              kind: 'auth_url',
+              url: event.url,
+              ...(event.instructions ? { instructions: event.instructions } : {}),
+            });
+            return;
+          case 'info':
+            input.notify({
+              kind: 'info',
+              message: event.message,
+              ...(event.links ? { links: event.links.map((l) => ({ ...l })) } : {}),
+            });
+            return;
+          case 'progress':
+            input.notify({ kind: 'progress', message: event.message });
+            return;
+        }
+      },
+      prompt: async (prompt) =>
+        input.ask({
+          message: prompt.message,
+          kind:
+            prompt.type === 'select'
+              ? 'select'
+              : prompt.type === 'manual_code'
+                ? 'manual_code'
+                : 'text',
+          ...('placeholder' in prompt && prompt.placeholder
+            ? { placeholder: prompt.placeholder }
+            : {}),
+          ...(prompt.type === 'select'
+            ? { options: prompt.options.map((option) => ({ ...option })) }
+            : {}),
+        }),
+    });
+
+    // The cached auth view is what `hasAuth` is read from, so mark this provider
+    // configured — otherwise its models stay unselectable until a restart.
+    this.markProviderAuth(input.providerId, true);
+  }
+
+  async logoutProvider(providerId: string): Promise<void> {
+    this.assertAlive();
+    await this.ensureRuntime(process.cwd());
+    await this.modelRuntime!.logout(providerId);
+    this.markProviderAuth(providerId, false);
+  }
+
+  /** Keep the cached auth view in step with a login/logout. */
+  private markProviderAuth(providerId: string, hasAuth: boolean): void {
+    const existing = this.authSummaries.find((summary) => summary.providerId === providerId);
+    if (existing) {
+      this.authSummaries = this.authSummaries.map((summary) =>
+        summary.providerId === providerId
+          ? { ...summary, hasAuth, source: hasAuth ? 'runtime' : 'none' }
+          : summary,
+      );
+      return;
+    }
+    if (hasAuth) {
+      this.authSummaries = [
+        ...this.authSummaries,
+        { providerId, hasAuth: true, source: 'runtime' },
+      ];
+    }
   }
 
   async pickDefaultModel(): Promise<ModelRef | null> {
