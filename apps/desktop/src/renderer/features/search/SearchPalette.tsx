@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { FileText, Search, Sparkles, SquareTerminal, Zap } from 'lucide-react';
+import { Code2, FileText, Search, Sparkles, SquareTerminal, Zap } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import type { SessionSummary, SkillInfo } from '@pi-desktop/protocol';
+import type { IndexHit, IndexSearchResult, SessionSummary, SkillInfo } from '@pi-desktop/protocol';
 
 import { Badge } from '@/components/ui/badge';
 import { invoke } from '@/lib/ipc';
@@ -22,13 +22,15 @@ interface Hit {
   icon: ReactNode;
   title: string;
   hint?: string;
+  /** Secondary line — the matched text for a code hit. */
+  detail?: string;
   run: () => void;
 }
 
 /**
- * The ⌘K palette. Tasks come from the session list, files from `git ls-files`
- * in Main (so ignored paths never show up), commands from the app itself, and
- * skills from the on-disk skill dirs.
+ * The ⌘K palette. Tasks come from the session list, commands from the app
+ * itself, skills from the on-disk skill dirs, and files and code from the
+ * workspace index — which spans every trusted project, not just the open one.
  */
 export function SearchPalette({
   onClose,
@@ -40,7 +42,7 @@ export function SearchPalette({
   onClose: () => void;
   commands: PaletteCommand[];
   onOpenSession: (session: SessionSummary) => void;
-  onOpenFile: (path: string) => void;
+  onOpenFile: (hit: IndexHit) => void;
   onRunSkill: (skill: SkillInfo) => void;
 }) {
   const project = useWorkspaceStore((s) => s.project);
@@ -61,13 +63,21 @@ export function SearchPalette({
       invoke<SkillInfo[]>({ method: 'skills.list', params: { projectId: project?.id } }),
   });
 
-  const files = useQuery({
-    queryKey: ['project.searchFiles', project?.id, query],
-    enabled: Boolean(project?.trusted && query.trim().length > 0),
+  // One tick behind the keystrokes: the index query is cheap, but there is no
+  // reason to run it on every character of a path being typed.
+  const [debounced, setDebounced] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(query.trim()), 90);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const indexed = useQuery({
+    queryKey: ['index.search', debounced],
+    enabled: debounced.length > 0,
     queryFn: () =>
-      invoke<string[]>({
-        method: 'project.searchFiles',
-        params: { projectId: project!.id, query, limit: 8 },
+      invoke<IndexSearchResult>({
+        method: 'index.search',
+        params: { query: debounced, limit: 8 },
       }),
   });
 
@@ -89,13 +99,28 @@ export function SearchPalette({
       if (out.length > 6) break;
     }
 
-    for (const filePath of files.data ?? []) {
+    for (const hit of indexed.data?.paths ?? []) {
       out.push({
-        key: `file:${filePath}`,
+        key: `file:${hit.projectId}:${hit.path}`,
         group: 'Files',
         icon: <FileText className="h-3.5 w-3.5" />,
-        title: filePath,
-        run: () => onOpenFile(filePath),
+        title: hit.path,
+        // Only name the project when it is not the one you are looking at, so
+        // same-project results stay uncluttered.
+        ...(hit.projectId === project?.id ? {} : { hint: hit.projectName }),
+        run: () => onOpenFile(hit),
+      });
+    }
+
+    for (const hit of indexed.data?.content ?? []) {
+      out.push({
+        key: `code:${hit.projectId}:${hit.path}`,
+        group: 'Code',
+        icon: <Code2 className="h-3.5 w-3.5" />,
+        title: hit.path,
+        detail: hit.excerpt,
+        ...(hit.projectId === project?.id ? {} : { hint: hit.projectName }),
+        run: () => onOpenFile(hit),
       });
     }
 
@@ -127,8 +152,9 @@ export function SearchPalette({
     return out;
   }, [
     query,
+    project?.id,
     sessions.data,
-    files.data,
+    indexed.data,
     skills.data,
     commands,
     onOpenSession,
@@ -205,14 +231,11 @@ export function SearchPalette({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
-          {project ? (
-            <span className="inline-flex items-center gap-1.5">
-              <span className="text-[11px] text-muted">in</span>
-              <Badge tone="neutral" className="text-[10.5px]">
-                {project.name}
-              </Badge>
-            </span>
-          ) : null}
+          {/* Files and code come from the index, which spans every trusted
+              project — so this must not claim to be scoped to the open one. */}
+          <Badge tone="neutral" className="flex-none text-[10.5px]">
+            all projects
+          </Badge>
         </div>
 
         <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-2.5 pt-2 pb-2.5">
@@ -241,9 +264,16 @@ export function SearchPalette({
                     <span className="grid h-6 w-6 flex-none place-items-center rounded-lg bg-neutral-200 text-neutral-700">
                       {hit.icon}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-[13px]">{hit.title}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px]">{hit.title}</span>
+                      {hit.detail ? (
+                        <span className="block truncate font-mono text-[11px] text-muted">
+                          {hit.detail}
+                        </span>
+                      ) : null}
+                    </span>
                     {hit.hint ? (
-                      <span className="font-mono text-[11px] text-muted">{hit.hint}</span>
+                      <span className="flex-none font-mono text-[11px] text-muted">{hit.hint}</span>
                     ) : null}
                   </div>
                 );
@@ -259,7 +289,9 @@ export function SearchPalette({
               <div className="text-[13px] font-bold">
                 {query ? `No results for “${query}”` : 'Start typing to search'}
               </div>
-              <div className="text-xs text-muted">Try a task title, a file path, or a $ skill.</div>
+              <div className="text-xs text-muted">
+                Try a task title, a file path, a word from the code, or a $ skill.
+              </div>
             </div>
           ) : null}
         </div>

@@ -189,4 +189,40 @@ CREATE INDEX IF NOT EXISTS run_metrics_started_at ON run_metrics(started_at);
 CREATE INDEX IF NOT EXISTS run_metrics_project ON run_metrics(project_id);
 `,
   },
+  {
+    version: 10,
+    name: 'workspace_index',
+    sql: `
+CREATE TABLE IF NOT EXISTS index_files (
+  project_id TEXT NOT NULL,
+  path TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  mtime_ms INTEGER NOT NULL,
+  indexed_at INTEGER NOT NULL,
+  -- rowid of this file's row in index_content, or NULL when only the path is
+  -- indexed (too big, binary, or content indexing off). Kept so a re-index can
+  -- delete the old body by rowid instead of scanning the FTS table.
+  content_rowid INTEGER
+);
+CREATE UNIQUE INDEX IF NOT EXISTS index_files_key ON index_files(project_id, path);
+CREATE INDEX IF NOT EXISTS index_files_path ON index_files(path);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS index_content USING fts5(
+  path,
+  body,
+  project_id UNINDEXED,
+  tokenize = "unicode61 remove_diacritics 2"
+);
+
+CREATE TABLE IF NOT EXISTS index_state (
+  project_id TEXT PRIMARY KEY,
+  head TEXT,
+  files INTEGER NOT NULL DEFAULT 0,
+  indexed_bytes INTEGER NOT NULL DEFAULT 0,
+  skipped INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL,
+  duration_ms INTEGER
+);
+`,
+  },
 ];

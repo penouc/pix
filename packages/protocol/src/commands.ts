@@ -123,6 +123,21 @@ export const SearchFilesInputSchema = z.object({
 });
 export type SearchFilesInput = z.infer<typeof SearchFilesInputSchema>;
 
+export const IndexSearchInputSchema = z.object({
+  query: z.string().max(512),
+  /** Omit to search every trusted project. */
+  projectId: z.string().min(1).optional(),
+  limit: z.number().int().positive().max(50).optional(),
+});
+export type IndexSearchInput = z.infer<typeof IndexSearchInputSchema>;
+
+export const IndexRebuildInputSchema = z.object({
+  projectId: z.string().min(1),
+  /** Discard and re-read everything instead of an incremental pass. */
+  force: z.boolean().optional(),
+});
+export type IndexRebuildInput = z.infer<typeof IndexRebuildInputSchema>;
+
 export const SkillScopeSchema = z.enum(['global', 'project']);
 export type SkillScope = z.infer<typeof SkillScopeSchema>;
 
@@ -297,6 +312,13 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('diagnostics.export'), params: z.object({}).optional() }),
   z.object({ method: z.literal('project.searchFiles'), params: SearchFilesInputSchema }),
   z.object({ method: z.literal('git.getBranch'), params: GetWorkingTreeDiffInputSchema }),
+  z.object({ method: z.literal('index.search'), params: IndexSearchInputSchema }),
+  z.object({ method: z.literal('index.status'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('index.rebuild'), params: IndexRebuildInputSchema }),
+  z.object({
+    method: z.literal('index.forget'),
+    params: z.object({ projectId: z.string().min(1) }),
+  }),
   z.object({ method: z.literal('skills.list'), params: ListSkillsInputSchema.optional() }),
   z.object({ method: z.literal('skills.setEnabled'), params: SetSkillEnabledInputSchema }),
   z.object({ method: z.literal('skills.reveal'), params: RevealPathInputSchema }),

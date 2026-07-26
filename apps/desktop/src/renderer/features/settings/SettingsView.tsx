@@ -6,6 +6,7 @@ import type {
   AppInfo,
   ApprovalMode,
   AuditSummary,
+  IndexProjectStatus,
   RememberedRule,
   SetUiSettingInput,
   Settings,
@@ -434,32 +435,136 @@ function ProjectsTab() {
   });
 
   return (
-    <Group label="Opening">
-      <Row name="Default projects folder" desc="Where the folder picker starts.">
-        <span className="flex flex-none items-center gap-2">
-          <Mono>{flags?.defaultProjectsFolder || 'system default'}</Mono>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={pickFolder.isPending}
-            onClick={() => pickFolder.mutate()}
-          >
-            Choose…
-          </Button>
-          {flags?.defaultProjectsFolder ? (
-            <Button variant="ghost" size="sm" onClick={() => clearFolder.mutate()}>
-              Clear
+    <>
+      <Group label="Opening">
+        <Row name="Default projects folder" desc="Where the folder picker starts.">
+          <span className="flex flex-none items-center gap-2">
+            <Mono>{flags?.defaultProjectsFolder || 'system default'}</Mono>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={pickFolder.isPending}
+              onClick={() => pickFolder.mutate()}
+            >
+              Choose…
             </Button>
-          ) : null}
-        </span>
+            {flags?.defaultProjectsFolder ? (
+              <Button variant="ghost" size="sm" onClick={() => clearFolder.mutate()}>
+                Clear
+              </Button>
+            ) : null}
+          </span>
+        </Row>
+        <FlagSwitch
+          name="Trust new projects automatically"
+          desc="Off keeps the Workspace Trust step on first open. Automations never bypass it."
+          flag="trustNewProjects"
+        />
+      </Group>
+      <IndexingGroup />
+    </>
+  );
+}
+
+/**
+ * Per-project index state. Deliberately shows real numbers only — files, bytes,
+ * when it last ran — because the interesting question about an index is whether
+ * it is current, and a spinner alone does not answer that.
+ */
+function IndexingGroup() {
+  const queryClient = useQueryClient();
+  const status = useQuery({
+    queryKey: ['index.status'],
+    queryFn: () => invoke<IndexProjectStatus[]>({ method: 'index.status' }),
+    // Poll only while something is actually indexing.
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some((entry) => entry.indexing) ? 1200 : false,
+  });
+
+  const rebuild = useMutation({
+    mutationFn: (projectId: string) =>
+      invoke<IndexProjectStatus[]>({
+        method: 'index.rebuild',
+        params: { projectId, force: true },
+      }),
+    onSuccess: (next) => queryClient.setQueryData(['index.status'], next),
+  });
+
+  const projects = status.data ?? [];
+
+  return (
+    <Group label="Search index">
+      <Row
+        stacked
+        name="Indexed projects"
+        desc="Paths and file contents for every trusted project, so ⌘K searches all of them at once. Untrusted projects are never read, and revoking trust deletes what was indexed."
+      >
+        {projects.length ? (
+          <div className="flex flex-col gap-1.5">
+            {projects.map((entry) => (
+              <div
+                key={entry.projectId}
+                className="flex items-center gap-3 rounded-xl bg-surface px-3 py-2"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[12.5px] font-bold">{entry.name}</span>
+                  <span className="block truncate text-[11px] text-muted">
+                    {!entry.trusted
+                      ? 'not trusted — not indexed'
+                      : entry.indexing
+                        ? 'indexing…'
+                        : entry.updatedAt == null
+                          ? 'not indexed yet'
+                          : `${entry.files.toLocaleString()} files · ${formatBytes(
+                              entry.indexedBytes,
+                            )} searchable${
+                              entry.skipped ? ` · ${entry.skipped.toLocaleString()} skipped` : ''
+                            } · ${formatWhen(entry.updatedAt)}`}
+                  </span>
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={!entry.trusted || entry.indexing || rebuild.isPending}
+                  onClick={() => rebuild.mutate(entry.projectId)}
+                >
+                  Rebuild
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <span className="text-xs text-muted">No projects opened yet.</span>
+        )}
       </Row>
-      <FlagSwitch
-        name="Trust new projects automatically"
-        desc="Off keeps the Workspace Trust step on first open. Automations never bypass it."
-        flag="trustNewProjects"
-      />
+      <Row
+        name="What is skipped"
+        desc="Binaries, lockfiles, generated bundles, and anything over 512 KB are listed by path but not full-text searched."
+      >
+        <Mono>by path only</Mono>
+      </Row>
+      <Row
+        name="When it refreshes"
+        desc="On open, and a few seconds after a run writes files. Only changed files are re-read."
+      >
+        <Mono>incremental</Mono>
+      </Row>
     </Group>
   );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatWhen(timestamp: number): string {
+  const seconds = Math.round((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
+  if (seconds < 86_400) return `${Math.round(seconds / 3600)}h ago`;
+  return `${Math.round(seconds / 86_400)}d ago`;
 }
 
 function CheckpointsTab() {

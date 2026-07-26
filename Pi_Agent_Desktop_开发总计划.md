@@ -968,15 +968,31 @@ Pi customTools → tool_call 钩子 → tool-normalizer → risk-classifier → 
 
 **约束：** 新增 method 一律走 `IpcCommandSchema` discriminated union；事件一律带 `projectId/sessionId/runId/sequence/timestamp`（§4.1 A4）；Renderer 仍无通用 invoke。
 
-## 26.2 SQLite 迁移路线（当前 v5）
+## 26.2 SQLite 迁移路线（当前 v10）
+
+**已落地**（`packages/database/src/migrations.ts` 是唯一事实来源）：
+
+| 版本 | 名称 | 内容 |
+|------|------|------|
+| v1–v3 | `sessions_and_schema_meta` / `projects` / `checkpoints_agent_runs_and_baseline_files` | 基础表 |
+| v4–v5 | `checkpoint_write_snapshots` / `checkpoint_review_outcomes` | 写前快照 BLOB 与 Keep/Continue/Revert 结果 |
+| v6 | `checkpoint_write_snapshot_expected_states` | 快照期望态（exists/sha256/size），Revert 前的冲突检测依据 |
+| v7 | `checkpoint_recovery_conflicts` | 恢复冲突记录 |
+| v8 | `sessions_soft_delete` | `sessions.deleted_at`，软删除 |
+| v9 | `run_metrics` | 每次 run 的 token/成本/时长/结果，Usage 页面的数据源；此前指标只在内存里，重启即清零 |
+| v10 | `workspace_index` | `index_files` + FTS5 `index_content` + `index_state`，跨项目搜索索引 |
+
+**规划中**（版本号顺延，不复用上表）：
 
 | 版本 | 阶段 | 内容 |
 |------|------|------|
-| v6 | M9 | `compactions`（session_id, run_id, summary, tokens_before, tokens_after, usage_json）；`agent_runs` 增 `cost_usd`、`cache_read_tokens`、`cache_write_tokens`、`retry_count` |
-| v7 | M10 | `plans`（id, session_id, run_id, markdown, approved_at）；`todos`（id, session_id, run_id, text, status, ordinal）；`agent_runs` 增 `mode`；`sessions` 增 `parent_session_id`、`fork_from_entry_id` |
-| v8 | M11 | `project_extensions`（project_id, source_path, enabled, enabled_at）；`mcp_servers`（id, name, transport, command_json, enabled）；`skill_grants`（project_id, skill_path, granted_at） |
-| v9 | M12 | `provider_endpoints`（id, kind, base_url, model_ids_json）；`provider_health`（provider_id, checked_at, status, detail） |
-| v10 | M13 | `worktrees`（session_id, path, branch, created_at）；`terminal_runs`（session_id, command, exit_code, output_path） |
+| v11 | M9 | `compactions`（session_id, run_id, summary, tokens_before, tokens_after, usage_json）；`agent_runs` 增 `cache_read_tokens`、`cache_write_tokens`、`retry_count` |
+| v12 | M10 | `plans`（id, session_id, run_id, markdown, approved_at）；`todos`（id, session_id, run_id, text, status, ordinal）；`agent_runs` 增 `mode`；`sessions` 增 `parent_session_id`、`fork_from_entry_id` |
+| v13 | M11 | `project_extensions`（project_id, source_path, enabled, enabled_at）；`mcp_servers`（id, name, transport, command_json, enabled）；`skill_grants`（project_id, skill_path, granted_at） |
+| v14 | M12 | `provider_endpoints`（id, kind, base_url, model_ids_json）；`provider_health`（provider_id, checked_at, status, detail） |
+| v15 | M13 | `worktrees`（session_id, path, branch, created_at）；`terminal_runs`（session_id, command, exit_code, output_path） |
+
+**索引与信任的关系（§9 的延伸）：** 索引是文件内容的持久副本，因此只索引 trusted 项目；撤销信任时同步删除该项目的全部索引行（`IndexService.refresh` 在 untrusted 分支先 `deleteProject`），且搜索阶段再次按 trusted 过滤，防止残留行被读出。
 
 **迁移约束（延续 §10.1）：** 每次迁移可前向、有备份、有回滚说明；快照 BLOB 表结构不做破坏性修改；含未解决 Checkpoint 时禁止执行破坏性迁移。
 

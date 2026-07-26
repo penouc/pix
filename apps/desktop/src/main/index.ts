@@ -39,6 +39,7 @@ import { DesktopLogger } from './observability/logger.js';
 import { RunMetricsStore } from './observability/run-metrics-store.js';
 import { NotificationService } from './observability/notification-service.js';
 import { readCurrentBranch, searchProjectFiles } from './git/file-search-service.js';
+import { IndexService } from './indexing/index-service.js';
 import { SkillsService } from './skills/skills-service.js';
 import {
   TerminalService,
@@ -288,6 +289,11 @@ function broadcastEvent(event: unknown): void {
   runMetrics.observe(data);
   getNotifications().observe(data);
 
+  // Written files change what search should return, so the index follows them.
+  if (data.type === 'files.changed' && data.paths.length) {
+    scheduleIndexRefresh(data.projectId);
+  }
+
   if (data.type === 'message.delta') {
     // Buffer streaming deltas; flush every 16ms to reduce IPC overhead.
     if (deltaBuffer.length < MAX_BUFFERED_DELTAS) {
@@ -352,6 +358,45 @@ function broadcastEvent(event: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send(IpcChannels.event, data);
   }
+}
+
+let indexService: IndexService | null = null;
+
+function getIndexService(db: DesktopDatabase): IndexService {
+  indexService ??= new IndexService({
+    repo: db.index,
+    listProjects: () =>
+      db.projects.listRecent(100).map((project) => ({
+        id: project.id,
+        name: project.name,
+        path: project.path,
+        trusted: project.trusted,
+        isGit: project.isGit,
+      })),
+  });
+  return indexService;
+}
+
+/**
+ * Re-index after a run touches files, coalesced per project. A run can write
+ * dozens of files in a burst, and each `files.changed` event would otherwise
+ * queue its own pass over the whole project.
+ */
+const indexRefreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const INDEX_REFRESH_DEBOUNCE_MS = 4_000;
+
+function scheduleIndexRefresh(projectId: string): void {
+  const existing = indexRefreshTimers.get(projectId);
+  if (existing) clearTimeout(existing);
+  indexRefreshTimers.set(
+    projectId,
+    setTimeout(() => {
+      indexRefreshTimers.delete(projectId);
+      void getDb()
+        .then((db) => getIndexService(db).refresh(projectId))
+        .catch((error) => console.error('[main] index refresh failed', error));
+    }, INDEX_REFRESH_DEBOUNCE_MS),
+  );
 }
 
 function getSkillsService(): SkillsService {
@@ -572,6 +617,12 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         if (!project.trusted && getProviderSettings().getUiFlags().trustNewProjects) {
           project = await projects.setTrust(project.id, true);
         }
+        // Index in the background: opening a project must not wait on it.
+        if (project.trusted) {
+          void getIndexService(db)
+            .refreshIfStale(project.id)
+            .catch((error) => console.error('[main] index refresh failed', error));
+        }
         return okResult(project satisfies ProjectSummary);
       }
       case 'project.pickFolder': {
@@ -597,6 +648,15 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       }
       case 'project.setTrust': {
         const project = await projects.setTrust(cmd.params.projectId, cmd.params.trusted);
+        // Revoking trust drops the index: it is a stored copy of file contents,
+        // and it must not outlive permission to read them.
+        if (project.trusted) {
+          void getIndexService(db)
+            .refresh(project.id)
+            .catch((error) => console.error('[main] index refresh failed', error));
+        } else {
+          getIndexService(db).forget(project.id);
+        }
         return okResult(project);
       }
       case 'git.getWorkingTreeDiff': {
@@ -830,6 +890,29 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         return okResult(
           await searchProjectFiles(project.path, cmd.params.query, cmd.params.limit ?? 40),
         );
+      }
+      case 'index.search': {
+        return okResult(
+          getIndexService(db).search({
+            query: cmd.params.query,
+            ...(cmd.params.projectId ? { projectId: cmd.params.projectId } : {}),
+            ...(cmd.params.limit ? { limit: cmd.params.limit } : {}),
+          }),
+        );
+      }
+      case 'index.status': {
+        return okResult(getIndexService(db).status());
+      }
+      case 'index.rebuild': {
+        const project = projects.get(cmd.params.projectId);
+        if (!project) return errResult('PROJECT_NOT_FOUND', 'Project not found');
+        if (!project.trusted) return errResult('PROJECT_UNTRUSTED', 'Project is not trusted.');
+        await getIndexService(db).refresh(project.id, { force: cmd.params.force ?? true });
+        return okResult(getIndexService(db).status());
+      }
+      case 'index.forget': {
+        getIndexService(db).forget(cmd.params.projectId);
+        return okResult(getIndexService(db).status());
       }
       case 'skills.list': {
         const projectId = cmd.params?.projectId;

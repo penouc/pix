@@ -18,9 +18,19 @@ export { SqliteProjectRepository, projectIdForPath } from './sqlite-project-repo
 export { SqliteCheckpointRepository } from './sqlite-checkpoint-repository.js';
 export { DesktopDatabase } from './desktop-database.js';
 export { openDatabase, applyMigrations } from './sqlite-connection.js';
+export type { SqliteDatabase } from './sqlite-connection.js';
 export { MIGRATIONS } from './migrations.js';
 export type { Migration } from './migrations.js';
 export { SqliteRunMetricsRepository } from './sqlite-run-metrics-repository.js';
+export { SqliteIndexRepository, toMatchQuery } from './sqlite-index-repository.js';
+export type {
+  IndexRepository,
+  IndexFileInput,
+  IndexFileRecord,
+  IndexPathHit,
+  IndexContentHit,
+  IndexStateRecord,
+} from './index-repository.js';
 export type {
   RunMetricsRepository,
   UsageSummary,

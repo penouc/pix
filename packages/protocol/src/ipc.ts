@@ -195,6 +195,38 @@ export const UsageSummarySchema = z.object({
 });
 export type UsageSummary = z.infer<typeof UsageSummarySchema>;
 
+/** One indexed project, for the Indexing settings section. */
+export const IndexProjectStatusSchema = z.object({
+  projectId: z.string(),
+  name: z.string(),
+  path: z.string(),
+  trusted: z.boolean(),
+  indexing: z.boolean(),
+  files: z.number().int().nonnegative(),
+  indexedBytes: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+  /** null when the project has never been indexed. */
+  updatedAt: z.number().int().nonnegative().nullable(),
+  durationMs: z.number().int().nonnegative().nullable(),
+});
+export type IndexProjectStatus = z.infer<typeof IndexProjectStatusSchema>;
+
+const IndexHitSchema = z.object({
+  projectId: z.string(),
+  projectName: z.string(),
+  /** Absolute project root, so a hit in another project can be acted on. */
+  projectPath: z.string(),
+  /** Project-relative file path. */
+  path: z.string(),
+});
+
+export const IndexSearchResultSchema = z.object({
+  paths: z.array(IndexHitSchema),
+  content: z.array(IndexHitSchema.extend({ excerpt: z.string() })),
+});
+export type IndexHit = z.infer<typeof IndexHitSchema>;
+export type IndexSearchResult = z.infer<typeof IndexSearchResultSchema>;
+
 /** Local audit-log summary for the Permissions tab. */
 export const AuditSummarySchema = z.object({
   path: z.string(),

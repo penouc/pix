@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
   ApprovalDecision,
   CheckpointRecoverySummary,
+  IndexHit,
   ProjectSummary,
   SessionSummary,
   SkillInfo,
@@ -130,6 +131,24 @@ export function App() {
     setComposerInsert({ text: `${skill.command} `, token: Date.now() });
     setView('run');
   }, []);
+
+  /**
+   * Act on a file or code hit from ⌘K. A hit in another project switches to that
+   * project first — the index searches all of them, so a result you cannot reach
+   * would be worse than no result. There is no in-app file viewer, so the file
+   * itself is handed to the OS rather than pretending to open it here.
+   */
+  async function openIndexHit(hit: IndexHit) {
+    const current = useWorkspaceStore.getState().project;
+    if (hit.projectPath && hit.projectId !== current?.id) {
+      await openProjectPath(hit.projectPath);
+    }
+    if (!hit.projectPath) return;
+    await invoke({
+      method: 'system.revealPath',
+      params: { path: `${hit.projectPath}/${hit.path}` },
+    }).catch((err) => console.error(err));
+  }
 
   async function openProjectPath(pathValue: string) {
     setOpeningProject(true);
@@ -336,7 +355,7 @@ export function App() {
               commands={commands}
               onClose={() => setSearchOpen(false)}
               onOpenSession={(session) => selectSession(session)}
-              onOpenFile={() => setView('diff')}
+              onOpenFile={(hit) => void openIndexHit(hit)}
               onRunSkill={useSkill}
             />
           ) : null}
