@@ -2,7 +2,9 @@
 
 > 本地桌面 Coding Agent 产品与工程开发总计划
 >
-> PRODUCT & ENGINEERING PLAN · Version 1.0 · 2026-07-24
+> PRODUCT & ENGINEERING PLAN · Version 1.1 · 2026-07-26
+>
+> v1.1 变更：新增 §21–§28（第一版收口清单、Pi SDK 能力盘点、M8.5–M13 增强路线与方案设计、功能候选清单、协议与数据模型演进、增强阶段测试与风险、ADR 队列）。§1–§20 的范围与契约未变。
 
 > **核心目标：** 以 Pi Agent SDK 作为 Agent Runtime，构建一个在本地项目中完成“理解任务、修改代码、执行验证、审查 Diff、接受或撤销变更”的桌面应用。
 
@@ -34,6 +36,10 @@
 | 7-11     | Runtime、事件、状态机、权限、数据与恢复如何定义 |
 | 12-15    | 各里程碑的行动项、测试、可观测性与发布门槛      |
 | 16-18    | 风险、决策记录、启动开发的首批 Backlog          |
+| 19-20    | MVP 最终验收剧本与技术依据                      |
+| 21-22    | 第一版还差什么、Pi SDK 还有哪些能力没被产品使用 |
+| 23-25    | MVP 之后做什么：增强路线、方案设计、功能优先级  |
+| 26-28    | 增强阶段的协议/数据演进、测试与风险、ADR 队列   |
 
 # 1. 产品愿景与成功定义
 
@@ -452,6 +458,8 @@ rememberable: boolean;
 - [ ] 签名、Notarization、自动更新与产品化分发。
 
 > **完成门槛：** 每项增强有独立 ADR、评测与安全审查，不回侵 MVP 核心。
+>
+> **拆分说明（v1.1）：** M9 原为一行占位。自 v1.1 起，MVP 之后的规划拆分为 **M8.5（收口）+ M9–M13**，详见 §21–§26。本节保留作为历史锚点，执行状态仍以 `docs/TODOS.md` 为准。
 
 
 # 13. 测试与 Agent 质量评测
@@ -614,3 +622,357 @@ rememberable: boolean;
 - Pi Coding Agent：Provider、Model、Session 与程序化用法。https://github.com/earendil-works/pi
 - Pierre Diffs：基于 Shiki 的 Diff/Code Rendering。https://diffs.com/
 - Pierre CodeView 技术说明：Virtualization-first 的大型 Diff 渲染。https://pierre.computer/writing/on-rendering-diffs
+
+
+# 21. 第一版收口（M8.5）
+
+> **本节存在的理由：** M0–M8 的 todo 已基本勾满，但 §15 发布门槛与 §19 验收剧本**尚未逐条通过**。在开新功能之前，先关闭这些缺口，否则后续增强建立在未验证的地基上。M8.5 不是新功能阶段，是**证据补齐阶段**。
+
+## 21.1 已闭环的能力（截至 2026-07-26）
+
+| 能力 | 证据 |
+|------|------|
+| Electron 安全基线 | contextIsolation + 关 nodeIntegration + 白名单 preload，无通用 invoke |
+| Typed IPC | `packages/protocol` Zod discriminated union，30 个 method |
+| Pi 适配层 | `PiAgentRuntime`（createSession / prompt / steer / followUp / abort / setModel / listModels / dispose）+ 事件映射 |
+| 权限管线 | tool-normalizer → risk-classifier → policy-engine → 审批四态 + 审计日志（Main-only） |
+| Diff Review | `@pierre/diffs@1.2.12`，多文件 / unified-split / 折叠 / 大 Diff 基准 |
+| Checkpoint | SQLite v5：写前 BLOB 快照 + hash + 并发冲突检测 + Keep/Continue/Revert file/Revert all + 崩溃恢复 |
+| 可观测性 | NDJSON 轮转日志 + 脱敏 + RunMetrics + `diagnostics.export` |
+| 打包 | electron-builder mac-arm64 dir + DMG，`verify:packaged` 校验 asar / native / DMG |
+| 测试 | 25 文件 / 73 用例通过；11 个 fixture 完整性验证；Playwright happy-path E2E |
+
+## 21.2 必须在 M8.5 关闭的缺口
+
+| ID | 缺口 | 为什么必须先关 | 完成定义 |
+|----|------|----------------|----------|
+| M8.5-1 | **M1 门槛未闭环**：没有「packaged 应用内、真实 Provider 鉴权、真实编码任务」的端到端证据 | 这是整个技术路线的立论前提；只有离线 integration 和 CLI 侧 fixture eval | 在 packaged app 内跑通 §19 剧本 1–11，截图/日志落 `docs/eval-reports/` |
+| M8.5-2 | **缺 2 份契约文档**：`security-model.md`、`checkpoint-semantics.md` | 权限与恢复是本产品最高风险面，实现已存在但语义未成文，后续改动无参照 | 文档描述与代码一致，且每条语义有对应测试链接 |
+| M8.5-3 | **仓库结构与 §6 不符**：无 `packages/git`、`packages/ui`（git 服务在 `apps/desktop/src/main/git`，UI 组件散在 renderer） | 契约文档与现实不符会持续误导 | 二选一并落 ADR：抽包，或修改 §6 承认现结构 |
+| M8.5-4 | **评测集只有 baseline，没有成功率** | §13.3 的正确性/克制性/安全性指标目前是空的，无法判断模型或依赖升级是否退化 | 11 个 fixture 跑至少 2 个模型 × 3 次，记录成功率与无关修改率 |
+| M8.5-5 | **性能基准只覆盖 Diff 解析** | §15 要求「大型会话」性能，长会话事件吞吐与内存未测 | 增加长会话（≥2000 事件）与超长 tool output 基准 |
+| M8.5-6 | **API Key 仍短暂经过 Renderer** | 违反 §4.1「密钥不进 Renderer」的精神（M3-4 标记为 `[~]`） | 改为 Main 侧输入（native prompt / 独立 BrowserWindow），或落 ADR 明确接受该风险及理由 |
+| M8.5-7 | **依赖版本仍大量 `^`** | §5 版本策略要求 MVP 不使用自动跟随最新 | 关键依赖钉版；其余记录例外清单 |
+| M8.5-8 | **卸载 / 数据位置 / 导出说明缺失** | §15 最后一条门槛 | `docs/data-lifecycle.md`：数据位置、清理、导出、卸载 |
+| M8.5-9 | **未提交的 UI 重设计**（浅色主题 + `hiddenInset` 标题栏，8 文件 843 行改动） | 长期停在工作树里会与后续功能冲突 | 收敛为 design token 文档 + 提交；或明确回退 |
+| M8.5-10 | **Composer 已承诺但未实现的能力**：placeholder 写着 `@ for files, / for commands, $ for skills`，三者都没实现 | UI 承诺不存在的功能，属于产品欺骗性缺陷 | 要么实现（见 §24.4），要么先改 placeholder |
+
+> **M8.5 完成门槛：** §15 九条发布门槛逐条有可复现证据；§19 剧本在 packaged 应用内通过一次；本节 10 项全部 `[x]` 或有 ADR 说明为什么不做。
+
+## 21.3 M8.5 之后才允许开新功能
+
+理由是本项目已经出现过一次「Fake runtime 被误标为真实 Pi 打通」的进度失真（见 `docs/TODOS.md` §7）。增强阶段的每个阶段沿用同一约束：**先证据，后功能**。
+
+
+# 22. Pi SDK 能力盘点（0.82.0）与未使用能力映射
+
+> **本节存在的理由：** 规划「还能加什么功能」时，最低成本的来源不是发明新架构，而是**把已经付费引入、已经在进程内、但产品还没暴露的 SDK 能力接出来**。下表基于 `@earendil-works/pi-coding-agent@0.82.0` 的实际 d.ts surface 盘点。
+
+## 22.1 AgentSession 能力 → 产品状态
+
+| Pi SDK API | 可支撑的产品能力 | Desktop 现状 |
+|------------|------------------|--------------|
+| `prompt` / `abort` / `setModel` / `listModels` | 基础对话与模型切换 | **已接** |
+| `steer` / `followUp` + `steeringMode` / `followUpMode` / `clearQueue` / `pendingMessageCount` | 运行中插话、排队策略、队列可视化与清空 | 部分接（IPC 有 steer/followUp，无模式与队列 UI） |
+| `getContextUsage` / `getSessionStats` / `usage-totals` / `cache-stats` / `provider-attribution` | 上下文占用、Token、缓存命中、成本归因面板 | **未接**（UI 只显示 Pi 报告的粗粒度值） |
+| `compact` / `abortCompaction` / `setAutoCompactionEnabled` / `SessionBeforeCompactEvent` | 长会话自动/手动压缩、压缩摘要卡片 | **未接**（长任务会直接撞上下文上限） |
+| `setThinkingLevel` / `getAvailableThinkingLevels` / `supportsThinking` / `cycleThinkingLevel` | Thinking 档位控制（§2 主路径第 3 步明确要求，但未实现） | **未接** |
+| `scopedModels` / `setScopedModels` / `cycleModel` | 模型编排：计划用强模型、执行用快模型、一键切换 | **未接** |
+| `setActiveToolsByName` / `getAllTools` / `createReadOnlyTools` / `noTools` / `excludeTools` | **Plan Mode**、工具白名单、per-session 工具策略 | **未接** |
+| `customTools` / `defineTool` | 注册桌面原生工具（todo、询问用户、MCP 桥、浏览器） | **未接** |
+| `navigateTree` / `getUserMessagesForForking` / `SessionBeforeForkEvent` / `SessionTreeEvent` | Session Fork 与树状历史导航 | **未接** |
+| `exportToHtml` / `exportToJsonl` | 会话导出、分享、issue 附件 | **未接** |
+| `sendUserMessage([TextContent \| ImageContent])`，`steer/followUp(text, images)` | 图片输入：截图粘贴、UI 缺陷复现 | **未接** |
+| `resourceLoader` / `promptTemplates` / `loadSkillsFromDir` / `BUILTIN_SLASH_COMMANDS` | `@` 文件引用、`/` 命令、`$` skills（Composer 已承诺） | **未接** |
+| `bindExtensions` / `ExtensionRunner` / extension hooks（tool_call、tool_result、project_trust、resources_discover、session_*） | Extension Host：项目级自定义工具与钩子 | 仅用了 tool_call / tool_result 两个钩子做权限与快照 |
+| `executeBash` / `recordBashResult` / `output-guard` | 用户自己跑命令且结果进入会话上下文（终端面板） | **未接** |
+| `setAutoRetryEnabled` / `isRetrying` / `retryAttempt` / `abortRetry` | Provider 抖动自动重试与可见状态 | **未接** |
+| `extensions/llama`（llama.cpp + HuggingFace） | 本地模型 Provider（M9-2 的现成实现） | **未接** |
+| `setSessionName` / `sessionFile` / `reload` | 会话命名、外部编辑后重载 | 部分（rename 走 SQLite，未同步 Pi 会话名） |
+
+## 22.2 SDK 明确**不提供**、需要自建的能力
+
+| 能力 | 0.82.0 现状 | 自建方案 |
+|------|-------------|----------|
+| MCP | **无 MCP 支持**（全仓仅在 vendor 高亮库中命中字符串） | Desktop 侧实现 MCP client，把 MCP tool 适配成 Pi `customTools`（§24.5） |
+| Todo / 任务清单工具 | 无内建 todo 工具 | 用 `defineTool` 注册 `desktop_todo_write`（§24.2） |
+| Sub-agent / 多 Agent 编排 | 无 spawn-agent 工具 | Main 侧多 Session + `customTool` 触发子 Session（§24.7） |
+| 文件级并行隔离 | Session 共享一个 cwd | `git worktree` per session（§24.7） |
+| 远程 Workspace / SSH | 无 | Main 侧远程 FS/exec 抽象，工作量大，排到 M13 |
+
+> **规划结论：** §24 中 Tier A 的绝大多数功能，成本集中在 **IPC + UI + 持久化**，Runtime 侧只是把已存在的 SDK 调用接出来。这是 MVP 之后性价比最高的一批工作。
+
+
+# 23. 增强路线总览（M8.5 → M13）
+
+| 阶段 | 主题 | 核心问题 | 完成门槛 |
+|------|------|----------|----------|
+| **M8.5** | 第一版收口 | 发布门槛没有逐条证据 | §21.2 十项关闭 |
+| **M9** | 上下文与成本经济学 | 长任务撞上下文上限即失败，且成本不可见 | 单会话连续工作 ≥2 小时不因上下文中断；成本与上下文实时可见且与 Provider 账单量级一致 |
+| **M10** | 计划与控制 | 用户无法在 Agent 动手前干预方向 | Plan → Approve → Build 全流程；Plan Mode 下零写操作（安全测试断言）；Fork 不损坏任何 Checkpoint |
+| **M11** | 能力扩展 | Agent 只有 read/write/edit/bash 四把工具 | Skills / Slash / `@` 引用可用；Extension 与 MCP 工具全部经过既有权限管线；供应链风险有 trust 门 |
+| **M12** | Provider 与本地推理 | 只依赖云 Provider，离线不可用、隐私不可控 | 本地模型完成 fixture 评测；Provider 健康状态可诊断；凭据不出本机 |
+| **M13** | 工作流与分发 | 结果留在工作树里，且应用无法交付给他人 | Git 工作流闭环（stage/commit/branch/worktree）；签名 + Notarization + 自动更新；跨平台决策成文 |
+
+> **阶段间约束（延续 §0 推进原则）：** 每个阶段独立 ADR + 评测 + 安全审查；任何阶段不得回侵 §7–§11 的四条硬契约——Renderer 无特权、权限判定在 Main、Checkpoint 是唯一可靠恢复源、Pi 类型不出 `agent-pi`。
+
+
+# 24. 增强阶段方案设计
+
+## 24.1 M9：上下文与成本经济学
+
+**问题：** 当前一个长任务撞到模型上下文上限就直接失败，用户看不到「还剩多少上下文」，也看不到这次任务花了多少钱。这是目前最容易让产品在真实使用中崩掉的一环。
+
+**方案：**
+
+| 子项 | 设计 |
+|------|------|
+| 上下文仪表 | `session.getContextUsage()` 轮询 + `SessionBeforeCompactEvent` 推送 → 新事件 `context.updated`；UI 在 Composer 上方显示占用环（绿/黄/红三档） |
+| 自动压缩 | `setAutoCompactionEnabled(true)` + 阈值写入 settings；压缩期间 UI 进入 `compacting` 状态（`AgentRunState` 需扩一个态） |
+| 手动压缩 | `/compact [instructions]` → `agent.compact` IPC；支持自定义压缩指令（如「只保留与 auth 模块相关的上下文」） |
+| 压缩摘要卡片 | `CompactionResult`（summary / tokensBefore / estimatedTokensAfter / usage）落 `compactions` 表；Chat 中渲染为可折叠特殊消息 |
+| 成本归因 | `usage-totals` + `provider-attribution` + `cache-stats` → run / session / project 三级成本；缓存命中率单列（对 Anthropic 类 Provider 影响巨大） |
+| 自动重试可见化 | `setAutoRetryEnabled` + `retryAttempt` → 事件 `run.retrying`，UI 显示「第 N 次重试」而不是假死 |
+
+**安全影响：** 压缩摘要由模型生成，可能包含敏感文件片段；写入 SQLite 前走 `redactSecrets`，导出时同样脱敏。
+
+**验收：** 构造一个必然超上下文的 fixture（大仓库全量 grep + 多轮修改），验证自动压缩后任务仍能完成，且压缩前后 Checkpoint 语义不变。
+
+## 24.2 M10-a：Plan Mode 与 Todo
+
+**问题：** §1.3 把 Plan Mode 列为 MVP 冻结项，理由是不阻塞主路径。但真实使用中「Agent 直接动手改错方向」是最贵的失败模式。M10 是解冻它的正确位置。
+
+**Plan Mode 方案（SDK 已完全支持，无需 hack）：**
+
+```text
+SessionMode = 'build' | 'plan'
+
+进入 plan：session.setActiveToolsByName(readOnlyToolNames)   // read / grep / find / ls
+           + 计划专用 system prompt 片段
+退出 plan：session.setActiveToolsByName(codingToolNames)     // + edit / write / bash
+```
+
+- 每个 Run 记录 `mode`；`agent_runs` 表加 `mode` 列。
+- 计划产出以 Markdown checklist 形式落 `plans` 表；UI 提供「Approve plan」→ 把计划作为首条消息注入一个新的 build Run，并把 plan id 关联到该 Run。
+- **权限管线仍然生效**：Plan Mode 下若出现 write/edit/bash 请求，视为契约违规 → 拒绝 + 审计 + UI 明确告警（这同时是一条安全测试断言）。
+- 与 Checkpoint 的关系：plan run 不产生文件修改，因此不创建快照，但仍创建 `agent_runs` 记录以保留成本与耗时。
+
+**Todo 方案（SDK 无内建，需自建）：**
+
+- 用 `defineTool` 注册 `desktop_todo_write`（入参：`items: {id, text, status}[]`），Main 持久化到 `todos` 表并广播 `todo.updated`。
+- UI 在 Chat 侧栏显示实时步骤清单；步骤与 tool call 时间轴对齐（复用 M8-2 的 RunMetrics）。
+- 该工具风险等级 `safe`，不进审批队列。
+
+## 24.3 M10-b：Session Fork 与树状历史
+
+**方案：** `getUserMessagesForForking()` 列出可分叉点 → `navigateTree(targetId)` 切换；SDK 提供 `SessionBeforeForkEvent` / `SessionTreeEvent` 钩子供 Main 记账。
+
+**数据模型：** `sessions` 增 `parent_session_id`、`fork_from_entry_id`。
+
+**关键语义（必须写进 `checkpoint-semantics.md`）：**
+
+> **Fork 只分叉对话历史，不分叉工作树。** 两个分支共享同一份文件系统状态。Checkpoint 归属 Run，fork 时**不复制**快照 BLOB，只保留引用；因此在 fork 分支上 Revert 一个 Run 时，必须校验当前文件 hash 是否仍与该 Run 的预期状态一致（M7-4 的冲突检测已提供此能力），不一致则拒绝自动覆盖。
+
+文件级真正分叉需要 `git worktree`，属于 M13（§24.7）。
+
+## 24.4 M11-a：Composer 能力补齐（`@` / `/` / `$`）
+
+**问题：** placeholder 已经承诺，实现为零（§21.2 M8.5-10）。
+
+| 触发符 | 数据来源 | 安全约束 |
+|--------|----------|----------|
+| `@file` / `@dir` | Main 侧 `resources.search` IPC，基于 workspace 内 ripgrep/fd | 只允许 workspace 内路径；遵守 protected paths；结果路径经 canonicalize |
+| `@symbol` | ripgrep + 语言无关正则（首版不引入 LSP） | 同上 |
+| `/command` | `BUILTIN_SLASH_COMMANDS` + `session.promptTemplates` | 内建命令走 Main 白名单分派，不允许任意字符串直通 |
+| `$skill` | `loadSkillsFromDir`（`~/.pi/skills` + 项目 `.pi/skills`） | **项目内 skill 是代码级供应链风险**：必须在 Workspace Trust 之外再给一次显式启用确认，且列出 skill 来源路径 |
+
+## 24.5 M11-b：Extension Host 与 MCP 桥
+
+**Extension Host：** Pi 的 extension 是**在 Main 进程内执行的任意代码**。因此：
+
+- 默认不加载项目内 extension；需要用户在 Trust 之后显式勾选启用清单（per-project，落 SQLite）。
+- 加载结果、诊断与每次 hook 调用写审计日志。
+- Extension 注册的工具**不绕过**权限管线：`getAllTools()` 得到的工具名统一进 tool-normalizer，未知工具默认风险等级取 `external-side-effect`（fail-closed）。
+
+**MCP 桥（SDK 无 MCP，自建）：**
+
+```text
+MCP Server (stdio / http)
+  ↓ Desktop MCP Client（Main 进程，独立子进程，超时/输出上限）
+  ↓ tools/list → defineTool() 包装
+Pi customTools → tool_call 钩子 → tool-normalizer → risk-classifier → policy-engine
+```
+
+- MCP 工具默认风险 `external-side-effect`，首次调用必须审批，支持 allow-session / allow-project 记忆。
+- MCP server 进程纳入 M8-1 的进程树终止逻辑（退出/Abort 不留残留）。
+- 需独立 ADR：为什么在 SDK 无 MCP 时自建桥、以及升级 SDK 后如何迁移。
+
+## 24.6 M12：Provider 与本地推理
+
+| 子项 | 设计 |
+|------|------|
+| 本地 llama.cpp | 直接复用 `@earendil-works/pi-coding-agent/dist/extensions/llama`（含 HuggingFace 模型拉取与 provider 实现）；UI 提供模型下载进度与本地端口配置 |
+| OpenAI-compatible | 自定义 base URL + key 的 Provider 条目（覆盖 vLLM / LM Studio / Ollama / 自建网关） |
+| Provider 健康检查 | 启动与切换时探测：凭据有效性、模型列表可达性、限流状态；结果缓存并在 Auth 行显示（现有 `agent.authStatus` 扩展） |
+| 模型能力标签 | 来自 `model-registry` / `model-config`：context window、vision、thinking、tool use；UI 在模型下拉中显示，避免选到不支持工具调用的模型 |
+| Mac + 4090 节点 | 4090 侧跑 OpenAI-compatible server，Mac 侧作为客户端；**Workspace 与文件永不出本机**，只有 prompt/completion 过网；链路走 Tailscale 或 SSH 隧道，需 ADR + 安全审查（明确 prompt 中会包含源码片段这一事实） |
+
+## 24.7 M13：Git 工作流、并行与分发
+
+| 子项 | 设计 | 风险等级 |
+|------|------|----------|
+| Stage / Unstage（含 hunk 级） | Main 侧 git 服务扩写操作，复用 Pierre diff 的 hunk 结构 | 需审批（写操作） |
+| Commit message 生成 | 用当前会话模型 + 暂存区 diff 生成候选，用户可编辑；**不自动提交** | commit 高风险，必须审批 |
+| Branch / `git worktree` 隔离 | 每个 Session 可选绑定独立 worktree → 真正的并行运行基础；Checkpoint 作用域随之绑定到 worktree 路径 | 高风险 |
+| Push | **默认拒绝**，仅显式审批放行，且不提供「记住此决定」 | external-side-effect |
+| 终端面板 | `executeBash` + `recordBashResult` + `output-guard`：用户自己跑命令，结果进入会话上下文，省掉 Agent 重复探索 | 用户主动执行，仍记审计 |
+| 会话导出 | `exportToHtml` / `exportToJsonl` + 导出前脱敏 | — |
+| 并行多 Agent | 前提是 worktree 隔离 + 事件路由（已有 projectId/sessionId/runId 作用域）；子 Agent 通过 `customTool` 触发新 Session，父会话只拿摘要 | 需 ADR |
+| 签名 / Notarization / 自动更新 | Developer ID 签名 + notarytool + electron-updater；更新源与签名校验策略成文 | 需 ADR |
+| 跨平台 | Windows/Linux 需重做：`node:sqlite` 可用性、Keychain → `safeStorage`、进程树终止（`taskkill /T` vs pgid）、路径大小写与符号链接语义 | 需 ADR |
+
+
+# 25. 功能候选清单与优先级
+
+> 排序依据：**对「个人日常连续使用」的边际收益 ÷ 实现成本**，并优先选择 SDK 已支持、只差 IPC/UI 的项。
+
+## 25.1 Tier A — 直接决定日常可用性（建议 M9–M11 内完成）
+
+| # | 功能 | 依据 | 成本 | 说明 |
+|---|------|------|------|------|
+| A1 | 上下文占用仪表 + 自动/手动压缩 | §24.1 | 中 | **最高优先**：不做这个，长任务必然中断 |
+| A2 | Thinking Level 选择器 | §22.1 | 低 | §2 主路径第 3 步已要求，却一直没实现 |
+| A3 | Token / 成本 / 缓存命中面板 | §24.1 | 中 | 成本不可见 = 不敢长时间用 |
+| A4 | `@` 文件引用 + `/` 命令 + `$` skills | §24.4 | 中 | UI 已承诺，属于必须兑现 |
+| A5 | Plan Mode（Plan → Approve → Build） | §24.2 | 中 | 最贵失败模式（方向跑偏）的直接解药 |
+| A6 | Todo / 步骤清单 | §24.2 | 低 | 长任务的可理解性，对齐 §13.3「透明度」 |
+| A7 | 图片输入（截图粘贴 / 拖拽） | §22.1 | 低 | UI 类任务的输入效率提升极大 |
+| A8 | 跟进队列可视化 + 清空 + 排队模式 | §22.1 | 低 | `clearQueue` / `pendingMessageCount` 已存在，纯 UI |
+| A9 | 全局命令面板 + 键盘快捷键 | — | 低 | 桌面应用的基本素养，当前全靠鼠标 |
+| A10 | 跨会话搜索（消息 / tool / 文件） | — | 中 | SQLite FTS5；会话变多后没有搜索等于数据坟场 |
+| A11 | 自动重试状态可见化 | §24.1 | 低 | 把「假死」变成「重试中」 |
+| A12 | 会话导出（HTML / JSONL，脱敏） | §24.7 | 低 | SDK 一行调用 |
+| A13 | 模型能力标签 + 模型编排（scopedModels） | §24.6 | 中 | 避免选到不支持 tool use 的模型 |
+
+## 25.2 Tier B — 结构性能力（M11–M13）
+
+| # | 功能 | 依据 | 成本 |
+|---|------|------|------|
+| B1 | Session Fork + 树状历史 | §24.3 | 中 |
+| B2 | Extension Host（显式启用 + 审计） | §24.5 | 中 |
+| B3 | MCP 客户端桥 | §24.5 | 高 |
+| B4 | 终端面板（用户命令进上下文） | §24.7 | 中 |
+| B5 | Git stage / commit + message 生成 | §24.7 | 中 |
+| B6 | `git worktree` 隔离与并行 Session | §24.7 | 高 |
+| B7 | 本地 llama.cpp Provider | §24.6 | 中 |
+| B8 | OpenAI-compatible 自定义 Provider | §24.6 | 低 |
+| B9 | Provider 健康检查与诊断 | §24.6 | 中 |
+| B10 | Diff 行级评论 / 行级指令（选中行 → 让 Agent 改这里） | §3 后续增强 | 中 |
+| B11 | 项目分组与工作区收藏 | §3 后续增强 | 低 |
+| B12 | 会话模板 / 项目级 prompt 预设 | `promptTemplates` | 低 |
+
+## 25.3 Tier C — 产品化与生态（M13+，需先有稳定用户价值）
+
+| # | 功能 | 成本 | 前置条件 |
+|---|------|------|----------|
+| C1 | 签名 + Notarization + 自动更新 | 中 | 要对外分发才有意义 |
+| C2 | Windows / Linux 支持 | 高 | ADR 先定平台抽象边界 |
+| C3 | Mac + 4090 远程推理节点 | 中 | §24.6 安全审查 |
+| C4 | 远程 Workspace / SSH | 高 | Main 侧 FS/exec 抽象重构 |
+| C5 | 多 Agent 编排（父子任务分解） | 高 | B6 worktree 隔离 |
+| C6 | 会话分享 / 团队协作 | 高 | 涉及服务端，超出「本地优先」定位，需先决定产品形态 |
+| C7 | 崩溃上报与匿名遥测（默认关闭） | 低 | 隐私策略成文 |
+| C8 | 浏览器工具（截图 / DOM 检查） | 高 | 权限面显著扩大，需独立安全审查 |
+
+## 25.4 明确不做（延续 §1.3 精神）
+
+- 云端会话同步与账号体系：与「本地优先、数据不外传」定位冲突。
+- 自建多 Provider 抽象层：§17 已决策交给 Pi。
+- 内置完整编辑器（Monaco/LSP）：本产品是 Agent 工作台，不是 IDE；行级编辑交回用户的编辑器。
+- 插件市场：在 Extension 安全模型成熟前不做分发。
+
+
+# 26. 协议与数据模型演进
+
+## 26.1 IPC 增量（保持 §4.1 「全部 Zod 校验」）
+
+| 阶段 | 新增 method | 新增事件 |
+|------|-------------|----------|
+| M9 | `agent.compact`、`agent.setAutoCompaction`、`agent.getContextUsage`、`agent.setThinkingLevel`、`session.getStats` | `context.updated`、`compaction.completed`、`run.retrying` |
+| M10 | `agent.setMode`、`plan.approve`、`plan.list`、`session.fork`、`session.navigateTree`、`session.listForkPoints` | `todo.updated`、`plan.updated`、`mode.changed` |
+| M11 | `resources.search`、`skills.list`、`skills.setEnabled`、`commands.list`、`extensions.list`、`extensions.setEnabled`、`mcp.addServer`、`mcp.listTools` | `extension.diagnostic`、`mcp.serverState` |
+| M12 | `provider.testConnection`、`provider.addCustomEndpoint`、`localModel.download`、`localModel.status` | `provider.health`、`localModel.progress` |
+| M13 | `git.stage`、`git.unstage`、`git.commit`、`git.generateCommitMessage`、`git.createWorktree`、`terminal.exec`、`session.export` | `terminal.output`、`worktree.changed` |
+
+**约束：** 新增 method 一律走 `IpcCommandSchema` discriminated union；事件一律带 `projectId/sessionId/runId/sequence/timestamp`（§4.1 A4）；Renderer 仍无通用 invoke。
+
+## 26.2 SQLite 迁移路线（当前 v5）
+
+| 版本 | 阶段 | 内容 |
+|------|------|------|
+| v6 | M9 | `compactions`（session_id, run_id, summary, tokens_before, tokens_after, usage_json）；`agent_runs` 增 `cost_usd`、`cache_read_tokens`、`cache_write_tokens`、`retry_count` |
+| v7 | M10 | `plans`（id, session_id, run_id, markdown, approved_at）；`todos`（id, session_id, run_id, text, status, ordinal）；`agent_runs` 增 `mode`；`sessions` 增 `parent_session_id`、`fork_from_entry_id` |
+| v8 | M11 | `project_extensions`（project_id, source_path, enabled, enabled_at）；`mcp_servers`（id, name, transport, command_json, enabled）；`skill_grants`（project_id, skill_path, granted_at） |
+| v9 | M12 | `provider_endpoints`（id, kind, base_url, model_ids_json）；`provider_health`（provider_id, checked_at, status, detail） |
+| v10 | M13 | `worktrees`（session_id, path, branch, created_at）；`terminal_runs`（session_id, command, exit_code, output_path） |
+
+**迁移约束（延续 §10.1）：** 每次迁移可前向、有备份、有回滚说明；快照 BLOB 表结构不做破坏性修改；含未解决 Checkpoint 时禁止执行破坏性迁移。
+
+
+# 27. 增强阶段的测试、评测与风险追加
+
+## 27.1 固定评测集扩展（在现有 11 个 fixture 之上）
+
+| 新 fixture | 验证的能力 | 对应阶段 |
+|------------|------------|----------|
+| `context-overflow` | 必然超上下文的任务，自动压缩后仍完成 | M9 |
+| `plan-then-build` | Plan Mode 只读、Approve 后按计划执行、无范围外修改 | M10 |
+| `plan-mode-violation` | Plan Mode 下模型尝试写文件 → 必须被拒绝并审计 | M10（安全） |
+| `fork-revert-safety` | Fork 分支上 Revert 不破坏另一分支与用户未提交修改 | M10（恢复性） |
+| `skill-supply-chain` | 项目内恶意 skill / extension 未经启用不得执行 | M11（安全） |
+| `mcp-tool-approval` | MCP 工具首次调用必须审批，且 deny 后不执行 | M11（安全） |
+| `local-model-parity` | 本地模型在基础 fixture 上的成功率与成本对比 | M12 |
+| `worktree-isolation` | 并行两个 Session 互不污染文件与 Checkpoint | M13 |
+
+## 27.2 性能基准扩展
+
+| 基准 | 目标 |
+|------|------|
+| 长会话事件吞吐（≥2000 事件） | UI 不掉帧，内存无单调增长 |
+| 超长 tool output（≥10MB） | 尾部窗口策略生效，主进程内存有上限 |
+| 压缩耗时与压缩后首 Token 延迟 | 压缩不让用户感觉「卡住」 |
+| 多 worktree 并行下的 Git 操作 | 无锁竞争导致的假死 |
+
+## 27.3 风险登记册追加（接 §16）
+
+| 风险 | 影响 | 缓解 |
+|------|------|------|
+| 压缩丢失关键上下文 | Agent 遗忘约束、重复劳动、改错方向 | 压缩摘要可见可展开；支持自定义压缩指令；`context-overflow` fixture 回归 |
+| Extension / Skill 供应链 | Main 进程内任意代码执行 | 默认不加载 + 显式启用 + 来源展示 + 审计 + 安全 fixture |
+| MCP 桥扩大权限面 | 外部副作用不可控 | fail-closed 风险等级、强制审批、进程树纳管、超时与输出上限 |
+| Fork 与 Checkpoint 语义耦合 | 误 Revert 破坏另一分支工作 | Fork 不复制快照 + 恢复前 hash 校验 + 冲突拒绝覆盖 |
+| 本地模型能力不足 | 任务成功率骤降，用户误判产品质量 | 能力标签 + 本地模型评测报告 + 明确提示「本地模型能力受限」 |
+| 远程推理节点泄露源码 | prompt 中含源码片段过网 | 明示数据流、隧道加密、可开关、ADR 记录接受的风险 |
+| 并行 Session 冲突 | 文件互相覆盖 | worktree 强隔离；未隔离时禁止同项目并行写 |
+| 增强阶段范围膨胀 | 又一次没有可用版本 | M8.5 门槛前不开新功能；每阶段独立门槛与 ADR |
+
+
+# 28. ADR 队列
+
+> 现有：ADR-0001（Electron + Pi）、ADR-0002（Pi SDK 版本锁定）。以下为按阶段应补的决策记录。
+
+| 编号 | 主题 | 触发阶段 | 必须回答 |
+|------|------|----------|----------|
+| 0003 | `@pierre/diffs` 选型与版本策略 | M8.5（补记） | 为什么不用 Monaco；升级回归步骤 |
+| 0004 | SQLite 驱动选择（`node:sqlite` 实验特性） | M8.5（补记） | 实验特性风险、packaged ARM64 验证、迁移到 better-sqlite3 的退路 |
+| 0005 | 仓库结构对齐（抽 `packages/git`、`packages/ui` 还是修改 §6） | M8.5 | 依赖方向与收益评估 |
+| 0006 | API Key 输入路径（Main 侧输入 vs 接受经 Renderer 的短暂暴露） | M8.5 | 威胁模型与取舍 |
+| 0007 | 上下文压缩策略（自动阈值、摘要留存、成本记账） | M9 | 压缩失真的可接受边界 |
+| 0008 | Plan Mode 实现方式（工具集切换 vs 独立 Session） | M10 | 为什么选 `setActiveToolsByName`；违规处理 |
+| 0009 | Fork 语义（只分叉历史不分叉文件） | M10 | 与 Checkpoint 的交互规则 |
+| 0010 | Extension / Skill 信任模型 | M11 | 启用门、审计、撤销 |
+| 0011 | MCP 桥架构（SDK 无 MCP 时自建，未来迁移路径） | M11 | 进程模型、权限映射、SDK 支持 MCP 后如何退场 |
+| 0012 | 本地推理与远程节点数据流 | M12 | 源码是否过网、加密与开关 |
+| 0013 | Git 写操作与 worktree 隔离 | M13 | 审批边界、push 策略 |
+| 0014 | 分发：签名、Notarization、自动更新源 | M13 | 更新校验与回滚 |
+| 0015 | 跨平台抽象边界 | M13 | SQLite / Keychain / 进程树 / 路径语义
