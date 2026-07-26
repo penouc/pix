@@ -1,38 +1,21 @@
-import { useQuery } from '@tanstack/react-query';
 import { ChevronDown } from 'lucide-react';
-import { useEffect, useMemo } from 'react';
-
-import type { ModelInfo } from '@pi-desktop/protocol';
+import { useEffect } from 'react';
 
 import { modelKey } from '@/features/models/model-key';
+import { useOfferedModels } from '@/features/models/use-offered-models';
 import { invoke } from '@/lib/ipc';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 
 /**
- * The title-bar model pill. The design puts model selection in the chrome bar
- * rather than the composer, with a dot that reads the provider's auth state.
+ * The composer's model pill, beside the send button — the model is a property of
+ * the message you are about to send. The dot reads the provider's auth state.
  */
 export function ModelPill() {
   const session = useWorkspaceStore((s) => s.session);
   const selectedModel = useWorkspaceStore((s) => s.selectedModel);
   const setSelectedModel = useWorkspaceStore((s) => s.setSelectedModel);
 
-  const models = useQuery({
-    queryKey: ['agent.models'],
-    queryFn: () => invoke<ModelInfo[]>({ method: 'agent.listModels' }),
-  });
-
-  /**
-   * Only models you can actually run. Pi's catalogue lists every model it knows
-   * about — a couple of hundred entries, most with no credential — which made
-   * this a wall of unusable options. `hasAuth` covers both a key saved in
-   * Settings and an ambient credential (env var, OpenCode's auth store), so
-   * filtering on it does not hide a working setup.
-   */
-  const usable = useMemo(
-    () => (models.data ?? []).filter((model) => model.hasAuth === true),
-    [models.data],
-  );
+  const { models: usable, isLoading } = useOfferedModels();
 
   useEffect(() => {
     if (!usable.length || selectedModel) return;
@@ -56,7 +39,7 @@ export function ModelPill() {
 
   const label = active
     ? `${active.providerId} / ${active.modelId}`
-    : models.isLoading
+    : isLoading
       ? 'loading models…'
       : usable.length
         ? 'choose a model'

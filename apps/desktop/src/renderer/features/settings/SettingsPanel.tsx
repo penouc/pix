@@ -2,9 +2,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, MessageSquare, Key, ExternalLink } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import type { ModelInfo, ProviderSetting, Settings } from '@pi-desktop/protocol';
+import type { ProviderSetting, Settings } from '@pi-desktop/protocol';
 
 import { Button } from '@/components/ui/button';
+import { useOfferedModels } from '@/features/models/use-offered-models';
+import { VisibleModelsSection } from '@/features/models/VisibleModelsSection';
 import { invoke } from '@/lib/ipc';
 
 const PROVIDERS = [
@@ -51,10 +53,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
     queryKey: ['settings'],
     queryFn: () => invoke<Settings>({ method: 'settings.get' }),
   });
-  const models = useQuery({
-    queryKey: ['agent.models'],
-    queryFn: () => invoke<ModelInfo[]>({ method: 'agent.listModels' }),
-  });
+  const { models: offered } = useOfferedModels();
 
   useEffect(() => {
     if (model || !settings.data?.defaultModel) return;
@@ -335,6 +334,17 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           )}
         </section>
 
+        {/* ── Which models the picker offers ── */}
+        <section className="space-y-3 border-t border-border pt-6">
+          <div>
+            <h2 className="text-sm font-semibold">Models in the picker</h2>
+            <p className="mt-1 text-xs text-muted">
+              Which of your runnable models the composer offers.
+            </p>
+          </div>
+          <VisibleModelsSection />
+        </section>
+
         {/* ── Default model ── */}
         <section className="space-y-3 border-t border-border pt-6">
           <div>
@@ -347,7 +357,8 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
             onChange={(e) => void saveDefaultModel(e.target.value)}
           >
             <option value="">Choose automatically</option>
-            {(models.data ?? []).map((entry) => {
+            {/* The same offered list the composer uses, not the whole catalogue. */}
+            {offered.map((entry) => {
               const value = `${entry.providerId}/${entry.modelId}`;
               return (
                 <option key={value} value={value}>

@@ -25,6 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { PiAvatar } from '@/components/ui/pi-mark';
 import { Segmented } from '@/components/ui/segmented';
+import { Markdown } from '@/features/chat/Markdown';
 import { ModelPill } from '@/features/models/ModelPill';
 import { useCreateTask } from '@/features/sessions/use-create-task';
 import { invoke } from '@/lib/ipc';
@@ -338,10 +339,12 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
                   {entry.message.content}
                 </div>
               ) : (
-                <div key={entry.message.id} className="flex items-start gap-3">
-                  <PiAvatar />
-                  <div className="pt-0.5 text-[13.5px] leading-[1.62] whitespace-pre-wrap">
-                    {entry.message.content}
+                // No avatar on either side: in a two-party conversation the
+                // alignment already says who is speaking, and a mark on every
+                // turn is repetition that crowds the text.
+                <div key={entry.message.id} className="flex items-start">
+                  <div className="min-w-0 flex-1">
+                    <Markdown>{entry.message.content}</Markdown>
                     {entry.message.streaming ? (
                       <span
                         className="ml-0.5 inline-block"
@@ -458,8 +461,7 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
 
           {/* Live indicator */}
           {running ? (
-            <div className="flex items-center gap-3">
-              <PiAvatar bobbing />
+            <div className="flex items-center gap-2.5">
               <span className="text-[12.5px] text-muted">
                 {status === 'waiting_for_approval'
                   ? 'Waiting for your decision — the run is paused, nothing else will be written.'

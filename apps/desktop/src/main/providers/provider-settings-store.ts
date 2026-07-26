@@ -42,6 +42,16 @@ interface StoredSettings {
   defaultModel?: ModelRef;
   uiFlags?: Partial<UiFlags>;
   defaultApprovalMode?: StoredApprovalMode;
+  /**
+   * `provider/model` keys the model picker should offer, chosen in Settings.
+   *
+   * This exists because "configured" is not a usable filter on its own. Pi knows
+   * ~1100 models; credentials (a key here, an env var, or another tool's auth
+   * store) make ~90 of them runnable, and nothing narrows that further. An empty
+   * list means "no choice made yet" and every runnable model is offered — the
+   * picker must not be empty just because this has never been touched.
+   */
+  visibleModels?: string[];
 }
 
 export interface ProviderSettingSummary {
@@ -110,15 +120,39 @@ export class ProviderSettingsStore {
     this.write({ ...this.read(), defaultModel: model });
   }
 
+  getVisibleModels(): string[] {
+    return this.read().visibleModels ?? [];
+  }
+
+  /** Empty array restores "offer everything runnable". */
+  setVisibleModels(keys: string[]): void {
+    const settings = this.read();
+    // De-duplicated and sorted so the stored list is stable to diff and read.
+    settings.visibleModels = [...new Set(keys)].sort();
+    this.write(settings);
+  }
+
   private read(): StoredSettings {
     if (!existsSync(this.filePath)) return { providers: [] };
     try {
       const encrypted = Buffer.from(readFileSync(this.filePath, 'utf8'), 'base64');
       const value = safeStorage.decryptString(encrypted);
       const parsed = JSON.parse(value) as Partial<StoredSettings>;
+      /*
+       * Every field has to be carried through. This used to return only
+       * `providers` and `defaultModel`, so `uiFlags`, `defaultApprovalMode` and
+       * `visibleModels` were dropped on every read — which meant not only that
+       * they never survived a restart, but that any *other* setting being written
+       * silently reset them, because a write starts from `read()`.
+       */
       return {
         providers: Array.isArray(parsed.providers) ? parsed.providers : [],
-        defaultModel: parsed.defaultModel,
+        ...(parsed.defaultModel ? { defaultModel: parsed.defaultModel } : {}),
+        ...(parsed.uiFlags ? { uiFlags: parsed.uiFlags } : {}),
+        ...(parsed.defaultApprovalMode
+          ? { defaultApprovalMode: parsed.defaultApprovalMode }
+          : {}),
+        ...(Array.isArray(parsed.visibleModels) ? { visibleModels: parsed.visibleModels } : {}),
       };
     } catch {
       return { providers: [] };

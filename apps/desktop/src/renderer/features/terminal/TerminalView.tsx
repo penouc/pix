@@ -181,7 +181,7 @@ export function TerminalView() {
   }
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col bg-neutral-900">
+    <div className="flex min-w-0 flex-1 flex-col bg-[var(--color-output)]">
       {/* Tabs */}
       <div className="flex flex-none items-center gap-0.5 px-3 pt-2">
         {tabs.map((tab) => (
@@ -192,8 +192,8 @@ export function TerminalView() {
             className={cn(
               'cursor-pointer rounded-t-xl border-0 px-3.5 py-2 font-mono text-[11.5px]',
               tab.id === active
-                ? 'bg-[var(--color-output)] text-neutral-100'
-                : 'bg-transparent text-neutral-500 hover:text-neutral-300',
+                ? 'bg-[var(--color-output)] text-white'
+                : 'bg-transparent text-white/45 hover:text-white/80',
             )}
           >
             {/* The label is the tab's own directory — that is the thing that now
@@ -219,7 +219,7 @@ export function TerminalView() {
             ]);
             setActive(id);
           }}
-          className="ml-1 grid h-6 w-6 cursor-pointer place-items-center rounded-full border-0 bg-transparent text-neutral-400 hover:bg-white/10"
+          className="ml-1 grid h-6 w-6 cursor-pointer place-items-center rounded-full border-0 bg-transparent text-white/55 hover:bg-white/10 hover:text-white/85"
         >
           <Plus className="h-3.5 w-3.5" />
         </button>
@@ -231,9 +231,9 @@ export function TerminalView() {
         className="min-h-0 flex-1 overflow-y-auto bg-[var(--color-output)] px-5 py-3.5 font-mono text-[12.5px] leading-[1.7] text-[var(--color-output-foreground)]"
       >
         {!project ? (
-          <div className="text-neutral-500">Open a project to run commands.</div>
+          <div className="text-white/45">Open a project to run commands.</div>
         ) : !current.entries.length ? (
-          <div className="text-neutral-500">
+          <div className="text-white/45">
             Commands run once inside {project.name}. Yours run without asking; paths outside the
             project are still refused. Interactive programs are not supported.
           </div>
@@ -259,7 +259,7 @@ export function TerminalView() {
               </pre>
             )}
             {entry.outcome === 'ran' && entry.kind !== 'cd' ? (
-              <div className="mt-0.5 text-[11px] text-neutral-500">
+              <div className="mt-0.5 text-[11px] text-white/40">
                 exit {entry.exitCode ?? '—'} · {entry.durationMs}ms
                 {entry.truncated ? ' · output truncated' : ''}
               </div>
@@ -268,7 +268,7 @@ export function TerminalView() {
         ))}
 
         {busy ? (
-          <div className="text-neutral-500">
+          <div className="text-white/45">
             running…{' '}
             <span
               className="inline-block h-3.5 w-1.5 align-middle bg-[var(--color-output-foreground)]"
@@ -284,7 +284,7 @@ export function TerminalView() {
         <span className="text-accent-200">{promptLabel(project, current.cwd)}</span>
         <input
           ref={inputRef}
-          className="flex-1 border-0 bg-transparent p-0 font-mono text-[12.5px] text-[var(--color-output-foreground)] outline-none placeholder:text-neutral-600"
+          className="flex-1 border-0 bg-transparent p-0 font-mono text-[12.5px] text-[var(--color-output-foreground)] outline-none placeholder:text-white/35"
           placeholder={project ? 'pnpm test …' : 'open a project first'}
           disabled={!project || busy}
           value={draft}

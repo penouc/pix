@@ -869,6 +869,13 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       case 'agent.listModels': {
         return okResult((await agent.listModels()) as ModelInfo[]);
       }
+      case 'settings.getVisibleModels': {
+        return okResult({ keys: getProviderSettings().getVisibleModels() });
+      }
+      case 'settings.setVisibleModels': {
+        getProviderSettings().setVisibleModels(cmd.params.keys);
+        return okResult({ keys: getProviderSettings().getVisibleModels() });
+      }
       case 'agent.authStatus': {
         return okResult(await readAuthStatus(agent));
       }
