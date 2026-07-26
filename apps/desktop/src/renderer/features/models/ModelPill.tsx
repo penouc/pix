@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 
 import type { ModelInfo } from '@pi-desktop/protocol';
 
@@ -22,13 +22,24 @@ export function ModelPill() {
     queryFn: () => invoke<ModelInfo[]>({ method: 'agent.listModels' }),
   });
 
-  useEffect(() => {
-    if (!models.data?.length || selectedModel) return;
-    const preferred = models.data.find((m) => m.hasAuth) ?? models.data[0];
-    if (preferred) setSelectedModel(modelKey(preferred));
-  }, [models.data, selectedModel, setSelectedModel]);
+  /**
+   * Only models you can actually run. Pi's catalogue lists every model it knows
+   * about — a couple of hundred entries, most with no credential — which made
+   * this a wall of unusable options. `hasAuth` covers both a key saved in
+   * Settings and an ambient credential (env var, OpenCode's auth store), so
+   * filtering on it does not hide a working setup.
+   */
+  const usable = useMemo(
+    () => (models.data ?? []).filter((model) => model.hasAuth === true),
+    [models.data],
+  );
 
-  const active = models.data?.find((m) => modelKey(m) === selectedModel);
+  useEffect(() => {
+    if (!usable.length || selectedModel) return;
+    setSelectedModel(modelKey(usable[0]!));
+  }, [usable, selectedModel, setSelectedModel]);
+
+  const active = usable.find((m) => modelKey(m) === selectedModel);
   const authed = active?.hasAuth === true;
 
   function change(value: string) {
@@ -47,7 +58,9 @@ export function ModelPill() {
     ? `${active.providerId} / ${active.modelId}`
     : models.isLoading
       ? 'loading models…'
-      : 'no model configured';
+      : usable.length
+        ? 'choose a model'
+        : 'no provider configured';
 
   return (
     <div className="relative inline-flex">
@@ -63,19 +76,18 @@ export function ModelPill() {
       <select
         aria-label="Active model"
         className="absolute inset-0 cursor-pointer appearance-none rounded-full bg-transparent text-transparent opacity-0"
-        disabled={!models.data?.length}
+        disabled={!usable.length}
         value={selectedModel}
         onChange={(event) => change(event.target.value)}
       >
-        {!models.data?.length ? (
-          <option value="">No models</option>
+        {!usable.length ? (
+          <option value="">Add a provider key in Settings</option>
         ) : (
-          models.data.slice(0, 200).map((model) => {
+          usable.map((model) => {
             const value = modelKey(model);
             return (
               <option key={value} value={value}>
                 {model.displayName}
-                {model.hasAuth ? '' : ' (no credentials)'}
               </option>
             );
           })

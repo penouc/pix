@@ -66,8 +66,19 @@ export function App() {
    */
   useEffect(() => {
     if (!window.piDesktop) return;
-    return window.piDesktop.onAgentEvent((event) => applyEvent(event));
-  }, [applyEvent]);
+    return window.piDesktop.onAgentEvent((event) => {
+      applyEvent(event);
+      // A finished run is also when Main applies an auto-generated task name,
+      // so refresh the list that shows it.
+      if (
+        event.type === 'run.completed' ||
+        event.type === 'run.failed' ||
+        event.type === 'run.cancelled'
+      ) {
+        void queryClient.invalidateQueries({ queryKey: ['session.list', event.projectId] });
+      }
+    });
+  }, [applyEvent, queryClient]);
 
   const recoverable = useQuery({
     queryKey: ['checkpoint.listRecoverable'],

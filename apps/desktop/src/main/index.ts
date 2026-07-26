@@ -67,6 +67,41 @@ let automationStore: AutomationStore | null = null;
 let automationScheduler: AutomationScheduler | null = null;
 let notifications: NotificationService | null = null;
 
+/**
+ * Titles waiting to be applied, keyed by session. A task is created before its
+ * first message exists, so it starts as "New task"; the first prompt is the
+ * best description of it we have. Applied when the first run finishes rather
+ * than on send, so a task that fails immediately keeps its neutral name.
+ */
+const pendingSessionTitles = new Map<string, string>();
+
+/** Names still considered "unnamed" and safe to replace. */
+const DEFAULT_SESSION_TITLES = new Set(['New task', 'Session']);
+
+/**
+ * Derive a task name from the first prompt. Deliberately not an LLM call: it
+ * would cost a request and a round-trip per task for a sidebar label, and this
+ * is both free and predictable.
+ */
+export function deriveSessionTitle(text: string): string | null {
+  const firstLine = text
+    .split('\n')
+    .map((line) => line.trim())
+    // Skip fences, quotes and headings — the first prose line is the intent.
+    .find((line) => line.length > 0 && !/^([`>#\-*]|\d+\.)/.test(line));
+  if (!firstLine) return null;
+
+  const cleaned = firstLine
+    // Drop inline markdown emphasis/code markers without touching the words.
+    .replace(/[`*_]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (cleaned.length < 3) return null;
+
+  const capped = cleaned.length > 72 ? `${cleaned.slice(0, 71).trimEnd()}…` : cleaned;
+  return capped.charAt(0).toUpperCase() + capped.slice(1);
+}
+
 function getNotifications(): NotificationService {
   notifications ??= new NotificationService(() => getProviderSettings().getUiFlags());
   return notifications;
@@ -294,6 +329,7 @@ function broadcastEvent(event: unknown): void {
     data.type === 'run.failed' ||
     data.type === 'run.cancelled'
   ) {
+    void applyPendingSessionTitle(data.sessionId);
     void automationScheduler
       ?.handleRunFinished({
         runId: data.runId,
@@ -406,6 +442,29 @@ function getAutomationScheduler(): AutomationScheduler {
     log: (message, meta) => desktopLogger?.write('info', message, meta ?? {}),
   });
   return automationScheduler;
+}
+
+/**
+ * Rename an auto-named task once its first run finishes, and push the new
+ * summary to the Renderer so the sidebar updates without a poll.
+ */
+async function applyPendingSessionTitle(sessionId: string): Promise<void> {
+  const title = pendingSessionTitles.get(sessionId);
+  if (!title) return;
+  pendingSessionTitles.delete(sessionId);
+  try {
+    const db = await getDb();
+    const existing = db.sessions.get(sessionId);
+    // Respect a name the user set while the run was in flight.
+    if (!existing || !DEFAULT_SESSION_TITLES.has(existing.title)) return;
+    const renamed = await db.sessions.rename(sessionId, title);
+    getNotifications().setSessionTitle(sessionId, renamed.title);
+    // No bespoke event: the Renderer already refetches the session list on the
+    // run's terminal event, and inventing one would mean an unvalidated event
+    // type on a channel that is Zod-checked end to end (§4.1 A2).
+  } catch (error) {
+    console.error('[main] auto-naming the task failed', error);
+  }
 }
 
 function ensureRuntime(): AgentRuntime {
@@ -657,6 +716,11 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         } catch (error) {
           await db.checkpoints.discard(checkpoint.id);
           throw error;
+        }
+        // Queue an auto-name if this task is still called "New task".
+        if (DEFAULT_SESSION_TITLES.has(meta.title)) {
+          const derived = deriveSessionTitle(cmd.params.text);
+          if (derived) pendingSessionTitles.set(meta.id, derived);
         }
         writeSnapshots.associateRun(ref.runId, checkpoint.id, project.path);
         await db.checkpoints.attachRun({

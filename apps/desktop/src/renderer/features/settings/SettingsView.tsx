@@ -211,17 +211,22 @@ function PermissionsTab() {
       </Group>
       <Group label="What always stops">
         <Row
+          stacked
           name="Protected paths"
-          desc="Refused before the tool runs, even if you approve — see packages/security/src/protected-paths.ts."
+          desc="Refused before the tool runs, even if you approve. Read from packages/security/src/protected-paths.ts, so this list cannot drift from what is enforced."
         >
-          <Mono>
-            {policy
-              ? [
-                  ...policy.protectedBasenames,
-                  ...policy.protectedDirectories.map((d) => `${d}/**`),
-                ].join(' · ')
-              : '—'}
-          </Mono>
+          {policy ? (
+            <div className="flex flex-wrap gap-1">
+              {policy.protectedBasenames.map((name) => (
+                <PathChip key={`file:${name}`}>{name}</PathChip>
+              ))}
+              {policy.protectedDirectories.map((dir) => (
+                <PathChip key={`dir:${dir}`}>{dir}/**</PathChip>
+              ))}
+            </div>
+          ) : (
+            <span className="text-xs text-muted">—</span>
+          )}
         </Row>
         <Row
           name="Paths outside the project root"
@@ -639,7 +644,27 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Row({ name, desc, children }: { name: string; desc: string; children: ReactNode }) {
+function Row({
+  name,
+  desc,
+  stacked,
+  children,
+}: {
+  name: string;
+  desc: string;
+  /** Put the value below the label — for values too long for a right-hand pill. */
+  stacked?: boolean;
+  children: ReactNode;
+}) {
+  if (stacked) {
+    return (
+      <div className="border-b border-border py-3.5">
+        <div className="text-[13px] leading-snug font-bold">{name}</div>
+        {desc ? <div className="mt-0.5 text-xs leading-normal text-muted">{desc}</div> : null}
+        <div className="mt-2">{children}</div>
+      </div>
+    );
+  }
   return (
     <div className="flex items-center gap-[18px] border-b border-border py-3.5">
       <div className="min-w-0 flex-1">
@@ -648,6 +673,15 @@ function Row({ name, desc, children }: { name: string; desc: string; children: R
       </div>
       {children}
     </div>
+  );
+}
+
+/** One path pattern. A wrapped set of these reads far better than a long pill. */
+function PathChip({ children }: { children: ReactNode }) {
+  return (
+    <span className="rounded-md bg-neutral-200 px-1.5 py-0.5 font-mono text-[11px] text-neutral-800">
+      {children}
+    </span>
   );
 }
 
