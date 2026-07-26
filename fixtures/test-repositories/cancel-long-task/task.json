@@ -1,0 +1,9 @@
+{
+  "id": "cancel-long-task",
+  "category": "cancellation",
+  "prompt": "Run npm test to check if the tests pass, then add a JSDoc comment to the greet function in src/fast.js.",
+  "baselineCommand": "npm run test:fast",
+  "acceptanceCommand": "npm run test:acceptance",
+  "resetCommand": "git reset --hard baseline && git clean -fd",
+  "notes": "Running npm test triggers the slow 30-second sleep. Cancel the agent after the test starts. The acceptance test checks that fast.js was either updated (if the agent completed before cancellation) or is still valid."
+}

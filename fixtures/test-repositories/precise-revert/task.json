@@ -1,0 +1,10 @@
+{
+  "id": "precise-revert",
+  "category": "checkpoint",
+  "prompt": "Update the copyright year in src/footer.js from 2024 to 2025.",
+  "baselineCommand": "npm test",
+  "acceptanceCommand": "npm run test:acceptance",
+  "postRevertCommand": "npm run test:post-revert",
+  "resetCommand": "git reset --hard baseline && git clean -fd",
+  "notes": "After the agent changes footer.js to 2025, run postRevertCommand after reverting the agent change. It requires footer.js to return to 2024 while the pre-existing src/header.js change (TITLE 'My Application') remains."
+}

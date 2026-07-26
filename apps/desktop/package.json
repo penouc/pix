@@ -23,6 +23,7 @@
     "@pi-desktop/agent-pi": "workspace:*",
     "@pi-desktop/database": "workspace:*",
     "@pi-desktop/protocol": "workspace:*",
+    "@pi-desktop/security": "workspace:*",
     "@pierre/diffs": "1.2.12",
     "@tanstack/react-query": "^5.80.6",
     "class-variance-authority": "^0.7.1",

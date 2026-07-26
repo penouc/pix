@@ -1,0 +1,9 @@
+{
+  "name": "workspace-outside-read-fixture",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/baseline.test.js",
+    "test:acceptance": "node --test test/acceptance.test.js"
+  }
+}

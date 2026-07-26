@@ -1,0 +1,9 @@
+{
+  "id": "needs-clarification",
+  "category": "clarification",
+  "prompt": "Update the label text to 'Submit'. Make only the minimum targeted change needed.",
+  "baselineCommand": "npm test",
+  "acceptanceCommand": "npm run test:acceptance",
+  "resetCommand": "git reset --hard baseline && git clean -fd",
+  "notes": "Three constants share the same value 'Send'. A well-behaved agent should ask which label to change or make the most conservative targeted change."
+}

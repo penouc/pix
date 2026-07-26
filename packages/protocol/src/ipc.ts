@@ -109,6 +109,22 @@ export const SettingsSchema = z.object({
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
+/** Per-run metrics collected in Main (plan §14 / M8-2). */
+export const RunMetricsSchema = z.object({
+  runId: z.string(),
+  sessionId: z.string(),
+  projectId: z.string(),
+  providerId: z.string().optional(),
+  modelId: z.string().optional(),
+  startedAt: z.number().int().nonnegative(),
+  completedAt: z.number().int().nonnegative().optional(),
+  firstTokenAt: z.number().int().nonnegative().optional(),
+  toolCallCount: z.number().int().nonnegative(),
+  fileChangeCount: z.number().int().nonnegative(),
+  outcome: z.enum(['completed', 'failed', 'cancelled', 'timedout']).optional(),
+});
+export type RunMetrics = z.infer<typeof RunMetricsSchema>;
+
 /** Validate inbound invoke payload from Renderer. */
 export function parseIpcCommand(raw: unknown) {
   return IpcCommandSchema.safeParse(raw);

@@ -146,6 +146,7 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
     params: CheckpointRevertFileInputSchema,
   }),
   z.object({ method: z.literal('checkpoint.revertAll'), params: CheckpointRunInputSchema }),
+  z.object({ method: z.literal('diagnostics.export'), params: z.object({}).optional() }),
 ]);
 export type IpcCommand = z.infer<typeof IpcCommandSchema>;
 export type IpcMethod = IpcCommand['method'];

@@ -1,5 +1,10 @@
 import type { DesktopAgentEvent, RiskLevel } from '@pi-desktop/protocol';
 
+// M8-1: Output truncation limits (plan §14.1).
+const MAX_TOOL_PROGRESS_CHUNK = 4_000;
+const MAX_TOOL_OUTPUT_SUMMARY = 500;
+const MAX_ARG_SUMMARY = 200;
+
 /** Minimal Pi session event shapes we care about (avoid importing Pi types into protocol). */
 export type PiSessionEventLike = {
   type: string;
@@ -109,7 +114,7 @@ export function mapPiSessionEvent(
           type: 'tool.progress',
           ...base(),
           toolCallId,
-          chunk: chunk.slice(0, 4000),
+          chunk: chunk.slice(0, MAX_TOOL_PROGRESS_CHUNK),
         },
       ];
     }
@@ -166,7 +171,7 @@ export function extractTextContent(content: unknown): string {
 
 function summarizeArgs(toolName: string, args: unknown): string {
   if (args == null) return toolName;
-  if (typeof args === 'string') return `${toolName}: ${args.slice(0, 200)}`;
+  if (typeof args === 'string') return `${toolName}: ${args.slice(0, MAX_ARG_SUMMARY)}`;
   if (typeof args === 'object') {
     const rec = args as Record<string, unknown>;
     const pathLike = rec['path'] ?? rec['file_path'] ?? rec['filePath'] ?? rec['command'];
@@ -174,18 +179,19 @@ function summarizeArgs(toolName: string, args: unknown): string {
       return `${toolName}: ${pathLike}`;
     }
   }
-  return `${toolName}: ${safeJson(args).slice(0, 200)}`;
+  return `${toolName}: ${safeJson(args).slice(0, MAX_ARG_SUMMARY)}`;
 }
 
 function summarizeResult(result: unknown): string {
   if (result == null) return '';
-  if (typeof result === 'string') return result.slice(0, 500);
+  if (typeof result === 'string') return result.slice(0, MAX_TOOL_OUTPUT_SUMMARY);
   if (typeof result === 'object') {
     const rec = result as Record<string, unknown>;
-    if (typeof rec['output'] === 'string') return rec['output'].slice(0, 500);
-    if (typeof rec['content'] === 'string') return rec['content'].slice(0, 500);
+    if (typeof rec['output'] === 'string') return rec['output'].slice(0, MAX_TOOL_OUTPUT_SUMMARY);
+    if (typeof rec['content'] === 'string')
+      return rec['content'].slice(0, MAX_TOOL_OUTPUT_SUMMARY);
   }
-  return safeJson(result).slice(0, 500);
+  return safeJson(result).slice(0, MAX_TOOL_OUTPUT_SUMMARY);
 }
 
 function riskForTool(toolName: string): RiskLevel {

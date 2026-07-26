@@ -1,0 +1,10 @@
+{
+  "name": "precise-revert-fixture",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/baseline.test.js",
+    "test:acceptance": "node --test test/acceptance.test.js",
+    "test:post-revert": "node --test test/post-revert.test.js"
+  }
+}

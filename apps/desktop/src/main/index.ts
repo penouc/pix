@@ -32,6 +32,8 @@ import {
 import { CheckpointRecoveryService } from './checkpoints/checkpoint-recovery-service.js';
 import { WriteSnapshotCoordinator } from './checkpoints/write-snapshot-coordinator.js';
 import { ProviderSettingsStore } from './providers/provider-settings-store.js';
+import { DesktopLogger } from './observability/logger.js';
+import { RunMetricsStore } from './observability/run-metrics-store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -44,6 +46,28 @@ let checkpointRecovery: CheckpointRecoveryService | null = null;
 let providerSettings: ProviderSettingsStore | null = null;
 let persistedProviderKeysApplied = false;
 const RESOLVED_CHECKPOINT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+let desktopLogger: DesktopLogger | null = null;
+const runMetrics = new RunMetricsStore();
+
+// M8-1: Message delta batching (§14.1) — coalesce rapid streaming deltas
+// to reduce IPC pressure without adding noticeable latency.
+const DELTA_FLUSH_INTERVAL_MS = 16;
+const MAX_BUFFERED_DELTAS = 500;
+let deltaBuffer: unknown[] = [];
+let deltaFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+function flushDeltaBuffer(): void {
+  deltaFlushTimer = null;
+  if (deltaBuffer.length === 0) return;
+  const events = deltaBuffer;
+  deltaBuffer = [];
+  const windows = BrowserWindow.getAllWindows();
+  for (const win of windows) {
+    for (const ev of events) {
+      win.webContents.send(IpcChannels.event, ev);
+    }
+  }
+}
 
 function getProviderSettings(): ProviderSettingsStore {
   providerSettings ??= new ProviderSettingsStore(
@@ -139,8 +163,28 @@ function broadcastEvent(event: unknown): void {
     console.error('[main] dropping invalid agent event', parsed.error.flatten());
     return;
   }
+  const data = parsed.data;
+
+  // Observe event for run metrics tracking before any buffering.
+  runMetrics.observe(data);
+
+  if (data.type === 'message.delta') {
+    // Buffer streaming deltas; flush every 16ms to reduce IPC overhead.
+    if (deltaBuffer.length < MAX_BUFFERED_DELTAS) {
+      deltaBuffer.push(data);
+    }
+    if (!deltaFlushTimer) {
+      deltaFlushTimer = setTimeout(flushDeltaBuffer, DELTA_FLUSH_INTERVAL_MS);
+    }
+    return;
+  }
+
+  // Non-delta event: flush pending deltas first to preserve ordering.
+  if (deltaBuffer.length > 0) {
+    flushDeltaBuffer();
+  }
   for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send(IpcChannels.event, parsed.data);
+    win.webContents.send(IpcChannels.event, data);
   }
 }
 
@@ -440,6 +484,9 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       case 'checkpoint.revertAll': {
         return okResult(await checkpointRecovery.revertAll(cmd.params.runId));
       }
+      case 'diagnostics.export': {
+        return okResult(exportDiagnostics());
+      }
       default: {
         const _exhaustive: never = cmd;
         return errResult('UNHANDLED', `Unhandled command ${JSON.stringify(_exhaustive)}`);
@@ -455,7 +502,18 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
   }
 }
 
+function exportDiagnostics(): { logPath: string; recentMetrics: unknown[] } {
+  return {
+    logPath: desktopLogger?.getLogPath() ?? '',
+    recentMetrics: runMetrics.listCompleted(),
+  };
+}
+
 app.whenReady().then(() => {
+  // M8-2: Install structured logger before any other log calls.
+  desktopLogger = new DesktopLogger(app.getPath('logs'));
+  desktopLogger.install();
+
   ipcMain.handle(IpcChannels.invoke, async (_event, raw: unknown) => handleInvoke(raw));
   void initializeCheckpointRecovery().catch((error) => {
     console.error('[main] checkpoint recovery initialization failed', error);
@@ -472,6 +530,11 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  if (deltaFlushTimer) {
+    clearTimeout(deltaFlushTimer);
+    deltaFlushTimer = null;
+  }
+  deltaBuffer = [];
   void runtime?.dispose();
   runtime = null;
   desktopDb?.close();
@@ -479,6 +542,7 @@ app.on('before-quit', () => {
   desktopDbInit = null;
   providerSettings = null;
   persistedProviderKeysApplied = false;
+  desktopLogger = null;
 });
 
 async function readAuthStatus(agent: AgentRuntime): Promise<ProviderAuthSummary[]> {

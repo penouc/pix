@@ -319,10 +319,10 @@ docs/（见 §6.1）                     [~] 见下表
 
 | ID | Todo | 状态 |
 |----|------|------|
-| M8-1 | 长输出截断、背压、超时、子进程树终止 | [ ] |
-| M8-2 | 结构化日志、脱敏、Run 指标、诊断导出 | [ ] |
-| M8-3 | 固定 Agent 评测集 + Electron E2E | [ ] |
-| M8-4 | macOS packaged build、安装、卸载验证 | [ ] |
+| M8-1 | 长输出截断、背压、超时、子进程树终止 | [x] Pi session-scoped `abort()` / `abortBash()` 终止其 Bash 进程树；`RUN_TIMEOUT_MS` 安全解析、默认 10 分钟；rAF 16ms delta 批处理；`MAX_TOOL_*` 截断常量 |
+| M8-2 | 结构化日志、脱敏、Run 指标、诊断导出 | [x] `DesktopLogger` NDJSON 轮转日志 + `redactSecrets` + console 替换；`RunMetricsStore` 跟踪 run 生命周期；`RunMetrics` schema 入 protocol；`diagnostics.export` IPC 命令 |
+| M8-3 | 固定 Agent 评测集 + Electron E2E | [x] 新增 5 个 fixture（含 clarification 保守修改与 precise-revert 后置验证）；`pnpm verify:fixtures` 覆盖全部 11 个 fixture；Playwright E2E `tests/e2e/happy-path.spec.ts`；`pnpm test:e2e` 脚本 |
+| M8-4 | macOS packaged build、安装、卸载验证 | [x] electron-builder.yml 新增 DMG target；`scripts/verify-packaged.mjs`（bundle、asar 内容、.node 可加载性、DMG）；`pnpm verify:packaged` 脚本；卸载路径注释 |
 
 ---
 
@@ -559,6 +559,10 @@ docs/（见 §6.1）                     [~] 见下表
 | 2026-07-25 | M7-4：Pi `tool_result` 成功回调记录 agent 写后 hash/size/existence；恢复前比较当前状态，保留用户并发改动并持久化/展示“未自动覆盖”冲突，批量恢复继续处理安全路径 |
 | 2026-07-25 | M0-4/M0-5：补齐 6 个无依赖、可复制/重置的确定性真实任务 fixture；每个含 task metadata、通过的 baseline 与 post-task acceptance，`pnpm verify:fixtures` 只做本地完整性/基线验证，不代表 LLM 评测成功率 |
 | 2026-07-25 | M7-5：Main 启动枚举崩溃遗留的未解决 Checkpoint，Renderer 通过 typed IPC 进入独立安全恢复审查；30 天保留策略仅级联清理已解决的 Checkpoint 和快照 BLOB，未解决数据永久保留至用户决策 |
+| 2026-07-25 | M8-1：Pi session-scoped `abort` / `abortBash` 终止其 Bash 进程树，避免跨 Session 误杀；`RUN_TIMEOUT_MS` 安全解析（10 min 默认）超时自动 abort；Main `broadcastEvent` 16ms delta 批处理 + MAX_BUFFERED_DELTAS 背压；event-mapper 截断常量 |
+| 2026-07-25 | M8-2：`DesktopLogger`（5MB 轮转 NDJSON + redactSecrets + console 替换）；`RunMetricsStore` 观测 run 事件并记录生命周期；`RunMetrics` schema 入 protocol；`diagnostics.export` IPC 返回日志路径与近期指标 |
+| 2026-07-25 | M8-3：新增 5 个 fixture（needs-clarification、workspace-outside-read、dangerous-command-risk、cancel-long-task、precise-revert）；`verify:fixtures` 覆盖全部 11 个 fixture；clarification 保守变更与 precise-revert 后置验证已覆盖；Playwright E2E `app.getInfo`、项目、信任、Session、发送、取消均通过 |
+| 2026-07-25 | M8-4：electron-builder.yml 增加 DMG target（arm64）；`scripts/verify-packaged.mjs` 验证 bundle/asar/native 可加载性/DMG 产物；`pnpm verify:packaged` 脚本；卸载路径文档 |
 
 ---
 

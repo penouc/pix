@@ -1,5 +1,30 @@
 import { execFileSync } from 'node:child_process';
 
+const SHELL_NAMES = new Set(['bash', 'sh', 'zsh', 'fish', 'dash', 'ksh', 'csh', 'tcsh']);
+
+/**
+ * Kill shell (bash/sh/zsh/…) descendant processes of rootPid.
+ * Used as a backstop after aborting a run to clean up any residual shells
+ * that Pi SDK's abortBash may not have reached (plan §14.1).
+ */
+export function killShellDescendants(rootPid: number): void {
+  if (process.platform === 'win32') return;
+  const descendants = listDescendantPids(rootPid);
+  for (const pid of descendants) {
+    try {
+      const comm = execFileSync('ps', ['-p', String(pid), '-o', 'comm='], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+      if (SHELL_NAMES.has(comm)) {
+        killProcessTree(pid);
+      }
+    } catch {
+      // process already gone
+    }
+  }
+}
+
 /**
  * Kill a process and its descendants (plan §7.2 / §14.1).
  * Cross-platform best-effort; safe to call with already-dead pids.

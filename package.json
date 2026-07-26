@@ -22,8 +22,10 @@
     "test:fixture": "node --test fixtures/test-repositories/react-button-label/test/button.test.js",
     "verify:fixtures": "node scripts/verify-fixtures.mjs",
     "smoke:packaged": "node scripts/smoke-packaged.mjs",
+    "verify:packaged": "node scripts/verify-packaged.mjs",
     "smoke:runtime": "pnpm -r --filter './packages/*' build && PI_DESKTOP_FAKE_RUNTIME=1 SMOKE_PROMPT=1 node scripts/smoke-pi-runtime.mjs",
     "smoke:runtime:pi": "pnpm -r --filter './packages/*' build && PI_DESKTOP_FAKE_RUNTIME=0 node scripts/smoke-pi-runtime.mjs",
+    "test:e2e": "pnpm build && playwright test",
     "eval:fixture": "pnpm -r --filter './packages/*' build && node scripts/eval-fixture-button-label.mjs",
     "package:dir": "pnpm build && pnpm --filter @pi-desktop/desktop package:dir",
     "clean": "pnpm -r exec rm -rf dist node_modules && rm -rf node_modules"
@@ -36,6 +38,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",
+    "@playwright/test": "^1.62.0",
     "@types/node": "^22.15.30",
     "eslint": "^9.28.0",
     "eslint-config-prettier": "^10.1.5",

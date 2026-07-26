@@ -27,9 +27,20 @@ mac:
     - target: dir
       arch:
         - arm64
+    - target: dmg
+      arch:
+        - arm64
   identity: null
   hardenedRuntime: false
   gatekeeperAssess: false
+  # Uninstall: delete ~/Library/Application Support/Pi Agent Desktop
+  # and remove the .app bundle from /Applications.
+
+dmg:
+  title: Pi Agent Desktop
+  window:
+    width: 540
+    height: 380
 
 linux:
   target:

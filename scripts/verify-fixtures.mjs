@@ -16,6 +16,11 @@ const requiredFixtures = [
   'form-validation',
   'failing-test',
   'small-refactor',
+  'cancel-long-task',
+  'dangerous-command-risk',
+  'needs-clarification',
+  'precise-revert',
+  'workspace-outside-read',
 ];
 
 const fixtureDirectories = new Set(
@@ -74,6 +79,23 @@ for (const fixtureName of requiredFixtures) {
     )
   ) {
     failures.push(`${fixtureName}: acceptance test file is missing`);
+  }
+  if (fixtureName === 'precise-revert') {
+    if (
+      typeof task.postRevertCommand !== 'string' ||
+      task.postRevertCommand.trim() === ''
+    ) {
+      failures.push(`${fixtureName}: task.json requires non-empty postRevertCommand`);
+    }
+    if (
+      typeof manifest.scripts?.['test:post-revert'] !== 'string' ||
+      !manifest.scripts['test:post-revert'].includes('node --test')
+    ) {
+      failures.push(`${fixtureName}: post-revert test script must use node:test`);
+    }
+    if (!existsSync(path.join(fixturePath, 'test', 'post-revert.test.js'))) {
+      failures.push(`${fixtureName}: post-revert test file is missing`);
+    }
   }
   if (failures.some((failure) => failure.startsWith(`${fixtureName}:`))) continue;
 

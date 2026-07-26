@@ -29,6 +29,24 @@ import {
 import { mapPiSessionEvent, type PiSessionEventLike } from './event-mapper.js';
 import { PermissionController } from './permission-controller.js';
 
+/** Maximum wall-clock time a single run may take before auto-abort (§14.1). */
+const DEFAULT_RUN_TIMEOUT_MS = 10 * 60 * 1000;
+const MIN_RUN_TIMEOUT_MS = 30_000;
+const MAX_RUN_TIMEOUT_MS = 2_147_483_647;
+
+export function resolveRunTimeoutMs(value: string | undefined): number {
+  if (value === undefined || !/^\d+$/.test(value)) {
+    return DEFAULT_RUN_TIMEOUT_MS;
+  }
+  const timeoutMs = Number(value);
+  if (!Number.isSafeInteger(timeoutMs)) {
+    return DEFAULT_RUN_TIMEOUT_MS;
+  }
+  return Math.min(MAX_RUN_TIMEOUT_MS, Math.max(MIN_RUN_TIMEOUT_MS, timeoutMs));
+}
+
+const RUN_TIMEOUT_MS = resolveRunTimeoutMs(process.env['PI_DESKTOP_RUN_TIMEOUT_MS']);
+
 export function writeToolPath(toolName: string, input: unknown): string | undefined {
   if (toolName !== 'write' && toolName !== 'edit') return undefined;
   if (!input || typeof input !== 'object') return undefined;
@@ -310,9 +328,6 @@ export class PiAgentRuntime implements AgentRuntime {
     try {
       await record.pi.abort();
       record.pi.abortBash();
-      // Best-effort: if Pi tracked shell PIDs on the session agent, also kill
-      // any residual child pids we can discover from the session process env.
-      // Primary process-tree guarantee is validated in process-tree tests.
     } catch (error) {
       console.error('[PiAgentRuntime] abort error', error);
     }
@@ -432,8 +447,16 @@ export class PiAgentRuntime implements AgentRuntime {
   }
 
   private async runPrompt(record: SessionRecord, runId: string, text: string): Promise<void> {
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        reject(new Error(`Run timed out after ${RUN_TIMEOUT_MS / 1000}s`));
+        void this.abort(runId);
+      }, RUN_TIMEOUT_MS);
+    });
+
     try {
-      await record.pi.prompt(text);
+      await Promise.race([record.pi.prompt(text), timeoutPromise]);
     } catch (error) {
       if (record.abortedRunIds.has(runId)) return;
       const message = error instanceof Error ? error.message : String(error);
@@ -451,6 +474,8 @@ export class PiAgentRuntime implements AgentRuntime {
       if (record.activeRunId === runId) {
         record.activeRunId = null;
       }
+    } finally {
+      clearTimeout(timeoutHandle);
     }
   }
 
