@@ -2,31 +2,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, MessageSquare, Key, ExternalLink } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import type { ProviderSetting, Settings } from '@pi-desktop/protocol';
+import type { ProviderCatalogEntry, ProviderSetting, Settings } from '@pi-desktop/protocol';
 
 import { Button } from '@/components/ui/button';
 import { useOfferedModels } from '@/features/models/use-offered-models';
 import { VisibleModelsSection } from '@/features/models/VisibleModelsSection';
 import { invoke } from '@/lib/ipc';
-
-const PROVIDERS = [
-  { id: 'openai', label: 'OpenAI' },
-  { id: 'anthropic', label: 'Anthropic' },
-  { id: 'google', label: 'Google' },
-  { id: 'xai', label: 'xAI' },
-  { id: 'openrouter', label: 'OpenRouter' },
-  { id: 'groq', label: 'Groq' },
-  { id: 'deepseek', label: 'DeepSeek' },
-  { id: 'mistral', label: 'Mistral' },
-  { id: 'together', label: 'Together AI' },
-  { id: 'fireworks', label: 'Fireworks' },
-  { id: 'moonshotai', label: 'Moonshot AI' },
-  { id: 'minimax', label: 'MiniMax' },
-  { id: 'minimax-cn', label: 'MiniMax (CN)' },
-  { id: 'opencode', label: 'OpenCode' },
-  { id: 'opencode-go', label: 'OpenCode Go' },
-  { id: 'zai', label: 'Zai' },
-];
 
 interface SettingsPanelProps {
   onClose?: () => void;
@@ -34,7 +15,7 @@ interface SettingsPanelProps {
 
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const queryClient = useQueryClient();
-  const [providerId, setProviderId] = useState(PROVIDERS[0]!.id);
+  const [providerId, setProviderId] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
@@ -54,6 +35,18 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
     queryFn: () => invoke<Settings>({ method: 'settings.get' }),
   });
   const { models: offered } = useOfferedModels();
+  /*
+   * Providers come from Pi's registry, not a list maintained here. The hand-written
+   * one had sixteen ids against the thirty-seven Pi knows, so twenty-one were
+   * unreachable, and it could not know which providers accept a subscription
+   * login because only the registry says so.
+   */
+  const catalog = useQuery({
+    queryKey: ['provider.listAvailable'],
+    queryFn: () => invoke<ProviderCatalogEntry[]>({ method: 'provider.listAvailable' }),
+  });
+  const available = catalog.data ?? [];
+  const chosen = available.find((entry) => entry.id === providerId);
 
   useEffect(() => {
     if (model || !settings.data?.defaultModel) return;
@@ -273,7 +266,11 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
         <section className="space-y-4 border-y border-border py-6">
           <div>
             <h2 className="text-sm font-semibold">Other providers</h2>
-            <p className="mt-1 text-xs text-muted">Add an API key for any supported provider.</p>
+            <p className="mt-1 text-xs text-muted">
+              {available.length
+                ? `Add an API key for any of the ${available.length} providers Pi supports.`
+                : 'Add an API key for any supported provider.'}
+            </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)_auto]">
             <select
@@ -281,9 +278,12 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
               value={providerId}
               onChange={(e) => setProviderId(e.target.value)}
             >
-              {PROVIDERS.map(({ id, label }) => (
-                <option key={id} value={id}>
-                  {label}
+              <option value="">Choose a provider…</option>
+              {available.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.name}
+                  {entry.hasAuth ? ' ✓' : ''}
+                  {entry.modelCount ? ` · ${entry.modelCount}` : ''}
                 </option>
               ))}
             </select>
@@ -291,15 +291,30 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
               className="rounded-xl border border-border bg-surface-raised px-3 py-2 text-sm outline-none focus:border-border-strong"
               type="password"
               autoComplete="off"
-              placeholder="API key"
+              placeholder={chosen?.apiKeyLabel ?? 'API key'}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') void saveKey(); }}
             />
-            <Button disabled={!apiKey.trim()} onClick={() => void saveKey()}>
+            <Button disabled={!apiKey.trim() || !providerId} onClick={() => void saveKey()}>
               Save
             </Button>
           </div>
+          {chosen?.oauthLabel ? (
+            /*
+             * Stated rather than offered. Pi supports a subscription login for
+             * this provider, but the desktop app has only wired the API-key path
+             * — the OAuth flow needs an interaction bridge (Pi asks for a code or
+             * a browser round-trip through its AuthInteraction callbacks). A
+             * button that did nothing would be worse than saying so.
+             */
+            <p className="mt-3 rounded-xl border border-border bg-surface px-3 py-2 text-xs leading-relaxed text-muted">
+              <span className="font-semibold">{chosen.oauthLabel}</span> is also supported by the
+              Pi SDK{chosen.oauthLoginLabel ? ` (“${chosen.oauthLoginLabel}”)` : ''}, but this app
+              has not wired subscription login yet — use an API key for now.
+            </p>
+          ) : null}
+
           {notice ? (
             <p className={`text-xs ${noticeType === 'err' ? 'text-danger' : 'text-muted'}`}>
               {notice}

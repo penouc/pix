@@ -869,6 +869,12 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       case 'agent.listModels': {
         return okResult((await agent.listModels()) as ModelInfo[]);
       }
+      case 'provider.listAvailable': {
+        // Straight from Pi's registry — the Settings list used to be sixteen
+        // hand-written ids against the thirty-seven Pi actually knows.
+        if (!agent.listProviders) return okResult([]);
+        return okResult(await agent.listProviders());
+      }
       case 'settings.getVisibleModels': {
         return okResult({ keys: getProviderSettings().getVisibleModels() });
       }

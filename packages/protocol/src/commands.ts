@@ -309,6 +309,7 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('project.setTrust'), params: SetProjectTrustInputSchema }),
   z.object({ method: z.literal('git.getWorkingTreeDiff'), params: GetWorkingTreeDiffInputSchema }),
   z.object({ method: z.literal('provider.list'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('provider.listAvailable'), params: z.object({}).optional() }),
   z.object({ method: z.literal('provider.saveApiKey'), params: SaveProviderApiKeyInputSchema }),
   z.object({ method: z.literal('provider.remove'), params: RemoveProviderInputSchema }),
   z.object({ method: z.literal('settings.get'), params: z.object({}).optional() }),

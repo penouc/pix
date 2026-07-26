@@ -66,6 +66,26 @@ export interface ModelCatalogEntry {
   outputCostPerMTok?: number;
 }
 
+/**
+ * One provider as Pi's registry describes it, including which auth methods it
+ * declares. The labels are the provider's own — "xAI API key", "Sign in with
+ * SuperGrok or X Premium" — so nothing here is transcribed by hand.
+ */
+export interface ProviderCatalogEntry {
+  id: string;
+  name: string;
+  /** Label for the API-key field, when the provider accepts one. */
+  apiKeyLabel?: string;
+  /** Present when the provider supports subscription/OAuth login. */
+  oauthLabel?: string;
+  /** The provider's own call to action, e.g. "Sign in with Kimi Code". */
+  oauthLoginLabel?: string;
+  /** True when a credential is already resolvable from any source. */
+  hasAuth?: boolean;
+  /** How many models this provider contributes to the catalogue. */
+  modelCount: number;
+}
+
 export interface AgentRuntime {
   createSession(options: CreateSessionOptions): Promise<AgentSession>;
   resumeSession(sessionId: string): Promise<AgentSession>;
@@ -99,6 +119,8 @@ export interface AgentRuntime {
   removeProviderConfiguration?(providerId: string): Promise<void>;
   approve(requestId: string, decision: ApprovalDecision): Promise<void>;
   listModels(): Promise<ModelCatalogEntry[]>;
+  /** Optional: every provider Pi knows, with its declared auth methods. */
+  listProviders?(): Promise<ProviderCatalogEntry[]>;
   /** Optional: which providers currently have usable credentials (no secrets). */
   getAuthStatus?(): Promise<Array<{ providerId: string; hasAuth: boolean; source: string }>>;
   /** Optional: choose a default model when the session has none. */

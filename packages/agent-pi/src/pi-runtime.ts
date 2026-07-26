@@ -17,6 +17,7 @@ import type {
   BeforeWriteToolHandler,
   CreateSessionOptions,
   ModelCatalogEntry,
+  ProviderCatalogEntry,
 } from '@pi-desktop/agent-domain';
 import { DomainError, agentError } from '@pi-desktop/agent-domain';
 import type { ApprovalDecision, DesktopAgentEvent, ModelRef, RunRef } from '@pi-desktop/protocol';
@@ -455,6 +456,47 @@ export class PiAgentRuntime implements AgentRuntime {
           : {}),
       };
     });
+  }
+
+  /**
+   * Every provider Pi knows, straight from its registry.
+   *
+   * The Settings screen used to carry a hand-written list of sixteen ids. Pi
+   * knows thirty-seven, so twenty-one were unreachable — and a transcribed list
+   * is exactly the kind of thing that drifts silently as the SDK moves. It also
+   * could not know which providers accept a subscription login, because only the
+   * registry says so.
+   */
+  async listProviders(): Promise<ProviderCatalogEntry[]> {
+    this.assertAlive();
+    await this.ensureRuntime(process.cwd());
+    const counts = new Map<string, number>();
+    for (const model of this.modelRuntime!.getModels()) {
+      const id = String(model.provider);
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+    const authSet = new Set(this.authSummaries.filter((s) => s.hasAuth).map((s) => s.providerId));
+
+    // `getProviders()` is typed by the SDK; no cast, so a shape change in Pi
+    // surfaces here as a compile error rather than as undefined at runtime.
+    return this.modelRuntime!.getProviders()
+      .map((provider): ProviderCatalogEntry => {
+        const hasAuth =
+          authSet.has(provider.id) ||
+          this.modelRuntime!.getProviderAuthStatus(provider.id)?.configured === true;
+        return {
+          id: provider.id,
+          name: provider.name ?? provider.id,
+          ...(provider.auth?.apiKey?.name ? { apiKeyLabel: provider.auth.apiKey.name } : {}),
+          ...(provider.auth?.oauth?.name ? { oauthLabel: provider.auth.oauth.name } : {}),
+          ...(provider.auth?.oauth?.loginLabel
+            ? { oauthLoginLabel: provider.auth.oauth.loginLabel }
+            : {}),
+          hasAuth,
+          modelCount: counts.get(provider.id) ?? 0,
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async pickDefaultModel(): Promise<ModelRef | null> {

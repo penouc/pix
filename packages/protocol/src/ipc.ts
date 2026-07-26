@@ -137,6 +137,20 @@ export const ModelInfoSchema = z.object({
 });
 export type ModelInfo = z.infer<typeof ModelInfoSchema>;
 
+/** One provider from Pi's registry, with the auth methods it declares. */
+export const ProviderCatalogEntrySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  /** Label for the API-key field, in the provider's own words. */
+  apiKeyLabel: z.string().optional(),
+  /** Present when the provider supports a subscription/OAuth login. */
+  oauthLabel: z.string().optional(),
+  oauthLoginLabel: z.string().optional(),
+  hasAuth: z.boolean().optional(),
+  modelCount: z.number().int().nonnegative(),
+});
+export type ProviderCatalogEntry = z.infer<typeof ProviderCatalogEntrySchema>;
+
 export const ProviderSettingSchema = z.object({
   providerId: z.string(),
   configured: z.boolean(),
