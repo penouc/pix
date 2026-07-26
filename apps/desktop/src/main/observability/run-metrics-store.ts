@@ -5,10 +5,22 @@ import type { RunMetrics } from '@pi-desktop/protocol';
  * In-memory store for per-run metrics (plan §14 / M8-2).
  * Updated by observing agent events; completed entries are kept for the session.
  */
+/** Token/cost figures the provider reported, kept alongside the run. */
+export type RunMetricsWithUsage = RunMetrics & {
+  inputTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
+};
+
 export class RunMetricsStore {
-  private readonly active = new Map<string, RunMetrics>();
-  private readonly completed: RunMetrics[] = [];
+  private readonly active = new Map<string, RunMetricsWithUsage>();
+  private readonly completed: RunMetricsWithUsage[] = [];
   private readonly MAX_COMPLETED = 100;
+  /**
+   * Called once per finished run so Main can persist it. In-memory alone meant
+   * every usage figure reset on restart.
+   */
+  onFinished?: (metrics: RunMetricsWithUsage) => void;
 
   observe(event: DesktopAgentEvent): void {
     switch (event.type) {
@@ -44,6 +56,16 @@ export class RunMetricsStore {
         }
         break;
       }
+      case 'usage.updated': {
+        const m = this.active.get(event.runId);
+        if (m) {
+          // Providers report cumulative totals per run, so last write wins.
+          if (event.inputTokens != null) m.inputTokens = event.inputTokens;
+          if (event.outputTokens != null) m.outputTokens = event.outputTokens;
+          if (event.costUsd != null) m.costUsd = event.costUsd;
+        }
+        break;
+      }
       case 'run.completed': {
         this.finish(event.runId, 'completed', event.timestamp);
         break;
@@ -59,19 +81,15 @@ export class RunMetricsStore {
     }
   }
 
-  get(runId: string): RunMetrics | undefined {
+  get(runId: string): RunMetricsWithUsage | undefined {
     return this.active.get(runId) ?? this.completed.find((m) => m.runId === runId);
   }
 
-  listCompleted(): RunMetrics[] {
+  listCompleted(): RunMetricsWithUsage[] {
     return [...this.completed];
   }
 
-  private finish(
-    runId: string,
-    outcome: RunMetrics['outcome'],
-    timestamp: number,
-  ): void {
+  private finish(runId: string, outcome: RunMetrics['outcome'], timestamp: number): void {
     const m = this.active.get(runId);
     if (!m) return;
     m.completedAt = timestamp;
@@ -81,5 +99,6 @@ export class RunMetricsStore {
     if (this.completed.length > this.MAX_COMPLETED) {
       this.completed.shift();
     }
+    this.onFinished?.(m);
   }
 }

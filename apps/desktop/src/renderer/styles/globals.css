@@ -73,6 +73,20 @@
   --color-accent-2-800: #3d472b;
   --color-accent-2-900: #272e1b;
 
+  /*
+   * Usage heatmap — a sequential single-hue ramp, light→dark on the light
+   * theme. Declared as its own five steps rather than reusing accent-100…800:
+   * the dark theme re-points those (tints go dark, deep steps go light so they
+   * stay readable as text), which would scramble a magnitude ramp. Per the
+   * sequential rule the empty step is allowed to recede toward the surface, and
+   * dark mode gets *selected* steps rather than a flip.
+   */
+  --color-heat-0: #f1f1f2;
+  --color-heat-1: #f9dfcd;
+  --color-heat-2: #f6a06b;
+  --color-heat-3: #b2622d;
+  --color-heat-4: #8c491a;
+
   /* Terminal / tool-output surface. Declared as its own pair rather than
      reusing neutral-900 + neutral-200: the dark theme inverts the neutral
      ramp, so the design's literal `neutral-200 on neutral-900` would render
@@ -157,6 +171,13 @@
 
   --color-output: #0e0f10;
   --color-output-foreground: #d6d7da;
+
+  /* Dark: more activity reads lighter and warmer against the dark surface. */
+  --color-heat-0: #2b2c2f;
+  --color-heat-1: #4d3626;
+  --color-heat-2: #8c491a;
+  --color-heat-3: #d67f48;
+  --color-heat-4: #f6a06b;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 3px 10px rgba(0, 0, 0, 0.45);

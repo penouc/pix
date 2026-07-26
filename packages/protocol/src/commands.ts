@@ -243,6 +243,13 @@ export const ClearRememberedInputSchema = z.object({
 });
 export type ClearRememberedInput = z.infer<typeof ClearRememberedInputSchema>;
 
+export const UsageSummaryInputSchema = z.object({
+  /** Trailing window in days. 365 suits the calendar heatmap. */
+  days: z.number().int().min(1).max(1096).optional(),
+  projectId: z.string().min(1).optional(),
+});
+export type UsageSummaryInput = z.infer<typeof UsageSummaryInputSchema>;
+
 export const SetDefaultProjectsFolderInputSchema = z.object({
   /** Empty string clears it back to the OS default. */
   path: z.string().max(4096),
@@ -309,6 +316,7 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   }),
   z.object({ method: z.literal('settings.pickProjectsFolder'), params: z.object({}).optional() }),
   z.object({ method: z.literal('audit.summary'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('usage.summary'), params: UsageSummaryInputSchema.optional() }),
   z.object({ method: z.literal('agent.setApprovalMode'), params: SetApprovalModeInputSchema }),
   z.object({
     method: z.literal('agent.getApprovalMode'),

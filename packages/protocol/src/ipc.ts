@@ -156,6 +156,45 @@ export const RememberedRuleSchema = z.object({
 });
 export type RememberedRule = z.infer<typeof RememberedRuleSchema>;
 
+/** One day of agent activity, for the usage heatmap. */
+export const UsageDaySchema = z.object({
+  date: z.string(),
+  runs: z.number().int().nonnegative(),
+  inputTokens: z.number().nonnegative(),
+  outputTokens: z.number().nonnegative(),
+  costUsd: z.number().nonnegative(),
+});
+export type UsageDay = z.infer<typeof UsageDaySchema>;
+
+export const UsageByModelSchema = z.object({
+  providerId: z.string(),
+  modelId: z.string(),
+  runs: z.number().int().nonnegative(),
+  inputTokens: z.number().nonnegative(),
+  outputTokens: z.number().nonnegative(),
+  costUsd: z.number().nonnegative(),
+  lastUsedAt: z.number().int().nonnegative(),
+});
+export type UsageByModel = z.infer<typeof UsageByModelSchema>;
+
+export const UsageSummarySchema = z.object({
+  from: z.number().int().nonnegative(),
+  to: z.number().int().nonnegative(),
+  totals: z.object({
+    runs: z.number().int().nonnegative(),
+    inputTokens: z.number().nonnegative(),
+    outputTokens: z.number().nonnegative(),
+    costUsd: z.number().nonnegative(),
+    completed: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+    cancelled: z.number().int().nonnegative(),
+    medianDurationMs: z.number().nonnegative().nullable(),
+  }),
+  days: z.array(UsageDaySchema),
+  byModel: z.array(UsageByModelSchema),
+});
+export type UsageSummary = z.infer<typeof UsageSummarySchema>;
+
 /** Local audit-log summary for the Permissions tab. */
 export const AuditSummarySchema = z.object({
   path: z.string(),

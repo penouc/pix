@@ -165,4 +165,28 @@ CREATE TABLE IF NOT EXISTS checkpoint_recovery_conflicts (
 ALTER TABLE sessions ADD COLUMN deleted_at INTEGER;
 `,
   },
+  {
+    version: 9,
+    name: 'run_metrics',
+    sql: `
+CREATE TABLE IF NOT EXISTS run_metrics (
+  run_id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  provider_id TEXT,
+  model_id TEXT,
+  started_at INTEGER NOT NULL,
+  completed_at INTEGER,
+  first_token_at INTEGER,
+  tool_call_count INTEGER NOT NULL DEFAULT 0,
+  file_change_count INTEGER NOT NULL DEFAULT 0,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  cost_usd REAL,
+  outcome TEXT
+);
+CREATE INDEX IF NOT EXISTS run_metrics_started_at ON run_metrics(started_at);
+CREATE INDEX IF NOT EXISTS run_metrics_project ON run_metrics(project_id);
+`,
+  },
 ];

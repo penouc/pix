@@ -95,6 +95,16 @@ export function formatDuration(
   return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
 }
 
+/** Format a bare duration in ms. `formatDuration` expects timestamps, and a 0 start reads as missing. */
+export function formatDurationMs(ms: number | null | undefined): string {
+  if (ms == null) return NOT_REPORTED;
+  const totalSeconds = Math.round(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes === 0) return `${seconds}s`;
+  return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
+}
+
 export function formatTokens(tokens: number | null | undefined): string {
   if (tokens == null) return NOT_REPORTED;
   if (tokens < 1000) return String(tokens);

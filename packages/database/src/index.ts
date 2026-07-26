@@ -20,3 +20,10 @@ export { DesktopDatabase } from './desktop-database.js';
 export { openDatabase, applyMigrations } from './sqlite-connection.js';
 export { MIGRATIONS } from './migrations.js';
 export type { Migration } from './migrations.js';
+export { SqliteRunMetricsRepository } from './sqlite-run-metrics-repository.js';
+export type {
+  RunMetricsRepository,
+  UsageSummary,
+  UsageDay,
+  UsageByModel,
+} from './run-metrics-repository.js';

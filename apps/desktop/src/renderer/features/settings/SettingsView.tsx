@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { Switch } from '@/components/ui/switch';
 import { SettingsPanel } from '@/features/settings/SettingsPanel';
+import { UsageTab } from '@/features/settings/UsageTab';
 import { invoke } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useUiPrefsStore } from '@/stores/ui-prefs-store';
@@ -27,6 +28,7 @@ type TabId =
   | 'checkpoints'
   | 'appearance'
   | 'notifications'
+  | 'usage'
   | 'about';
 
 const TABS: Array<{ id: TabId; name: string; title: string; desc: string }> = [
@@ -59,6 +61,12 @@ const TABS: Array<{ id: TabId; name: string; title: string; desc: string }> = [
     name: 'Appearance',
     title: 'Appearance',
     desc: 'How the workbench looks while a run is streaming.',
+  },
+  {
+    id: 'usage',
+    name: 'Usage',
+    title: 'Usage & cost',
+    desc: 'What the agent has actually run, and what it cost.',
   },
   {
     id: 'notifications',
@@ -111,7 +119,12 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
         {tab === 'providers' ? (
           <SettingsPanel onClose={onClose} />
         ) : (
-          <div className="mx-auto max-w-[660px] px-8 pt-8 pb-11">
+          <div
+            className={cn(
+              'mx-auto px-8 pt-8 pb-11',
+              tab === 'usage' ? 'max-w-[860px]' : 'max-w-[660px]',
+            )}
+          >
             <div className="mb-6 flex items-start justify-between gap-3.5">
               <div>
                 <h2 className="mb-1.5">{active.title}</h2>
@@ -126,6 +139,7 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
 
             {tab === 'appearance' ? <AppearanceTab /> : null}
             {tab === 'notifications' ? <NotificationsTab /> : null}
+            {tab === 'usage' ? <UsageTab /> : null}
             {tab === 'permissions' ? <PermissionsTab /> : null}
             {tab === 'projects' ? <ProjectsTab /> : null}
             {tab === 'checkpoints' ? <CheckpointsTab /> : null}

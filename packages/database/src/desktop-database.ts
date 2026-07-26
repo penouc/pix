@@ -6,6 +6,7 @@ import type { CheckpointRepository } from './checkpoint-repository.js';
 import { openDatabase, type SqliteDatabase } from './sqlite-connection.js';
 import { SqliteCheckpointRepository } from './sqlite-checkpoint-repository.js';
 import { SqliteProjectRepository } from './sqlite-project-repository.js';
+import { SqliteRunMetricsRepository } from './sqlite-run-metrics-repository.js';
 import { SqliteSessionRepository } from './sqlite-session-repository.js';
 
 /**
@@ -17,6 +18,7 @@ export class DesktopDatabase {
   readonly sessions: SqliteSessionRepository;
   readonly projects: SqliteProjectRepository;
   readonly checkpoints: SqliteCheckpointRepository;
+  readonly runMetrics: SqliteRunMetricsRepository;
   readonly dbPath: string;
 
   private constructor(dbPath: string, db: SqliteDatabase) {
@@ -25,6 +27,7 @@ export class DesktopDatabase {
     this.sessions = new SqliteSessionRepository(db);
     this.projects = new SqliteProjectRepository(db);
     this.checkpoints = new SqliteCheckpointRepository(db);
+    this.runMetrics = new SqliteRunMetricsRepository(db);
   }
 
   static open(dbPath: string): DesktopDatabase {

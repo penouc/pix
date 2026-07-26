@@ -61,6 +61,11 @@ let persistedProviderKeysApplied = false;
 const RESOLVED_CHECKPOINT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 let desktopLogger: DesktopLogger | null = null;
 const runMetrics = new RunMetricsStore();
+runMetrics.onFinished = (metrics) => {
+  void getDb()
+    .then((db) => db.runMetrics.record(metrics))
+    .catch((error) => console.error('[main] persisting run metrics failed', error));
+};
 let skillsService: SkillsService | null = null;
 let terminalService: TerminalService | null = null;
 let automationStore: AutomationStore | null = null;
@@ -919,6 +924,18 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       case 'permissions.clearRemembered': {
         const cleared = (await agent.clearRememberedDecisions?.(cmd.params)) ?? 0;
         return okResult({ cleared });
+      }
+      case 'usage.summary': {
+        const days = cmd.params?.days ?? 365;
+        const to = Date.now();
+        const from = to - days * 24 * 60 * 60 * 1000;
+        return okResult(
+          db.runMetrics.summary({
+            from,
+            to,
+            ...(cmd.params?.projectId ? { projectId: cmd.params.projectId } : {}),
+          }),
+        );
       }
       case 'audit.summary': {
         return okResult(await readAuditSummary());
