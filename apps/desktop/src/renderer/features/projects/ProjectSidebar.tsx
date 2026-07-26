@@ -9,13 +9,13 @@ import {
   SquareTerminal,
   Zap,
 } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import type { ProjectSummary, SessionSummary } from '@pi-desktop/protocol';
 
 import { Segmented } from '@/components/ui/segmented';
 import { useCreateTask } from '@/features/sessions/use-create-task';
-import { invoke, IpcError } from '@/lib/ipc';
+import { invoke } from '@/lib/ipc';
 import { dotStyle, statusTone } from '@/lib/status';
 import { cn } from '@/lib/utils';
 import { useAgentStreamStore } from '@/stores/agent-stream-store';
@@ -28,9 +28,12 @@ interface ProjectSidebarProps {
   onNewTask: () => void;
   onSelectSession: () => void;
   onOpenSearch: () => void;
+  onOpenProjectDialog: () => void;
   onNavigate: (destination: SidebarDestination) => void;
   /** Which nav entry reads as current. */
   activeNav: string;
+  /** True while the run screen is showing an unstarted task. */
+  isBlankRun: boolean;
 }
 
 export function ProjectSidebar({
@@ -38,8 +41,10 @@ export function ProjectSidebar({
   onNewTask,
   onSelectSession,
   onOpenSearch,
+  onOpenProjectDialog,
   onNavigate,
   activeNav,
+  isBlankRun,
 }: ProjectSidebarProps) {
   const project = useWorkspaceStore((s) => s.project);
   const session = useWorkspaceStore((s) => s.session);
@@ -52,8 +57,6 @@ export function ProjectSidebar({
 
   const { createTask, busy: creating, error: createError } = useCreateTask();
   const [opening, setOpening] = useState(false);
-  const [showProjectPicker, setShowProjectPicker] = useState(false);
-  const [pathInput, setPathInput] = useState('');
   const [openError, setOpenError] = useState<string | null>(null);
 
   const busy = creating || opening;
@@ -71,10 +74,6 @@ export function ProjectSidebar({
       invoke<SessionSummary[]>({ method: 'session.list', params: { projectId: project!.id } }),
   });
 
-  useEffect(() => {
-    if (project) setPathInput(project.path);
-  }, [project]);
-
   async function openProjectPath(path: string) {
     if (!path.trim()) return;
     setOpening(true);
@@ -89,27 +88,7 @@ export function ProjectSidebar({
       resetSessionView();
       setScope(opened.id, null);
       void recent.refetch();
-      setShowProjectPicker(false);
     } catch (err) {
-      setOpenError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setOpening(false);
-    }
-  }
-
-  async function browseFolder() {
-    setOpening(true);
-    setOpenError(null);
-    try {
-      const opened = await invoke<ProjectSummary>({ method: 'project.pickFolder' });
-      setProject(opened);
-      setSession(null);
-      resetSessionView();
-      setScope(opened.id, null);
-      void recent.refetch();
-      setShowProjectPicker(false);
-    } catch (err) {
-      if (err instanceof IpcError && err.code === 'CANCELLED') return;
       setOpenError(err instanceof Error ? err.message : String(err));
     } finally {
       setOpening(false);
@@ -118,7 +97,7 @@ export function ProjectSidebar({
 
   async function handleNewTask() {
     if (!project) {
-      setShowProjectPicker(true);
+      onOpenProjectDialog();
       return;
     }
     const created = await createTask();
@@ -142,7 +121,7 @@ export function ProjectSidebar({
           icon={<Plus className="h-[15px] w-[15px]" />}
           label="New task"
           shortcut="⌘N"
-          active={activeNav === 'run'}
+          active={activeNav === 'run' && isBlankRun}
           disabled={busy}
           onClick={() => void handleNewTask()}
         />
@@ -186,27 +165,11 @@ export function ProjectSidebar({
           <IconButton title="Filtering isn't implemented yet" disabled>
             <SlidersHorizontal className="h-3.5 w-3.5" />
           </IconButton>
-          <IconButton title="Browse folder" disabled={busy} onClick={() => void browseFolder()}>
+          <IconButton title="Open project" disabled={busy} onClick={onOpenProjectDialog}>
             <FolderOpen className="h-3.5 w-3.5" />
           </IconButton>
         </div>
       </div>
-
-      {showProjectPicker ? (
-        <div className="px-2.5 pb-2.5">
-          <input
-            autoFocus
-            className="input h-8 text-xs"
-            placeholder="Path to a Git project…"
-            value={pathInput}
-            onChange={(event) => setPathInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') void openProjectPath(pathInput);
-              if (event.key === 'Escape') setShowProjectPicker(false);
-            }}
-          />
-        </div>
-      ) : null}
 
       {error ? (
         <div className="px-3.5 pb-2 text-[11px] leading-snug text-danger">{error}</div>
@@ -239,7 +202,14 @@ export function ProjectSidebar({
           )}
         </div>
 
-        <SectionLabel>Tasks</SectionLabel>
+        <div className="flex items-center justify-between py-1 pr-0.5 pl-1.5">
+          <span className="text-[10px] font-bold tracking-[0.14em] text-foreground/45 uppercase">
+            Tasks
+          </span>
+          <IconButton title="New task" disabled={busy} onClick={() => void handleNewTask()}>
+            <Plus className="h-3 w-3" />
+          </IconButton>
+        </div>
         <div className="flex flex-col gap-px">
           {tasks.length ? (
             tasks.map((item) => {

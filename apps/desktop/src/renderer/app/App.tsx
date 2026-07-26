@@ -1,10 +1,11 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type {
   ApprovalDecision,
   CheckpointRecoverySummary,
+  ProjectSummary,
   SessionSummary,
   SkillInfo,
 } from '@pi-desktop/protocol';
@@ -16,32 +17,41 @@ import { AutomationsView } from '@/features/automations/AutomationsView';
 import { ChatPanel } from '@/features/chat/ChatPanel';
 import { ReviewPanel } from '@/features/chat/ReviewPanel';
 import { DiffPanel } from '@/features/diff/DiffPanel';
-import { HomeView } from '@/features/home/HomeView';
 import { ModelPill } from '@/features/models/ModelPill';
+import { OpenProjectDialog } from '@/features/projects/OpenProjectDialog';
 import { ProjectSidebar, type SidebarDestination } from '@/features/projects/ProjectSidebar';
 import { SearchPalette, type PaletteCommand } from '@/features/search/SearchPalette';
 import { useCreateTask } from '@/features/sessions/use-create-task';
 import { SettingsView } from '@/features/settings/SettingsView';
 import { SkillsView } from '@/features/skills/SkillsView';
 import { TerminalView } from '@/features/terminal/TerminalView';
-import { invoke } from '@/lib/ipc';
+import { invoke, IpcError } from '@/lib/ipc';
 import { useAgentStreamStore } from '@/stores/agent-stream-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 
-type View =
-  'home' | 'run' | 'diff' | 'settings' | 'recovery' | 'terminal' | 'automations' | 'skills';
+/**
+ * Design v3 removed the task list. The run screen is the landing surface: it
+ * shows an unstarted task (`blankRun`) until something is running, and the
+ * sidebar's Tasks list is the switcher.
+ */
+type View = 'run' | 'diff' | 'settings' | 'recovery' | 'terminal' | 'automations' | 'skills';
 
 export function App() {
-  const [view, setView] = useState<View>('home');
+  const [view, setView] = useState<View>('run');
+  const [blankRun, setBlankRun] = useState(true);
+  const [projectDialogOpen, setProjectDialogOpen] = useState(false);
+  const [openingProject, setOpeningProject] = useState(false);
+  const [projectError, setProjectError] = useState<string | null>(null);
   const [recoveryRunId, setRecoveryRunId] = useState<string | undefined>();
   const [panelOpen, setPanelOpen] = useState(true);
-  const [filterFocusToken, setFilterFocusToken] = useState(0);
   const [dismissedApproval, setDismissedApproval] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [composerInsert, setComposerInsert] = useState<{ text: string; token: number } | null>(
     null,
   );
 
+  const queryClient = useQueryClient();
+  const setProject = useWorkspaceStore((s) => s.setProject);
   const setSession = useWorkspaceStore((s) => s.setSession);
   const resetSessionView = useAgentStreamStore((s) => s.resetSessionView);
   const setScope = useAgentStreamStore((s) => s.setScope);
@@ -66,15 +76,20 @@ export function App() {
 
   const newTask = useCallback(async () => {
     const created = await createTask();
-    if (created) setView('run');
+    if (created) {
+      setBlankRun(true);
+      setView('run');
+    }
   }, [createTask]);
 
   const selectSession = useCallback(
-    (session: SessionSummary, nextView: View = 'home') => {
+    (session: SessionSummary) => {
       setSession(session);
       resetSessionView();
       setScope(session.projectId, session.id);
-      setView(nextView);
+      // Picking an existing task shows its run, not the unstarted state.
+      setBlankRun(false);
+      setView('run');
     },
     [setSession, resetSessionView, setScope],
   );
@@ -94,7 +109,7 @@ export function App() {
         params: { projectId: project.id },
       });
       const found = list.find((item) => item.id === sessionId);
-      if (found) selectSession(found, 'run');
+      if (found) selectSession(found);
     },
     [selectSession],
   );
@@ -104,6 +119,48 @@ export function App() {
     setComposerInsert({ text: `${skill.command} `, token: Date.now() });
     setView('run');
   }, []);
+
+  async function openProjectPath(pathValue: string) {
+    setOpeningProject(true);
+    setProjectError(null);
+    try {
+      const opened = await invoke<ProjectSummary>({
+        method: 'project.open',
+        params: { path: pathValue },
+      });
+      setProject(opened);
+      resetSessionView();
+      setScope(opened.id, null);
+      await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
+      setProjectDialogOpen(false);
+      setBlankRun(true);
+      setView('run');
+    } catch (err) {
+      setProjectError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setOpeningProject(false);
+    }
+  }
+
+  async function browseForProject() {
+    setOpeningProject(true);
+    setProjectError(null);
+    try {
+      const opened = await invoke<ProjectSummary>({ method: 'project.pickFolder' });
+      setProject(opened);
+      resetSessionView();
+      setScope(opened.id, null);
+      await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
+      setProjectDialogOpen(false);
+      setBlankRun(true);
+      setView('run');
+    } catch (err) {
+      if (err instanceof IpcError && err.code === 'CANCELLED') return;
+      setProjectError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setOpeningProject(false);
+    }
+  }
 
   const commands = useMemo<PaletteCommand[]>(
     () => [
@@ -127,6 +184,10 @@ export function App() {
       if (event.key === 'k') {
         event.preventDefault();
         setSearchOpen(true);
+      }
+      if (event.key === 'o') {
+        event.preventDefault();
+        setProjectDialogOpen(true);
       }
       if (event.key === ',') {
         event.preventDefault();
@@ -156,7 +217,12 @@ export function App() {
 
   const unresolved = recoverable.data ?? [];
   /** The design carries the banner on the task screen; a live run keeps its own chrome. */
-  const showBanner = unresolved.length > 0 && (view === 'home' || view === 'settings');
+  /**
+   * The design carried this on the task screen, which v3 removed. Kept on every
+   * screen except the recovery view itself: an unresolved checkpoint is a safety
+   * affordance and dropping it with the page would lose the only entry point.
+   */
+  const showBanner = unresolved.length > 0 && view !== 'recovery';
 
   /** The thread carries its own approval card, so the modal is for every other screen. */
   const showApprovalDialog =
@@ -186,7 +252,7 @@ export function App() {
 
       <div className="flex min-h-0 flex-1">
         {view === 'settings' ? (
-          <SettingsView onClose={() => setView('home')} />
+          <SettingsView onClose={() => setView('run')} />
         ) : view === 'terminal' ? (
           <TerminalView />
         ) : view === 'automations' ? (
@@ -196,11 +262,11 @@ export function App() {
         ) : view === 'recovery' ? (
           <DiffPanel
             onContinue={() => setView('run')}
-            onBack={() => setView('home')}
+            onBack={() => setView('run')}
             recoveryRunId={recoveryRunId}
             onRecoveryResolved={() => {
               setRecoveryRunId(undefined);
-              setView('home');
+              setView('run');
               void recoverable.refetch();
             }}
           />
@@ -208,24 +274,15 @@ export function App() {
           <DiffPanel
             onContinue={() => setView('run')}
             onBack={() => setView('run')}
-            onRecoveryResolved={() => setView('home')}
+            onRecoveryResolved={() => setView('run')}
           />
-        ) : view === 'run' ? (
+        ) : (
           <ChatPanel
-            onBack={() => setView('home')}
+            onBack={() => void newTask()}
             panelOpen={panelOpen}
             onTogglePanel={() => setPanelOpen((open) => !open)}
             insert={composerInsert}
-            onSelectSession={(session) => selectSession(session, 'run')}
-          />
-        ) : (
-          <HomeView
-            filterFocusToken={filterFocusToken}
-            onNewTask={() => void newTask()}
-            onOpenSession={() => setView('run')}
-            onReviewChanges={() => setView('diff')}
-            onSelectSession={(session) => selectSession(session)}
-            onOpenAutomations={() => setView('automations')}
+            blank={blankRun}
           />
         )}
       </div>
@@ -238,10 +295,21 @@ export function App() {
       sidebar={
         <ProjectSidebar
           activeNav={view}
-          onOpenSettings={() => setView(view === 'settings' ? 'home' : 'settings')}
-          onNewTask={() => setView('run')}
-          onSelectSession={() => setView('home')}
+          isBlankRun={blankRun}
+          onOpenSettings={() => setView(view === 'settings' ? 'run' : 'settings')}
+          onNewTask={() => {
+            setBlankRun(true);
+            setView('run');
+          }}
+          onSelectSession={() => {
+            setBlankRun(false);
+            setView('run');
+          }}
           onOpenSearch={() => setSearchOpen(true)}
+          onOpenProjectDialog={() => {
+            setProjectError(null);
+            setProjectDialogOpen(true);
+          }}
           onNavigate={(destination: SidebarDestination) => setView(destination)}
         />
       }
@@ -249,19 +317,25 @@ export function App() {
       right={
         <ReviewPanel onOpenFullDiff={() => setView('diff')} onContinue={() => setView('run')} />
       }
-      showRight={view === 'run' && panelOpen}
+      showRight={view === 'run' && panelOpen && !blankRun}
       overlay={
         <>
           {searchOpen ? (
             <SearchPalette
               commands={commands}
-              onClose={() => {
-                setSearchOpen(false);
-                setFilterFocusToken((token) => token + 1);
-              }}
-              onOpenSession={(session) => selectSession(session, 'run')}
+              onClose={() => setSearchOpen(false)}
+              onOpenSession={(session) => selectSession(session)}
               onOpenFile={() => setView('diff')}
               onRunSkill={useSkill}
+            />
+          ) : null}
+          {projectDialogOpen ? (
+            <OpenProjectDialog
+              busy={openingProject}
+              error={projectError}
+              onOpenPath={(value) => void openProjectPath(value)}
+              onBrowse={() => void browseForProject()}
+              onClose={() => setProjectDialogOpen(false)}
             />
           ) : null}
           {showApprovalDialog ? (

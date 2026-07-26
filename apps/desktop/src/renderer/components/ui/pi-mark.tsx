@@ -19,23 +19,29 @@ export function PiMark({ size = 13, className }: { size?: number; className?: st
   );
 }
 
-/** Round accent avatar the assistant's turns are anchored to. */
+/**
+ * Round accent avatar the assistant's turns are anchored to. `markSize` scales
+ * the glyph with the circle — the design pairs a 17px mark with its 36px hero
+ * circle and a 13px mark with the 24px thread avatar.
+ */
 export function PiAvatar({
   bobbing = false,
+  markSize = 13,
   className,
 }: {
   bobbing?: boolean;
+  markSize?: number;
   className?: string;
 }) {
   return (
     <span
       className={cn(
-        'grid h-6 w-6 flex-none place-items-center rounded-full bg-accent text-background',
+        'grid h-6 w-6 flex-none place-items-center rounded-full bg-accent text-white',
         className,
       )}
       style={bobbing ? { animation: 'pi-bob 1.4s ease-in-out infinite' } : undefined}
     >
-      <PiMark />
+      <PiMark size={markSize} />
     </span>
   );
 }

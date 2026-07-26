@@ -18,13 +18,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import type {
-  ApprovalDecision,
-  ApprovalMode,
-  RunRef,
-  SessionSummary,
-  SkillInfo,
-} from '@pi-desktop/protocol';
+import type { ApprovalDecision, ApprovalMode, RunRef, SkillInfo } from '@pi-desktop/protocol';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/badge';
@@ -67,16 +61,14 @@ interface ChatPanelProps {
   onTogglePanel: () => void;
   /** Text pushed into the composer from elsewhere (a `$skill`, for instance). */
   insert?: { text: string; token: number } | null;
-  onSelectSession: (session: SessionSummary) => void;
+  /**
+   * True for a task that has not been started. The design v3 replaced the task
+   * list with this state: same screen, no run to report on yet.
+   */
+  blank: boolean;
 }
 
-export function ChatPanel({
-  onBack,
-  panelOpen,
-  onTogglePanel,
-  insert,
-  onSelectSession,
-}: ChatPanelProps) {
+export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: ChatPanelProps) {
   const session = useWorkspaceStore((s) => s.session);
   const project = useWorkspaceStore((s) => s.project);
   const messages = useAgentStreamStore((s) => s.messages);
@@ -98,13 +90,6 @@ export function ChatPanel({
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
-
-  const sessions = useQuery({
-    queryKey: ['session.list', project?.id],
-    enabled: Boolean(project?.id),
-    queryFn: () =>
-      invoke<SessionSummary[]>({ method: 'session.list', params: { projectId: project!.id } }),
-  });
 
   const queryClient = useQueryClient();
   const approvalMode = useQuery({
@@ -258,11 +243,18 @@ export function ChatPanel({
   }
 
   const tone = statusTone(status);
-  const runMeta = [
-    activeRunId ? `run ${activeRunId.slice(0, 8)}` : `run ${NOT_REPORTED}`,
-    formatDuration(startedAt),
-    usage?.totalTokens != null ? `${formatTokens(usage.totalTokens)} tokens` : 'usage not reported',
-  ].join(' · ');
+  const runTitle = blank ? 'New task' : (session?.title ?? 'No session');
+  const runMeta = blank
+    ? [project?.name ?? 'no project', branch.data?.branch, 'not started yet']
+        .filter(Boolean)
+        .join(' · ')
+    : [
+        activeRunId ? `run ${activeRunId.slice(0, 8)}` : `run ${NOT_REPORTED}`,
+        formatDuration(startedAt),
+        usage?.totalTokens != null
+          ? `${formatTokens(usage.totalTokens)} tokens`
+          : 'usage not reported',
+      ].join(' · ');
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -272,18 +264,17 @@ export function ChatPanel({
           <ChevronLeft className="h-4 w-4" />
         </Button>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[15px] leading-tight font-bold">
-            {session?.title ?? 'No session'}
-          </div>
+          <div className="truncate text-[15px] leading-tight font-bold">{runTitle}</div>
           <div className="font-mono text-[11px] text-muted">{runMeta}</div>
         </div>
-        {status !== 'idle' ? (
+        {blank ? <Badge tone="neutral">not started</Badge> : null}
+        {!blank && status !== 'idle' ? (
           <Badge tone={toneBadge[tone]} className="gap-1.5">
             <span style={dotStyle(tone, 6)} />
             {status}
           </Badge>
         ) : null}
-        {running ? (
+        {!blank && running ? (
           <Button variant="secondary" size="sm" onClick={() => void stop()}>
             <Square className="h-2.5 w-2.5 fill-current" />
             Stop
@@ -300,41 +291,19 @@ export function ChatPanel({
         </Button>
       </div>
 
-      {/* Open tasks in this project — the design's run tab strip. */}
-      {(sessions.data?.length ?? 0) > 1 ? (
-        <div className="flex flex-none items-center gap-0.5 overflow-x-auto border-b border-border px-5 pt-1.5">
-          {sessions.data!.slice(0, 8).map((item) => {
-            const current = item.id === session?.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onSelectSession(item)}
-                className={cn(
-                  'flex flex-none cursor-pointer items-center gap-[7px] border-0 bg-transparent px-3.5 py-[7px] text-[12.5px] transition-colors',
-                  current
-                    ? 'border-b-2 border-accent font-bold text-foreground'
-                    : 'border-b-2 border-transparent text-foreground/60 hover:bg-foreground/[0.06]',
-                )}
-              >
-                {current ? <span style={dotStyle(tone, 6)} /> : null}
-                <span className="max-w-[180px] truncate">{item.title}</span>
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-
       {/* Thread */}
       <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto px-5 pt-5 pb-1.5">
         <div className="mx-auto flex max-w-[700px] flex-col gap-4">
           {!timeline.length && !approval ? (
-            <div className="flex flex-col items-center gap-4 py-20 text-center">
-              <PiAvatar className="h-11 w-11 opacity-90" />
-              <p className="max-w-[380px] text-[13.5px] leading-relaxed text-muted">
+            <div className="flex flex-col items-center gap-2 px-5 py-20 text-center">
+              <PiAvatar markSize={17} className="h-9 w-9" />
+              <div className="text-sm font-bold">
+                {session ? 'Describe what it should do' : 'Open a project to start'}
+              </div>
+              <p className="max-w-[320px] text-[12.5px] leading-relaxed text-muted">
                 {session
-                  ? 'Describe the change you want. Pi reads the project, edits files and runs your checks — and asks before anything risky.'
-                  : 'Start a task from the sidebar to open a session.'}
+                  ? "Type below — @ for files, / for commands, $ for skills. It'll read the project, plan, then ask before running anything risky."
+                  : 'Use Open project in the sidebar, then start a task.'}
               </p>
             </div>
           ) : null}
