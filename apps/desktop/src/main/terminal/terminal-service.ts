@@ -1,11 +1,13 @@
 import { spawn } from 'node:child_process';
+import { stat } from 'node:fs/promises';
 import path from 'node:path';
 
-import type { ApprovalDecision, TerminalResult } from '@pi-desktop/protocol';
+import type { ApprovalDecision, TerminalCwdResult, TerminalResult } from '@pi-desktop/protocol';
 import {
   PermissionPipeline,
   canonicalizePath,
   isPathInsideWorkspace,
+  toWorkspaceRelative,
   type ApprovalRequestDraft,
   type PolicyContext,
 } from '@pi-desktop/security';
@@ -151,12 +153,72 @@ export class TerminalService {
     };
   }
 
-  /** Resolve and confine the requested cwd to the workspace. */
+  /**
+   * Move a terminal tab to another directory.
+   *
+   * `cd` cannot be executed: each command runs in its own subshell, so a `cd`
+   * there would be undone the moment the shell exits. The directory therefore
+   * lives in the tab, and this resolves the target against the same confinement
+   * rule every command path uses. `~` means the project root, not `$HOME` —
+   * nothing outside the workspace is reachable anyway, so pointing it at the
+   * root is the only reading that does something useful.
+   */
+  async changeDirectory(input: {
+    workspaceRoot: string;
+    cwd?: string;
+    target: string;
+  }): Promise<TerminalCwdResult> {
+    const from = this.resolveCwd(input.workspaceRoot, input.cwd) ?? input.workspaceRoot;
+    const stay = (reason: string): TerminalCwdResult => ({
+      outcome: 'refused',
+      cwd: from,
+      // The root can itself be reached through a symlink (/var vs /private/var);
+      // toWorkspaceRelative resolves both sides before comparing.
+      relative: toWorkspaceRelative(input.workspaceRoot, from) ?? '.',
+      reason,
+    });
+
+    const raw = input.target.trim().replace(/^['"]|['"]$/g, '');
+    const requested =
+      raw === '' || raw === '~' || raw === '~/'
+        ? input.workspaceRoot
+        : path.isAbsolute(raw)
+          ? raw
+          : path.join(from, raw);
+
+    const canonical = canonicalizePath(input.workspaceRoot, requested);
+    if (!isPathInsideWorkspace(input.workspaceRoot, canonical)) {
+      return stay('That directory is outside the project root.');
+    }
+
+    try {
+      const stats = await stat(canonical);
+      if (!stats.isDirectory()) return stay(`Not a directory: ${raw}`);
+    } catch {
+      return stay(`No such directory: ${raw}`);
+    }
+
+    return {
+      outcome: 'changed',
+      cwd: canonical,
+      relative: toWorkspaceRelative(input.workspaceRoot, canonical) ?? '.',
+    };
+  }
+
+  /**
+   * Resolve and confine the requested cwd to the workspace.
+   *
+   * `isPathInsideWorkspace` takes (root, target) — the arguments used to be
+   * reversed here, which asked whether the *root* was inside the requested
+   * directory. Every ancestor of the project therefore passed, so a cwd of `/`
+   * or the user's home would have been accepted and the command would have run
+   * outside the workspace.
+   */
   private resolveCwd(workspaceRoot: string, requested?: string): string | null {
     if (!requested || requested === '.') return workspaceRoot;
     const absolute = path.isAbsolute(requested) ? requested : path.join(workspaceRoot, requested);
     const canonical = canonicalizePath(workspaceRoot, absolute);
-    if (!isPathInsideWorkspace(canonical, workspaceRoot)) return null;
+    if (!isPathInsideWorkspace(workspaceRoot, canonical)) return null;
     return canonical;
   }
 

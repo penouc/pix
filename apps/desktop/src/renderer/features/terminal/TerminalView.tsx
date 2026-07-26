@@ -1,17 +1,75 @@
 import { Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import type { TerminalResult } from '@pi-desktop/protocol';
+import type { ProjectSummary, TerminalCwdResult, TerminalResult } from '@pi-desktop/protocol';
 
 import { invoke } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 
+/**
+ * One scrollback line. A `cd` shares the shape so the transcript stays a single
+ * list, and `kind` is what lets it drop the exit-code footer that would be
+ * meaningless for a directory change.
+ */
+type Entry = TerminalResult & { kind?: 'cd' };
+
 interface TerminalTab {
   id: number;
-  title: string;
+  /** Absolute directory this tab runs in, or '.' for the project root. */
   cwd: string;
-  entries: TerminalResult[];
+  /** Project-relative label for `cwd`. */
+  label: string;
+  /** Where `cd -` goes back to. */
+  previousCwd: string;
+  entries: Entry[];
+}
+
+/**
+ * A `cd` this view handles itself, rather than a command to run.
+ *
+ * Only a bare `cd` qualifies. `cd build && pnpm test` still goes to the shell,
+ * where the directory change applies to that one command and then goes away —
+ * which is what a subshell does, and what the scrollback will show.
+ */
+const BARE_CD = /^cd(?:\s+(.+))?$/;
+
+function parseCd(command: string): { target: string } | null {
+  if (/[;&|`]|\$\(/.test(command)) return null;
+  const match = BARE_CD.exec(command);
+  return match ? { target: match[1] ?? '' } : null;
+}
+
+/** `project` at the root, `project/sub/dir` below it. */
+function promptLabel(project: ProjectSummary | null, cwd: string): string {
+  const name = project?.name ?? 'no project';
+  if (!project || cwd === '.' || cwd === project.path) return name;
+  if (cwd.startsWith(`${project.path}/`)) {
+    return `${name}/${cwd.slice(project.path.length + 1)}`;
+  }
+  return cwd;
+}
+
+/**
+ * A `cd` rendered into the scrollback.
+ *
+ * `from` is the directory the command was typed in — not where it landed. A real
+ * terminal shows the old prompt on the `cd` line and the new one underneath, and
+ * labelling it with the destination made the transcript read as though you were
+ * already there.
+ */
+function cwdEntry(command: string, from: string, result: TerminalCwdResult): Entry {
+  return {
+    kind: 'cd',
+    command,
+    cwd: from,
+    outcome: result.outcome === 'changed' ? 'ran' : 'denied',
+    exitCode: result.outcome === 'changed' ? 0 : null,
+    output: result.outcome === 'changed' ? result.relative : '',
+    truncated: false,
+    durationMs: 0,
+    ...(result.reason ? { reason: result.reason } : {}),
+  };
 }
 
 /**
@@ -25,7 +83,7 @@ export function TerminalView() {
   const project = useWorkspaceStore((s) => s.project);
   const session = useWorkspaceStore((s) => s.session);
   const [tabs, setTabs] = useState<TerminalTab[]>([
-    { id: 1, title: 'shell', cwd: '.', entries: [] },
+    { id: 1, cwd: '.', label: '.', previousCwd: '.', entries: [] },
   ]);
   const [active, setActive] = useState(1);
   const [draft, setDraft] = useState('');
@@ -40,12 +98,57 @@ export function TerminalView() {
     if (element) element.scrollTop = element.scrollHeight;
   }, [tabs, active, busy]);
 
+  /** Append one scrollback entry to the tab that produced it. */
+  function append(tabId: number, entry: Entry) {
+    setTabs((all) =>
+      all.map((tab) => (tab.id === tabId ? { ...tab, entries: [...tab.entries, entry] } : tab)),
+    );
+  }
+
+  async function changeDirectory(command: string, target: string) {
+    if (!project) return;
+    // `cd -` is the tab's own history, so it is resolved here and then validated
+    // in Main like any other target.
+    const requested = target === '-' ? current.previousCwd : target;
+    const result = await invoke<TerminalCwdResult>({
+      method: 'terminal.changeDirectory',
+      params: {
+        projectId: project.id,
+        ...(current.cwd === '.' ? {} : { cwd: current.cwd }),
+        target: requested === '.' ? '' : requested,
+      },
+    });
+
+    if (result.outcome === 'changed') {
+      setTabs((all) =>
+        all.map((tab) =>
+          tab.id === current.id
+            ? {
+                ...tab,
+                cwd: result.cwd,
+                label: result.relative,
+                previousCwd: tab.cwd,
+                entries: [...tab.entries, cwdEntry(command, tab.cwd, result)],
+              }
+            : tab,
+        ),
+      );
+      return;
+    }
+    append(current.id, cwdEntry(command, current.cwd, result));
+  }
+
   async function run() {
     const command = draft.trim();
     if (!command || !project || busy) return;
     setDraft('');
     setBusy(true);
     try {
+      const cd = parseCd(command);
+      if (cd) {
+        await changeDirectory(command, cd.target);
+        return;
+      }
       const result = await invoke<TerminalResult>({
         method: 'terminal.exec',
         params: {
@@ -55,34 +158,18 @@ export function TerminalView() {
           sessionId: session?.id,
         },
       });
-      setTabs((all) =>
-        all.map((tab) =>
-          tab.id === current.id ? { ...tab, entries: [...tab.entries, result] } : tab,
-        ),
-      );
+      append(current.id, result);
     } catch (error) {
-      setTabs((all) =>
-        all.map((tab) =>
-          tab.id === current.id
-            ? {
-                ...tab,
-                entries: [
-                  ...tab.entries,
-                  {
-                    command,
-                    cwd: current.cwd,
-                    outcome: 'denied',
-                    exitCode: null,
-                    output: '',
-                    truncated: false,
-                    durationMs: 0,
-                    reason: error instanceof Error ? error.message : String(error),
-                  },
-                ],
-              }
-            : tab,
-        ),
-      );
+      append(current.id, {
+        command,
+        cwd: current.cwd,
+        outcome: 'denied',
+        exitCode: null,
+        output: '',
+        truncated: false,
+        durationMs: 0,
+        reason: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       setBusy(false);
       inputRef.current?.focus();
@@ -105,7 +192,9 @@ export function TerminalView() {
                 : 'bg-transparent text-neutral-500 hover:text-neutral-300',
             )}
           >
-            {tab.title} — {project?.name ?? 'no project'}
+            {/* The label is the tab's own directory — that is the thing that now
+                differs between tabs, and the project name is the same for all. */}
+            {tab.label === '.' ? (project?.name ?? 'no project') : tab.label}
           </button>
         ))}
         <button
@@ -113,7 +202,17 @@ export function TerminalView() {
           title="New terminal"
           onClick={() => {
             const id = Math.max(...tabs.map((tab) => tab.id)) + 1;
-            setTabs((all) => [...all, { id, title: `shell ${id}`, cwd: '.', entries: [] }]);
+            setTabs((all) => [
+              ...all,
+              // A new tab opens where you were, the way a real terminal does.
+              {
+                id,
+                cwd: current.cwd,
+                label: current.label,
+                previousCwd: current.cwd,
+                entries: [],
+              },
+            ]);
             setActive(id);
           }}
           className="ml-1 grid h-6 w-6 cursor-pointer place-items-center rounded-full border-0 bg-transparent text-neutral-400 hover:bg-white/10"
@@ -140,19 +239,22 @@ export function TerminalView() {
           <div key={`${index}-${entry.command}`} className="mb-3.5">
             <div>
               <span className="text-accent-2-400">➜</span>{' '}
-              <span className="text-accent-200">{project?.name}</span> {entry.command}
+              {/* The directory each command actually ran in, not the current one
+                  — scrollback after a `cd` would otherwise misattribute it. */}
+              <span className="text-accent-200">{promptLabel(project, entry.cwd)}</span>{' '}
+              {entry.command}
             </div>
             {entry.outcome !== 'ran' ? (
               <pre className="mt-1 mb-0 whitespace-pre-wrap text-accent-300">
                 {entry.outcome === 'denied' ? 'refused: ' : 'cancelled: '}
                 {entry.reason ?? 'no reason given'}
               </pre>
-            ) : (
+            ) : entry.kind === 'cd' ? null : (
               <pre className="mt-1 mb-0 whitespace-pre-wrap opacity-90">
                 {entry.output || '(no output)'}
               </pre>
             )}
-            {entry.outcome === 'ran' ? (
+            {entry.outcome === 'ran' && entry.kind !== 'cd' ? (
               <div className="mt-0.5 text-[11px] text-neutral-500">
                 exit {entry.exitCode ?? '—'} · {entry.durationMs}ms
                 {entry.truncated ? ' · output truncated' : ''}
@@ -175,7 +277,7 @@ export function TerminalView() {
       {/* Prompt */}
       <div className="flex flex-none items-center gap-2 bg-[var(--color-output)] px-5 pt-2.5 pb-4 font-mono text-[12.5px] text-[var(--color-output-foreground)]">
         <span className="text-accent-2-400">➜</span>
-        <span className="text-accent-200">{current.cwd === '.' ? project?.name : current.cwd}</span>
+        <span className="text-accent-200">{promptLabel(project, current.cwd)}</span>
         <input
           ref={inputRef}
           className="flex-1 border-0 bg-transparent p-0 font-mono text-[12.5px] text-[var(--color-output-foreground)] outline-none placeholder:text-neutral-600"

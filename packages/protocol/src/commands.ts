@@ -161,11 +161,20 @@ export type RevealPathInput = z.infer<typeof RevealPathInputSchema>;
 export const TerminalExecInputSchema = z.object({
   projectId: z.string().min(1),
   command: z.string().min(1).max(8192),
-  /** Workspace-relative subdirectory to run in. Never escapes the root. */
+  /** Subdirectory to run in, relative or absolute. Never escapes the root. */
   cwd: z.string().max(4096).optional(),
   sessionId: z.string().min(1).optional(),
 });
 export type TerminalExecInput = z.infer<typeof TerminalExecInputSchema>;
+
+export const TerminalChangeDirectoryInputSchema = z.object({
+  projectId: z.string().min(1),
+  /** The tab's current directory. Absolute, or omitted for the project root. */
+  cwd: z.string().max(4096).optional(),
+  /** The `cd` argument exactly as typed. */
+  target: z.string().max(4096),
+});
+export type TerminalChangeDirectoryInput = z.infer<typeof TerminalChangeDirectoryInputSchema>;
 
 /** How much an automation may do without a human in the loop. */
 export const AutomationApprovalModeSchema = z.enum([
@@ -323,6 +332,10 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('skills.setEnabled'), params: SetSkillEnabledInputSchema }),
   z.object({ method: z.literal('skills.reveal'), params: RevealPathInputSchema }),
   z.object({ method: z.literal('terminal.exec'), params: TerminalExecInputSchema }),
+  z.object({
+    method: z.literal('terminal.changeDirectory'),
+    params: TerminalChangeDirectoryInputSchema,
+  }),
   z.object({ method: z.literal('automation.list'), params: ListAutomationsInputSchema.optional() }),
   z.object({ method: z.literal('automation.save'), params: AutomationDraftSchema }),
   z.object({ method: z.literal('automation.delete'), params: AutomationIdInputSchema }),

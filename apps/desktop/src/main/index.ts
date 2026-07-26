@@ -950,6 +950,20 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
           }),
         );
       }
+      case 'terminal.changeDirectory': {
+        const project = projects.get(cmd.params.projectId);
+        if (!project) return errResult('PROJECT_NOT_FOUND', 'Project not found');
+        if (!project.trusted) {
+          return errResult('PROJECT_UNTRUSTED', 'Trust the project before running commands.');
+        }
+        return okResult(
+          await getTerminalService().changeDirectory({
+            workspaceRoot: project.path,
+            ...(cmd.params.cwd ? { cwd: cmd.params.cwd } : {}),
+            target: cmd.params.target,
+          }),
+        );
+      }
       case 'automation.list': {
         const list = await getAutomationStore().list(cmd.params?.projectId);
         return okResult(

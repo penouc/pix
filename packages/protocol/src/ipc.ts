@@ -284,6 +284,17 @@ export const TerminalResultSchema = z.object({
 });
 export type TerminalResult = z.infer<typeof TerminalResultSchema>;
 
+/** Result of a `cd`. On refusal the tab stays where it was. */
+export const TerminalCwdResultSchema = z.object({
+  outcome: z.enum(['changed', 'refused']),
+  /** Absolute directory the tab should use from now on. */
+  cwd: z.string(),
+  /** Same directory relative to the project root; `.` at the root itself. */
+  relative: z.string(),
+  reason: z.string().optional(),
+});
+export type TerminalCwdResult = z.infer<typeof TerminalCwdResultSchema>;
+
 export const AutomationSchema = z.object({
   id: z.string(),
   name: z.string(),
