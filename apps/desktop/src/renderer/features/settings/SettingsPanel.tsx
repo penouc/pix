@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { X, MessageSquare, Key, ExternalLink } from 'lucide-react';
+import { X, MessageSquare, ExternalLink } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import type { ProviderCatalogEntry, ProviderSetting, Settings } from '@pi-desktop/protocol';
@@ -7,7 +7,7 @@ import type { ProviderCatalogEntry, ProviderSetting, Settings } from '@pi-deskto
 import { Button } from '@/components/ui/button';
 import { useOfferedModels } from '@/features/models/use-offered-models';
 import { VisibleModelsSection } from '@/features/models/VisibleModelsSection';
-import { ProviderLoginDialog } from '@/features/settings/ProviderLoginDialog';
+import { SubscriptionsSection } from '@/features/settings/SubscriptionsSection';
 import { invoke } from '@/lib/ipc';
 
 interface SettingsPanelProps {
@@ -24,7 +24,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 
   // ChatGPT subscription state
   const [chatgptKey, setChatgptKey] = useState('');
-  const [chatgptTab, setChatgptTab] = useState<'apikey' | 'subscription'>('apikey');
   const [chatgptNotice, setChatgptNotice] = useState<string | null>(null);
 
   const providers = useQuery({
@@ -47,26 +46,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
     queryFn: () => invoke<ProviderCatalogEntry[]>({ method: 'provider.listAvailable' }),
   });
   const available = catalog.data ?? [];
-  const [login, setLogin] = useState<{ loginId: string; providerName: string } | null>(null);
-  const [startingLogin, setStartingLogin] = useState(false);
 
-  /** Kick off a subscription login and hand the rest to the dialog. */
-  async function beginLogin(entry: ProviderCatalogEntry) {
-    setStartingLogin(true);
-    setNotice(null);
-    try {
-      const started = await invoke<{ loginId: string }>({
-        method: 'provider.login',
-        params: { providerId: entry.id, type: 'oauth' },
-      });
-      setLogin({ loginId: started.loginId, providerName: entry.name });
-    } catch (err) {
-      setNoticeType('err');
-      setNotice(err instanceof Error ? err.message : String(err));
-    } finally {
-      setStartingLogin(false);
-    }
-  }
 
   const chosen = available.find((entry) => entry.id === providerId);
 
@@ -170,7 +150,18 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           ) : null}
         </header>
 
-        {/* ── ChatGPT subscription card ── */}
+        {/* ── Subscriptions ── */}
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-sm font-semibold">Subscriptions</h2>
+            <p className="mt-1 text-xs text-muted">
+              Sign in with a plan you already pay for, instead of an API key.
+            </p>
+          </div>
+          <SubscriptionsSection />
+        </section>
+
+        {/* ── OpenAI API key ── */}
         <section className="rounded-2xl border border-border bg-surface p-5 space-y-4">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-foreground/5 border border-border">
@@ -186,95 +177,45 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                 ) : null}
               </h2>
               <p className="text-xs text-muted mt-0.5">
-                Connect your ChatGPT subscription to use GPT-4o and o-series models.
+                Add an OpenAI API key. To use a ChatGPT Plus/Pro subscription instead, sign in
+                under Subscriptions above.
               </p>
             </div>
           </div>
 
-          {/* Tabs */}
-          <div className="flex gap-1 border-b border-border">
-            <TabButton active={chatgptTab === 'apikey'} onClick={() => setChatgptTab('apikey')}>
-              <Key className="h-3.5 w-3.5" />
-              API Key
-            </TabButton>
-            <TabButton
-              active={chatgptTab === 'subscription'}
-              onClick={() => setChatgptTab('subscription')}
-            >
-              <MessageSquare className="h-3.5 w-3.5" />
-              Subscription
-            </TabButton>
+          <div className="space-y-3">
+            <p className="text-xs text-muted">
+              Use an API key from{' '}
+              <button
+                type="button"
+                className="inline-flex items-center gap-0.5 text-foreground underline underline-offset-2"
+                onClick={() =>
+                  window.open?.('https://platform.openai.com/api-keys', '_blank')
+                }
+              >
+                platform.openai.com
+                <ExternalLink className="h-3 w-3" />
+              </button>
+              . This works with any OpenAI plan.
+            </p>
+            <div className="flex gap-2">
+              <input
+                className="flex-1 rounded-xl border border-border bg-surface-raised px-3 py-2 text-sm outline-none focus:border-border-strong"
+                type="password"
+                autoComplete="off"
+                placeholder="sk-…"
+                value={chatgptKey}
+                onChange={(e) => setChatgptKey(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void saveChatGptKey(); }}
+              />
+              <Button disabled={!chatgptKey.trim()} onClick={() => void saveChatGptKey()}>
+                Connect
+              </Button>
+            </div>
+            {chatgptNotice ? (
+              <p className="text-xs text-muted">{chatgptNotice}</p>
+            ) : null}
           </div>
-
-          {chatgptTab === 'apikey' ? (
-            <div className="space-y-3">
-              <p className="text-xs text-muted">
-                Use an API key from{' '}
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-0.5 text-foreground underline underline-offset-2"
-                  onClick={() =>
-                    window.open?.('https://platform.openai.com/api-keys', '_blank')
-                  }
-                >
-                  platform.openai.com
-                  <ExternalLink className="h-3 w-3" />
-                </button>
-                . This works with any OpenAI plan.
-              </p>
-              <div className="flex gap-2">
-                <input
-                  className="flex-1 rounded-xl border border-border bg-surface-raised px-3 py-2 text-sm outline-none focus:border-border-strong"
-                  type="password"
-                  autoComplete="off"
-                  placeholder="sk-…"
-                  value={chatgptKey}
-                  onChange={(e) => setChatgptKey(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') void saveChatGptKey(); }}
-                />
-                <Button disabled={!chatgptKey.trim()} onClick={() => void saveChatGptKey()}>
-                  Connect
-                </Button>
-              </div>
-              {chatgptNotice ? (
-                <p className="text-xs text-muted">{chatgptNotice}</p>
-              ) : null}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="rounded-xl border border-border bg-surface-raised p-4 space-y-2">
-                <p className="text-sm font-medium text-foreground">ChatGPT Plus / Pro</p>
-                <p className="text-xs text-muted leading-5">
-                  ChatGPT subscriptions give you access to ChatGPT.com. To use those models here,
-                  create a separate API key at{' '}
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-0.5 text-foreground underline underline-offset-2"
-                    onClick={() =>
-                      window.open?.('https://platform.openai.com/api-keys', '_blank')
-                    }
-                  >
-                    platform.openai.com
-                    <ExternalLink className="h-3 w-3" />
-                  </button>{' '}
-                  (you can add credits separately, starting from $5).
-                </p>
-                <Button
-                  variant="secondary"
-                  className="w-full mt-2"
-                  onClick={() =>
-                    window.open?.('https://platform.openai.com/api-keys', '_blank')
-                  }
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Open OpenAI Platform
-                </Button>
-              </div>
-              <p className="text-[11px] text-muted/70">
-                Direct ChatGPT account sign-in (OAuth) is coming soon.
-              </p>
-            </div>
-          )}
 
           {chatgptConfigured ? (
             <div className="flex items-center justify-between pt-2 border-t border-border">
@@ -324,24 +265,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
               Save
             </Button>
           </div>
-          {chosen?.oauthLabel ? (
-            <div className="mt-3 flex items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2.5">
-              <div className="min-w-0 flex-1">
-                <div className="text-xs font-semibold">{chosen.oauthLabel}</div>
-                <div className="mt-0.5 text-[11px] leading-relaxed text-muted">
-                  Sign in with your subscription instead of an API key.
-                </div>
-              </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={startingLogin}
-                onClick={() => void beginLogin(chosen)}
-              >
-                {chosen.oauthLoginLabel ?? 'Sign in'}
-              </Button>
-            </div>
-          ) : null}
 
           {notice ? (
             <p className={`text-xs ${noticeType === 'err' ? 'text-danger' : 'text-muted'}`}>
@@ -413,37 +336,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
         </section>
       </div>
 
-      {login ? (
-        <ProviderLoginDialog
-          loginId={login.loginId}
-          providerName={login.providerName}
-          onClose={() => setLogin(null)}
-        />
-      ) : null}
     </div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors -mb-px ${
-        active
-          ? 'border-foreground text-foreground'
-          : 'border-transparent text-muted hover:text-foreground'
-      }`}
-    >
-      {children}
-    </button>
   );
 }

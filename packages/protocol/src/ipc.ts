@@ -183,6 +183,8 @@ export const ProviderCatalogEntrySchema = z.object({
   oauthLabel: z.string().optional(),
   oauthLoginLabel: z.string().optional(),
   hasAuth: z.boolean().optional(),
+  /** True only when the stored credential is an OAuth one, not an api key. */
+  oauthConnected: z.boolean().optional(),
   modelCount: z.number().int().nonnegative(),
 });
 export type ProviderCatalogEntry = z.infer<typeof ProviderCatalogEntrySchema>;

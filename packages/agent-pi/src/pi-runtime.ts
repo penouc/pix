@@ -495,6 +495,7 @@ export class PiAgentRuntime implements AgentRuntime {
             ? { oauthLoginLabel: provider.auth.oauth.loginLabel }
             : {}),
           hasAuth,
+          oauthConnected: this.modelRuntime!.isUsingOAuth(provider.id) === true,
           modelCount: counts.get(provider.id) ?? 0,
         };
       })

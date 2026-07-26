@@ -82,6 +82,14 @@ export interface ProviderCatalogEntry {
   oauthLoginLabel?: string;
   /** True when a credential is already resolvable from any source. */
   hasAuth?: boolean;
+  /**
+   * True only when the stored credential is an OAuth one.
+   *
+   * Distinct from `hasAuth` on purpose: an ambient API key (an env var, another
+   * tool's auth store) makes a provider usable without any subscription being
+   * connected, and showing that as "signed in" would be a lie.
+   */
+  oauthConnected?: boolean;
   /** How many models this provider contributes to the catalogue. */
   modelCount: number;
 }
