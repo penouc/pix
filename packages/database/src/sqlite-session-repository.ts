@@ -13,6 +13,7 @@ interface SessionRow {
   created_at: number;
   updated_at: number;
   archived: number;
+  deleted_at: number | null;
 }
 
 /**
@@ -50,15 +51,17 @@ export class SqliteSessionRepository implements SessionRepository {
     const rows = includeArchived
       ? (db
           .prepare(
-            `SELECT id, project_id, title, created_at, updated_at, archived
-             FROM sessions WHERE project_id = ?
+            // `includeArchived` means archived, not deleted: a soft-deleted
+            // session stays out of every list.
+            `SELECT id, project_id, title, created_at, updated_at, archived, deleted_at
+             FROM sessions WHERE project_id = ? AND deleted_at IS NULL
              ORDER BY updated_at DESC`,
           )
           .all(projectId) as unknown as SessionRow[])
       : (db
           .prepare(
-            `SELECT id, project_id, title, created_at, updated_at, archived
-             FROM sessions WHERE project_id = ? AND archived = 0
+            `SELECT id, project_id, title, created_at, updated_at, archived, deleted_at
+             FROM sessions WHERE project_id = ? AND archived = 0 AND deleted_at IS NULL
              ORDER BY updated_at DESC`,
           )
           .all(projectId) as unknown as SessionRow[]);
@@ -69,18 +72,14 @@ export class SqliteSessionRepository implements SessionRepository {
     const db = this.requireDb();
     const row = db
       .prepare(
-        `SELECT id, project_id, title, created_at, updated_at, archived
+        `SELECT id, project_id, title, created_at, updated_at, archived, deleted_at
          FROM sessions WHERE id = ?`,
       )
       .get(sessionId) as unknown as SessionRow | undefined;
     return row ? rowToSummary(row) : undefined;
   }
 
-  async create(input: {
-    id?: string;
-    projectId: string;
-    title: string;
-  }): Promise<SessionSummary> {
+  async create(input: { id?: string; projectId: string; title: string }): Promise<SessionSummary> {
     await this.init();
     const now = Date.now();
     const session: SessionSummary = {
@@ -98,14 +97,15 @@ export class SqliteSessionRepository implements SessionRepository {
     await this.init();
     const db = this.requireDb();
     db.prepare(
-      `INSERT INTO sessions (id, project_id, title, created_at, updated_at, archived)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO sessions (id, project_id, title, created_at, updated_at, archived, deleted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          project_id = excluded.project_id,
          title = excluded.title,
          created_at = excluded.created_at,
          updated_at = excluded.updated_at,
-         archived = excluded.archived`,
+         archived = excluded.archived,
+         deleted_at = excluded.deleted_at`,
     ).run(
       session.id,
       session.projectId,
@@ -113,6 +113,7 @@ export class SqliteSessionRepository implements SessionRepository {
       session.createdAt,
       session.updatedAt,
       session.archived ? 1 : 0,
+      session.deletedAt ?? null,
     );
     return session;
   }
@@ -130,6 +131,16 @@ export class SqliteSessionRepository implements SessionRepository {
     const existing = this.get(sessionId);
     if (!existing) throw new Error(`Session ${sessionId} not found`);
     const next = { ...existing, archived, updatedAt: Date.now() };
+    return this.put(next);
+  }
+
+  async setDeleted(sessionId: string, deleted: boolean): Promise<SessionSummary> {
+    await this.init();
+    const existing = this.get(sessionId);
+    if (!existing) throw new Error(`Session ${sessionId} not found`);
+    const next: SessionSummary = { ...existing, updatedAt: Date.now() };
+    if (deleted) next.deletedAt = Date.now();
+    else delete next.deletedAt;
     return this.put(next);
   }
 
@@ -194,5 +205,6 @@ function rowToSummary(row: SessionRow): SessionSummary {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     archived: row.archived === 1,
+    ...(row.deleted_at != null ? { deletedAt: row.deleted_at } : {}),
   };
 }

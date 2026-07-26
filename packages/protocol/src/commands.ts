@@ -76,6 +76,13 @@ export const RenameSessionInputSchema = z.object({
 });
 export type RenameSessionInput = z.infer<typeof RenameSessionInputSchema>;
 
+export const DeleteSessionInputSchema = z.object({
+  sessionId: z.string().min(1),
+  /** false restores a soft-deleted session. */
+  deleted: z.boolean().default(true),
+});
+export type DeleteSessionInput = z.infer<typeof DeleteSessionInputSchema>;
+
 export const ArchiveSessionInputSchema = z.object({
   sessionId: z.string().min(1),
   archived: z.boolean().default(true),
@@ -262,6 +269,7 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   }),
   z.object({ method: z.literal('session.rename'), params: RenameSessionInputSchema }),
   z.object({ method: z.literal('session.archive'), params: ArchiveSessionInputSchema }),
+  z.object({ method: z.literal('session.delete'), params: DeleteSessionInputSchema }),
   z.object({ method: z.literal('agent.sendMessage'), params: SendMessageInputSchema }),
   z.object({ method: z.literal('agent.steer'), params: SteerRunInputSchema }),
   z.object({ method: z.literal('agent.followUp'), params: FollowUpInputSchema }),

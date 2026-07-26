@@ -263,10 +263,7 @@ export class SqliteCheckpointRepository implements CheckpointRepository {
     return rows.map(rowToWriteSnapshot);
   }
 
-  async setReviewOutcome(
-    checkpointId: string,
-    outcome: CheckpointReviewOutcome,
-  ): Promise<void> {
+  async setReviewOutcome(checkpointId: string, outcome: CheckpointReviewOutcome): Promise<void> {
     const updated = this.db
       .prepare(`UPDATE checkpoints SET review_outcome = ? WHERE id = ? AND state = 'running'`)
       .run(outcome, checkpointId);

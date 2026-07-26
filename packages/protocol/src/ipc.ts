@@ -93,6 +93,11 @@ export const SessionSummarySchema = z.object({
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
   archived: z.boolean(),
+  /**
+   * Soft delete. Set means hidden from the task list; nothing is destroyed, so
+   * the run's checkpoints and snapshots stay recoverable (plan §11 / M7).
+   */
+  deletedAt: z.number().int().nonnegative().optional(),
 });
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;
 

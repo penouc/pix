@@ -614,6 +614,13 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         const summary = await sessions.archive(cmd.params.sessionId, cmd.params.archived);
         return okResult(summary);
       }
+      case 'session.delete': {
+        // Soft delete only. Checkpoints, snapshots and audit rows are left
+        // intact so a deleted task's writes stay revertable and an unresolved
+        // checkpoint keeps surfacing in the recovery banner (plan §11 / M7).
+        const summary = await sessions.setDeleted(cmd.params.sessionId, cmd.params.deleted);
+        return okResult(summary satisfies SessionSummary);
+      }
       case 'agent.sendMessage': {
         const meta = sessions.get(cmd.params.sessionId);
         if (!meta) {

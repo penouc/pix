@@ -7,6 +7,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   SquareTerminal,
+  X,
   Zap,
 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
@@ -56,6 +57,8 @@ export function ProjectSidebar({
   const setScope = useAgentStreamStore((s) => s.setScope);
 
   const { createTask, busy: creating, error: createError } = useCreateTask();
+  /** Last soft-deleted task, offered back as an Undo rather than a modal. */
+  const [undoable, setUndoable] = useState<SessionSummary | null>(null);
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
 
@@ -102,6 +105,24 @@ export function ProjectSidebar({
     }
     const created = await createTask();
     if (created) onNewTask();
+  }
+
+  async function setSessionDeleted(item: SessionSummary, deleted: boolean) {
+    try {
+      await invoke<SessionSummary>({
+        method: 'session.delete',
+        params: { sessionId: item.id, deleted },
+      });
+      setUndoable(deleted ? item : null);
+      if (deleted && session?.id === item.id) {
+        setSession(null);
+        resetSessionView();
+        if (project) setScope(project.id, null);
+      }
+      await sessions.refetch();
+    } catch (err) {
+      setOpenError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   function selectSession(item: SessionSummary) {
@@ -217,26 +238,55 @@ export function ProjectSidebar({
               // The pulsing dot marks the session that actually owns the run.
               const isLive = item.id === activeSessionId;
               return (
-                <button
+                <div
                   key={item.id}
-                  type="button"
-                  onClick={() => selectSession(item)}
                   className={cn(
-                    'density-row flex w-full cursor-pointer items-center gap-2 rounded-xl px-2.5 py-1.5 text-[12.5px] transition-colors',
-                    isSelected
-                      ? 'bg-accent-soft text-foreground'
-                      : 'text-foreground/60 hover:bg-foreground/[0.07] hover:text-foreground',
+                    'density-row group flex items-center gap-1 rounded-xl pr-1 transition-colors',
+                    isSelected ? 'bg-accent-soft' : 'hover:bg-foreground/[0.07]',
                   )}
                 >
-                  <span style={dotStyle(isLive ? statusTone(status) : 'done')} />
-                  <span className="min-w-0 flex-1 truncate text-left">{item.title}</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => selectSession(item)}
+                    className={cn(
+                      'flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-xl px-2.5 py-1.5 text-[12.5px]',
+                      isSelected
+                        ? 'text-foreground'
+                        : 'text-foreground/60 group-hover:text-foreground',
+                    )}
+                  >
+                    <span style={dotStyle(isLive ? statusTone(status) : 'done')} />
+                    <span className="min-w-0 flex-1 truncate text-left">{item.title}</span>
+                  </button>
+                  <button
+                    type="button"
+                    title="Delete task (recoverable — nothing is erased)"
+                    aria-label={`Delete ${item.title}`}
+                    onClick={() => void setSessionDeleted(item, true)}
+                    className="hidden h-5 w-5 flex-none cursor-pointer items-center justify-center rounded-full text-muted group-hover:flex hover:bg-foreground/[0.1] hover:text-foreground"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
               );
             })
           ) : (
             <EmptyHint>{project ? 'No tasks yet' : 'Open a project first'}</EmptyHint>
           )}
         </div>
+
+        {undoable ? (
+          <div className="mt-1.5 flex items-center gap-2 rounded-xl bg-foreground/[0.06] px-2.5 py-1.5 text-[11px]">
+            <span className="min-w-0 flex-1 truncate text-muted">Deleted “{undoable.title}”</span>
+            <button
+              type="button"
+              className="flex-none cursor-pointer font-semibold text-accent-700 hover:underline"
+              onClick={() => void setSessionDeleted(undoable, false)}
+            >
+              Undo
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {/* Footer */}

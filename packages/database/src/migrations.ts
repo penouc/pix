@@ -158,4 +158,11 @@ CREATE TABLE IF NOT EXISTS checkpoint_recovery_conflicts (
 );
 `,
   },
+  {
+    version: 8,
+    name: 'sessions_soft_delete',
+    sql: `
+ALTER TABLE sessions ADD COLUMN deleted_at INTEGER;
+`,
+  },
 ];

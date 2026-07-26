@@ -98,4 +98,39 @@ describe('SqliteSessionRepository', () => {
     expect(r.get('fixed-id')?.title).toBe('B');
     expect(r.listByProject('p3')).toHaveLength(1);
   });
+
+  describe('soft delete', () => {
+    it('hides a deleted session from the list without destroying it', async () => {
+      const r = await createRepo();
+      const session = await r.create({ projectId: 'p1', title: 'Nightly fix' });
+
+      await r.setDeleted(session.id, true);
+
+      expect(r.listByProject('p1').map((s) => s.id)).not.toContain(session.id);
+      // Still readable by id — the row and everything keyed to it survive, which
+      // is what keeps a deleted task's checkpoints revertable.
+      const stored = r.get(session.id);
+      expect(stored?.deletedAt).toBeGreaterThan(0);
+      expect(stored?.title).toBe('Nightly fix');
+    });
+
+    it('restores a soft-deleted session', async () => {
+      const r = await createRepo();
+      const session = await r.create({ projectId: 'p1', title: 'Restore me' });
+      await r.setDeleted(session.id, true);
+
+      await r.setDeleted(session.id, false);
+
+      expect(r.get(session.id)?.deletedAt).toBeUndefined();
+      expect(r.listByProject('p1').map((s) => s.id)).toContain(session.id);
+    });
+
+    it('stays hidden even when archived rows are requested', async () => {
+      const r = await createRepo();
+      const session = await r.create({ projectId: 'p1', title: 'Both flags' });
+      await r.setDeleted(session.id, true);
+
+      expect(r.listByProject('p1', true).map((s) => s.id)).not.toContain(session.id);
+    });
+  });
 });
