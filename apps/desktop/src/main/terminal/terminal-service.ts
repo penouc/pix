@@ -119,13 +119,20 @@ export class TerminalService {
         decision.request,
         decision.assessment,
       );
-      this.options.requestApproval({
-        requestId,
-        draft: decision.request,
-        projectId: ctx.projectId,
-        sessionId: ctx.sessionId,
-        runId: ctx.runId,
-      });
+      /*
+       * A command the user typed is not asked about.
+       *
+       * Approval exists to put a person in the loop when the *agent* wants to
+       * act. Here the person is the one acting — the keystroke is the consent —
+       * so a dialog asking them to confirm their own `ls` has nobody on the other
+       * side of it. It still goes through requestApproval/resolve rather than
+       * around them, so the audit log records the command and an explicit
+       * decision instead of silently gaining a blind spot.
+       *
+       * Policy *denials* are untouched: a protected path or a workspace escape is
+       * still refused above, before this point.
+       */
+      this.pipeline.resolve(requestId, 'allow-once');
       const answer = await pending;
       if (answer === 'deny') {
         return {

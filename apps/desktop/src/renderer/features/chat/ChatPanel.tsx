@@ -25,6 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { PiAvatar } from '@/components/ui/pi-mark';
 import { Segmented } from '@/components/ui/segmented';
+import { ModelPill } from '@/features/models/ModelPill';
 import { useCreateTask } from '@/features/sessions/use-create-task';
 import { invoke } from '@/lib/ipc';
 import {
@@ -542,15 +543,20 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
               value={approvalMode.data?.mode ?? 'auto-reads'}
               onChange={(mode) => setApprovalMode.mutate(mode)}
             />
-            <span className="font-mono text-[11px] text-muted">
+            <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted">
               {APPROVAL_HINT[approvalMode.data?.mode ?? 'auto-reads']}
             </span>
-            <span className="flex-1" />
-            <span className="font-mono text-[11px] text-muted">⌘↵</span>
+            {/* Model choice belongs with the send button: it is a property of the
+                message you are about to send, not of the window. */}
+            <ModelPill />
+            <span className="flex-none font-mono text-[11px] text-muted">⌘↵</span>
             <Button
               size="icon"
-              className="h-[30px] w-[30px]"
-              disabled={!session || !draft.trim() || sending}
+              className="h-[30px] w-[30px] flex-none"
+              // Not `!session`: the unstarted-task screen has no session yet and
+              // sending is what creates one, so gating on it left a dead button
+              // next to a working ⌘↵.
+              disabled={!project || !draft.trim() || sending}
               onClick={() => void send()}
               title="Send (⌘↵)"
             >

@@ -6,7 +6,11 @@ import type {
   IndexRepository,
   IndexStateRecord,
 } from './index-repository.js';
-import type { SqliteDatabase } from './sqlite-connection.js';
+import {
+  ensureContentIndex,
+  type ContentIndexMode,
+  type SqliteDatabase,
+} from './sqlite-connection.js';
 
 interface FileRow {
   path: string;
@@ -29,7 +33,15 @@ interface StateRow {
 const PATH_CANDIDATE_CAP = 4000;
 
 export class SqliteIndexRepository implements IndexRepository {
-  constructor(private readonly db: SqliteDatabase) {}
+  /** Which content-search implementation this database supports. */
+  readonly contentMode: ContentIndexMode;
+
+  constructor(private readonly db: SqliteDatabase, contentMode?: ContentIndexMode) {
+    // The override exists so tests can exercise the `like` path on a runtime
+    // that happens to have FTS5 — otherwise the fallback would only ever run in
+    // production, which is exactly how the FTS5 assumption slipped through.
+    this.contentMode = contentMode ?? ensureContentIndex(db);
+  }
 
   listFiles(projectId: string): Map<string, IndexFileRecord> {
     const rows = this.db
@@ -125,6 +137,56 @@ export class SqliteIndexRepository implements IndexRepository {
   }
 
   searchContent(input: {
+    query: string;
+    projectIds?: string[];
+    limit?: number;
+  }): IndexContentHit[] {
+    return this.contentMode === 'fts5' ? this.searchContentFts(input) : this.searchContentLike(input);
+  }
+
+  /**
+   * Fallback for runtimes with no FTS module. A LIKE scan over the stored bodies:
+   * slower and with weaker ranking than bm25 (shortest path first, as a proxy for
+   * the more central file), but it needs nothing beyond core SQLite. `instr` does
+   * the excerpt extraction so whole file bodies never cross the query boundary.
+   */
+  private searchContentLike(input: {
+    query: string;
+    projectIds?: string[];
+    limit?: number;
+  }): IndexContentHit[] {
+    const tokens = contentTokens(input.query);
+    if (!tokens.length) return [];
+    const limit = input.limit ?? 20;
+    const scope = scopeClause(input.projectIds);
+
+    // Every token must appear somewhere in the file, matching FTS5's implicit AND.
+    const conditions = tokens.map(() => `body LIKE ? ESCAPE '\\'`).join(' AND ');
+    const rows = this.db
+      .prepare(
+        `SELECT project_id, path,
+                substr(body, MAX(1, instr(lower(body), ?) - 40), 160) AS excerpt
+           FROM index_content
+          WHERE 1 = 1 ${scope.sql} AND ${conditions}
+          ORDER BY length(path)
+          LIMIT ?`,
+      )
+      // Bound in the order the placeholders appear: excerpt, scope, conditions, limit.
+      .all(
+        tokens[0]!,
+        ...scope.args,
+        ...tokens.map((token) => `%${escapeLike(token)}%`),
+        limit,
+      ) as unknown as Array<{ project_id: string; path: string; excerpt: string }>;
+
+    return rows.map((row) => ({
+      projectId: row.project_id,
+      path: row.path,
+      excerpt: row.excerpt.replace(/\s+/g, ' ').trim(),
+    }));
+  }
+
+  private searchContentFts(input: {
     query: string;
     projectIds?: string[];
     limit?: number;
@@ -254,11 +316,15 @@ function escapeLike(value: string): string {
  * rather than a search. Quoting each token makes every character literal, and a
  * trailing `*` on the last token gives as-you-type prefix matching.
  */
-export function toMatchQuery(query: string): string | null {
-  const tokens = query
+export function contentTokens(query: string): string[] {
+  return query
     .toLowerCase()
     .split(/[^\p{L}\p{N}_]+/u)
     .filter((token) => token.length > 0);
+}
+
+export function toMatchQuery(query: string): string | null {
+  const tokens = contentTokens(query);
   if (!tokens.length) return null;
   return tokens
     .map((token, index) => (index === tokens.length - 1 ? `"${token}"*` : `"${token}"`))

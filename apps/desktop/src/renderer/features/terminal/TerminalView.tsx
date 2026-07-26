@@ -73,11 +73,15 @@ function cwdEntry(command: string, from: string, result: TerminalCwdResult): Ent
 }
 
 /**
- * A command runner, not a shell. Each line is executed once through the same
- * permission pipeline the agent's bash tool uses — so a protected path or a
- * workspace escape is refused, and an elevated command raises the normal
- * approval. There is no PTY, so interactive programs (vim, top) will not work;
- * that is a deliberate limit, not a bug.
+ * A command runner, not a shell. Each line is executed once.
+ *
+ * Commands you type are not held for approval — you are the one acting, so the
+ * keystroke is the consent. The policy floor still applies: a protected path or
+ * a path outside the project is refused, and read-only mode refuses bash
+ * entirely. Every command is audited either way.
+ *
+ * There is no PTY, so interactive programs (vim, top) will not work; that is a
+ * deliberate limit, not a bug.
  */
 export function TerminalView() {
   const project = useWorkspaceStore((s) => s.project);
@@ -230,8 +234,8 @@ export function TerminalView() {
           <div className="text-neutral-500">Open a project to run commands.</div>
         ) : !current.entries.length ? (
           <div className="text-neutral-500">
-            Commands run once inside {project.name} and go through the same approval policy as the
-            agent&apos;s bash tool. Interactive programs are not supported.
+            Commands run once inside {project.name}. Yours run without asking; paths outside the
+            project are still refused. Interactive programs are not supported.
           </div>
         ) : null}
 

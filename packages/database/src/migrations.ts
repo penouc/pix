@@ -207,12 +207,13 @@ CREATE TABLE IF NOT EXISTS index_files (
 CREATE UNIQUE INDEX IF NOT EXISTS index_files_key ON index_files(project_id, path);
 CREATE INDEX IF NOT EXISTS index_files_path ON index_files(path);
 
-CREATE VIRTUAL TABLE IF NOT EXISTS index_content USING fts5(
-  path,
-  body,
-  project_id UNINDEXED,
-  tokenize = "unicode61 remove_diacritics 2"
-);
+-- index_content is deliberately NOT created here. Whether it can be an FTS5
+-- virtual table depends on the SQLite the runtime was built against, and that
+-- is not knowable at migration-authoring time: Electron 36's bundled node:sqlite
+-- has no FTS module at all, while a plain Node 22 build does. A migration that
+-- assumed FTS5 failed on Electron and took the whole database down with it, so
+-- the table is created at open time by ensureContentIndex(), which picks the
+-- shape the runtime actually supports.
 
 CREATE TABLE IF NOT EXISTS index_state (
   project_id TEXT PRIMARY KEY,

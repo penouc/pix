@@ -150,6 +150,40 @@ describe('TerminalService.exec cwd', () => {
     expect(result.output).toBe('');
   });
 
+  it('runs a typed command without asking for approval', async () => {
+    const prompts: unknown[] = [];
+    const asking = new TerminalService({ requestApproval: (request) => prompts.push(request) });
+
+    // `bash` classifies above `safe`, so this is exactly the case that used to
+    // raise a dialog for a command the user had just typed themselves.
+    const result = await asking.exec({
+      projectId: 'p1',
+      workspaceRoot: root,
+      projectTrusted: true,
+      command: 'echo hello > scratch.txt && cat scratch.txt',
+    });
+
+    expect(result.outcome).toBe('ran');
+    expect(result.output).toContain('hello');
+    expect(prompts).toHaveLength(0);
+  });
+
+  it('still refuses everything in read-only mode', async () => {
+    const readOnly = new TerminalService({ requestApproval: () => {} });
+    readOnly.setApprovalMode('read-only');
+
+    const result = await readOnly.exec({
+      projectId: 'p1',
+      workspaceRoot: root,
+      projectTrusted: true,
+      command: 'rm -rf scratch-dir',
+    });
+
+    // Auto-approving the user's own commands must not reach past the policy floor.
+    expect(result.outcome).toBe('denied');
+    expect(result.output).toBe('');
+  });
+
   it('refuses an ancestor of the project root', async () => {
     // Regression: the confinement check had its arguments reversed, so it asked
     // whether the root was inside the requested directory. Every ancestor —

@@ -17,8 +17,6 @@ import { ApprovalDialog } from '@/features/approvals/ApprovalDialog';
 import { AutomationsView } from '@/features/automations/AutomationsView';
 import { ChatPanel } from '@/features/chat/ChatPanel';
 import { DiffPanel } from '@/features/diff/DiffPanel';
-import { ModelPill } from '@/features/models/ModelPill';
-import { OpenProjectDialog } from '@/features/projects/OpenProjectDialog';
 import { ProjectSidebar, type SidebarDestination } from '@/features/projects/ProjectSidebar';
 import { SearchPalette, type PaletteCommand } from '@/features/search/SearchPalette';
 import { useCreateTask } from '@/features/sessions/use-create-task';
@@ -40,8 +38,6 @@ type View = 'run' | 'diff' | 'settings' | 'recovery' | 'terminal' | 'automations
 export function App() {
   const [view, setView] = useState<View>('run');
   const [blankRun, setBlankRun] = useState(true);
-  const [projectDialogOpen, setProjectDialogOpen] = useState(false);
-  const [openingProject, setOpeningProject] = useState(false);
   const [projectError, setProjectError] = useState<string | null>(null);
   const [recoveryRunId, setRecoveryRunId] = useState<string | undefined>();
   const [panelOpen, setPanelOpen] = useState(true);
@@ -151,7 +147,6 @@ export function App() {
   }
 
   async function openProjectPath(pathValue: string) {
-    setOpeningProject(true);
     setProjectError(null);
     try {
       const opened = await invoke<ProjectSummary>({
@@ -162,18 +157,19 @@ export function App() {
       resetSessionView();
       setScope(opened.id, null);
       await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
-      setProjectDialogOpen(false);
       setBlankRun(true);
       setView('run');
     } catch (err) {
       setProjectError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setOpeningProject(false);
     }
   }
 
-  async function browseForProject() {
-    setOpeningProject(true);
+  /**
+   * The OS folder picker, reached from the sidebar's folder button, ⌘O and ⌘K.
+   * There is no intermediate dialog: the picker is already modal, so a popup in
+   * front of it was one click of pure ceremony.
+   */
+  const browseForProject = useCallback(async () => {
     setProjectError(null);
     try {
       const opened = await invoke<ProjectSummary>({ method: 'project.pickFolder' });
@@ -181,16 +177,14 @@ export function App() {
       resetSessionView();
       setScope(opened.id, null);
       await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
-      setProjectDialogOpen(false);
       setBlankRun(true);
       setView('run');
     } catch (err) {
+      // Closing the picker is not an error worth reporting.
       if (err instanceof IpcError && err.code === 'CANCELLED') return;
       setProjectError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setOpeningProject(false);
     }
-  }
+  }, [queryClient, resetSessionView, setProject, setScope]);
 
   const commands = useMemo<PaletteCommand[]>(
     () => [
@@ -199,9 +193,10 @@ export function App() {
       { id: 'automations', title: 'Open automations', run: () => setView('automations') },
       { id: 'skills', title: 'Open skills', run: () => setView('skills') },
       { id: 'review', title: 'Review changes', run: () => setView('diff') },
+      { id: 'open-project', title: 'Open project folder', hint: '⌘O', run: () => void browseForProject() },
       { id: 'settings', title: 'Open settings', hint: '⌘,', run: () => setView('settings') },
     ],
-    [newTask],
+    [newTask, browseForProject],
   );
 
   useEffect(() => {
@@ -217,7 +212,8 @@ export function App() {
       }
       if (event.key === 'o') {
         event.preventDefault();
-        setProjectDialogOpen(true);
+        // Straight to the OS picker, the way ⌘O behaves everywhere else.
+        void browseForProject();
       }
       if (event.key === ',') {
         event.preventDefault();
@@ -226,7 +222,7 @@ export function App() {
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [newTask]);
+  }, [newTask, browseForProject]);
 
   function reviewRecovery(runId: string) {
     setRecoveryRunId(runId);
@@ -321,7 +317,6 @@ export function App() {
 
   return (
     <AppShell
-      titleBarRight={<ModelPill />}
       sidebar={
         <ProjectSidebar
           activeNav={view}
@@ -336,10 +331,8 @@ export function App() {
             setView('run');
           }}
           onOpenSearch={() => setSearchOpen(true)}
-          onOpenProjectDialog={() => {
-            setProjectError(null);
-            setProjectDialogOpen(true);
-          }}
+          onBrowseForProject={() => void browseForProject()}
+          externalError={projectError}
           onProjectSwitched={() => {
             setBlankRun(true);
             setView('run');
@@ -371,15 +364,6 @@ export function App() {
               onOpenSession={(session) => selectSession(session)}
               onOpenFile={(hit) => void openIndexHit(hit)}
               onRunSkill={useSkill}
-            />
-          ) : null}
-          {projectDialogOpen ? (
-            <OpenProjectDialog
-              busy={openingProject}
-              error={projectError}
-              onOpenPath={(value) => void openProjectPath(value)}
-              onBrowse={() => void browseForProject()}
-              onClose={() => setProjectDialogOpen(false)}
             />
           ) : null}
           {showApprovalDialog ? (

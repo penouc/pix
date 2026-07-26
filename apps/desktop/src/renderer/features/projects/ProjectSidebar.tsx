@@ -29,7 +29,10 @@ interface ProjectSidebarProps {
   onNewTask: () => void;
   onSelectSession: () => void;
   onOpenSearch: () => void;
-  onOpenProjectDialog: () => void;
+  /** Open the OS folder picker directly — no intermediate dialog. */
+  onBrowseForProject: () => void;
+  /** Error from a project opened elsewhere (⌘O), shown with the local ones. */
+  externalError?: string | null;
   /** Switched to another project — land on the unstarted-task screen. */
   onProjectSwitched: () => void;
   onNavigate: (destination: SidebarDestination) => void;
@@ -44,7 +47,8 @@ export function ProjectSidebar({
   onNewTask,
   onSelectSession,
   onOpenSearch,
-  onOpenProjectDialog,
+  onBrowseForProject,
+  externalError,
   onProjectSwitched,
   onNavigate,
   activeNav,
@@ -66,7 +70,7 @@ export function ProjectSidebar({
   const [openError, setOpenError] = useState<string | null>(null);
 
   const busy = creating || opening;
-  const error = openError ?? createError;
+  const error = openError ?? createError ?? externalError ?? null;
 
   const recent = useQuery({
     queryKey: ['project.listRecent'],
@@ -213,7 +217,7 @@ export function ProjectSidebar({
           <IconButton title="Filtering isn't implemented yet" disabled>
             <SlidersHorizontal className="h-3.5 w-3.5" />
           </IconButton>
-          <IconButton title="Open project" disabled={busy} onClick={onOpenProjectDialog}>
+          <IconButton title="Open project folder" disabled={busy} onClick={onBrowseForProject}>
             <FolderOpen className="h-3.5 w-3.5" />
           </IconButton>
         </div>

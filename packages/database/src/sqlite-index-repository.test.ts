@@ -1,15 +1,23 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 
-import { openDatabase, type SqliteDatabase } from './sqlite-connection.js';
+import { ensureContentIndex, openDatabase, type SqliteDatabase } from './sqlite-connection.js';
 import { SqliteIndexRepository, toMatchQuery } from './sqlite-index-repository.js';
 
-describe('SqliteIndexRepository', () => {
+/*
+ * Both content-search paths are exercised, not just the one this runtime happens
+ * to support. Electron ships node:sqlite without any FTS module while a plain
+ * Node build has FTS5, so a suite that only ran the available path passed here
+ * and failed at launch. `like` is what the app actually uses today.
+ */
+const MODES = ['like', ...(ensureContentIndex(openDatabase(':memory:')) === 'fts5' ? ['fts5'] : [])] as const;
+
+describe.each(MODES)('SqliteIndexRepository (%s)', (mode) => {
   let db: SqliteDatabase;
   let repo: SqliteIndexRepository;
 
   beforeEach(() => {
     db = openDatabase(':memory:');
-    repo = new SqliteIndexRepository(db);
+    repo = new SqliteIndexRepository(db, mode);
   });
 
   afterEach(() => {
@@ -93,14 +101,56 @@ describe('SqliteIndexRepository', () => {
     ]);
   });
 
-  it('treats FTS operator characters in the query as literal text', () => {
+  it('treats query punctuation as literal text, not operators', () => {
     put('p1', 'src/a.ts', 'a TODO: fix the read-only path');
 
-    // Each of these is a syntax error as a raw MATCH expression.
+    // Each of these is a syntax error as a raw FTS5 MATCH expression, and a
+    // wildcard or a no-op in a naive LIKE.
     expect(repo.searchContent({ query: 'read-only' })).toHaveLength(1);
     expect(repo.searchContent({ query: 'TODO:' })).toHaveLength(1);
     expect(repo.searchContent({ query: '"unbalanced' })).toHaveLength(0);
     expect(repo.searchContent({ query: 'NOT OR AND' })).toHaveLength(0);
+  });
+
+  it('requires every token to be present', () => {
+    put('p1', 'src/a.ts', 'alpha appears here');
+    put('p1', 'src/b.ts', 'alpha and beta both appear');
+
+    expect(repo.searchContent({ query: 'alpha' })).toHaveLength(2);
+    expect(repo.searchContent({ query: 'alpha beta' }).map((h) => h.path)).toEqual(['src/b.ts']);
+  });
+
+  it('matches regardless of case', () => {
+    put('p1', 'src/a.ts', 'export const ApprovalMode = 1;');
+
+    expect(repo.searchContent({ query: 'approvalmode' })).toHaveLength(1);
+    expect(repo.searchContent({ query: 'APPROVALMODE' })).toHaveLength(1);
+  });
+
+  it('does not let a wildcard in the query match everything', () => {
+    put('p1', 'src/a.ts', 'plain words only');
+
+    // A bare `%` would match every body if it reached LIKE unescaped. It is
+    // dropped by the tokenizer in both modes, so neither can be used to dump the
+    // whole index.
+    expect(repo.searchContent({ query: '%' })).toHaveLength(0);
+    expect(repo.searchContent({ query: '_' })).toHaveLength(0);
+  });
+
+  it('matches partial identifiers on LIKE and whole words on FTS5', () => {
+    put('p1', 'src/a.ts', 'const approvalMode = 1;');
+
+    /*
+     * The two modes are not identical and it is better to say so than to pretend.
+     * LIKE is substring search, so a partial identifier hits — which is usually
+     * what you want when hunting for a symbol. FTS5 matches tokenized words, and
+     * only the final token gets a prefix wildcard, so a partial leading token
+     * misses. Both find the full identifier, which is the guarantee callers rely
+     * on.
+     */
+    expect(repo.searchContent({ query: 'approvalMode' })).toHaveLength(1);
+    expect(repo.searchContent({ query: 'approvalMod' })).toHaveLength(1);
+    expect(repo.searchContent({ query: 'provalMode' })).toHaveLength(mode === 'like' ? 1 : 0);
   });
 
   it('does not let LIKE wildcards in a path query match anything', () => {

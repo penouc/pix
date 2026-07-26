@@ -18,6 +18,7 @@ import { useWorkspaceStore } from '@/stores/workspace-store';
 export function useCreateTask() {
   const queryClient = useQueryClient();
   const project = useWorkspaceStore((s) => s.project);
+  const selectedModel = useWorkspaceStore((s) => s.selectedModel);
   const setProject = useWorkspaceStore((s) => s.setProject);
   const setSession = useWorkspaceStore((s) => s.setSession);
   const resetSessionView = useAgentStreamStore((s) => s.resetSessionView);
@@ -43,6 +44,22 @@ export function useCreateTask() {
         method: 'session.create',
         params: { projectId: trusted.id, title: 'New task' },
       });
+      /*
+       * Apply the model chosen in the composer. The picker can be used before any
+       * session exists (the unstarted-task screen), where `agent.setModel` has
+       * nothing to target — so without this the first run of a new task silently
+       * ignored the model you had just selected.
+       */
+      if (selectedModel.includes('/')) {
+        const [providerId, ...rest] = selectedModel.split('/');
+        const modelId = rest.join('/');
+        if (providerId && modelId) {
+          await invoke({
+            method: 'agent.setModel',
+            params: { sessionId: created.id, model: { providerId, modelId } },
+          }).catch((err) => console.error('[createTask] setModel failed', err));
+        }
+      }
       setSession(created);
       resetSessionView();
       setScope(trusted.id, created.id);
