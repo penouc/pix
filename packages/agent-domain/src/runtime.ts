@@ -56,6 +56,27 @@ export interface AgentRuntime {
   abort(runId: string): Promise<void>;
   setModel(sessionId: string, model: ModelRef): Promise<void>;
   configureProvider?(providerId: string, apiKey: string): Promise<void>;
+  /**
+   * Approval policy. Omitting `sessionId` sets the default for new sessions.
+   * See packages/security ApprovalMode for the three behaviours.
+   */
+  setApprovalMode?(mode: 'ask' | 'auto-reads' | 'read-only', sessionId?: string): Promise<void>;
+  getApprovalMode?(sessionId?: string): Promise<'ask' | 'auto-reads' | 'read-only'>;
+  /** Remembered allow-session / allow-project rules, for display. No secrets. */
+  listRememberedDecisions?(): Promise<
+    Array<{
+      scope: 'session' | 'project';
+      scopeId: string;
+      toolName: string;
+      riskLevel: string;
+      focus: string;
+      key: string;
+    }>
+  >;
+  clearRememberedDecisions?(filter?: {
+    scope?: 'session' | 'project';
+    scopeId?: string;
+  }): Promise<number>;
   removeProviderConfiguration?(providerId: string): Promise<void>;
   approve(requestId: string, decision: ApprovalDecision): Promise<void>;
   listModels(): Promise<

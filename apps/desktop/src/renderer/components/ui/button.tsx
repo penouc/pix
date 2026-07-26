@@ -3,34 +3,41 @@ import type { ButtonHTMLAttributes } from 'react';
 
 import { cn } from '@/lib/utils';
 
-const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:pointer-events-none disabled:opacity-50',
-  {
-    variants: {
-      variant: {
-        default: 'bg-accent text-background hover:bg-sky-300',
-        secondary: 'bg-surface-raised text-foreground border border-border hover:border-border-strong',
-        ghost: 'text-muted hover:bg-surface-raised hover:text-foreground',
-        danger: 'bg-danger/15 text-danger hover:bg-danger/25',
-      },
-      size: {
-        default: 'h-9 px-3.5',
-        sm: 'h-8 px-2.5 text-xs',
-        lg: 'h-10 px-4',
-        icon: 'h-9 w-9',
-      },
+/**
+ * Organic `.btn` — the design system owns the shape (pill radius, body-face
+ * semibold, themed hover/active/focus states) in globals.css; these variants
+ * only pick the fill and the interface height.
+ *
+ * The system carries no red role: destructive actions read as deep terracotta
+ * on a tinted outline, matching the design's Deny / Revert all buttons.
+ */
+const buttonVariants = cva('btn', {
+  variants: {
+    variant: {
+      default: 'btn-primary',
+      secondary: 'btn-secondary',
+      ghost: 'btn-ghost',
+      quiet: 'btn-quiet',
+      danger: 'btn-secondary text-accent-800 border-accent/35 hover:bg-accent/10',
     },
-    defaultVariants: {
-      variant: 'default',
-      size: 'default',
+    size: {
+      default: 'h-8',
+      sm: 'h-[26px] px-3 text-xs',
+      lg: 'h-[34px]',
+      icon: 'btn-icon',
     },
   },
-);
+  defaultVariants: {
+    variant: 'default',
+    size: 'default',
+  },
+});
 
 export interface ButtonProps
-  extends ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {}
+  extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {}
 
-export function Button({ className, variant, size, ...props }: ButtonProps) {
-  return <button className={cn(buttonVariants({ variant, size }), className)} {...props} />;
+export function Button({ className, variant, size, type = 'button', ...props }: ButtonProps) {
+  return (
+    <button type={type} className={cn(buttonVariants({ variant, size }), className)} {...props} />
+  );
 }

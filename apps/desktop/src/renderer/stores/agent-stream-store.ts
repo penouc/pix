@@ -6,6 +6,8 @@ export interface ChatMessage {
   role: 'assistant' | 'user' | 'system';
   content: string;
   streaming: boolean;
+  /** Arrival order, shared with tool cards so the thread can interleave them. */
+  order: number;
 }
 
 export interface ToolCallCard {
@@ -15,6 +17,8 @@ export interface ToolCallCard {
   outputSummary?: string;
   ok?: boolean;
   status: 'running' | 'completed' | 'failed';
+  /** Arrival order, shared with messages so the thread can interleave them. */
+  order: number;
 }
 
 export interface RunUsage {
@@ -73,13 +77,30 @@ function shouldAccept(
   event: DesktopAgentEvent,
 ): boolean {
   if (state.activeProjectId && event.projectId !== state.activeProjectId) return false;
-  if (state.activeSessionId && event.sessionId !== state.activeSessionId) return false;
-  if (state.activeRunId && event.runId !== state.activeRunId && event.type !== 'run.started') {
+
+  // Approvals block whoever raised them — an agent run OR a user command in the
+  // Terminal panel, which carries its own runId. Dropping one leaves the caller
+  // waiting forever, so they are exempt from run/session scoping.
+  const isApproval = event.type === 'approval.requested' || event.type === 'approval.resolved';
+
+  if (!isApproval && state.activeSessionId && event.sessionId !== state.activeSessionId) {
+    return false;
+  }
+  if (
+    !isApproval &&
+    state.activeRunId &&
+    event.runId !== state.activeRunId &&
+    event.type !== 'run.started'
+  ) {
     return false;
   }
   const last = state.lastSequenceByRun[event.runId] ?? -1;
   return event.sequence > last;
 }
+
+/** Monotonic arrival counter shared by messages and tool cards. */
+let timelineSeq = 0;
+const nextOrder = () => (timelineSeq += 1);
 
 /** Pending message.delta chunks coalesced per animation frame (plan §14.1). */
 const pendingDeltas = new Map<string, { role: ChatMessage['role']; chunks: string[] }>();
@@ -121,6 +142,7 @@ function scheduleDeltaFlush(
             role: pending.role,
             content: delta,
             streaming: true,
+            order: nextOrder(),
           },
         ];
       }
@@ -172,6 +194,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
           role: 'user',
           content: text,
           streaming: false,
+          order: nextOrder(),
         },
       ],
     }));
@@ -179,6 +202,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
 
   resetSessionView: () => {
     clearDeltaBatch();
+    timelineSeq = 0;
     set({
       activeRunId: null,
       status: 'idle',
@@ -302,6 +326,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
                 role: event.role,
                 content,
                 streaming: false,
+                order: nextOrder(),
               },
             ],
           });
@@ -318,6 +343,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
               toolName: event.toolName,
               inputSummary: event.inputSummary,
               status: 'running',
+              order: nextOrder(),
             },
           ],
         });

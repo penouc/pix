@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { ApprovalDecision } from '@pi-desktop/protocol';
 
 import { AuditLog, redactSecrets } from './audit-log.js';
-import { PolicyEngine } from './policy-engine.js';
+import { PolicyEngine, type ApprovalMode } from './policy-engine.js';
 import { normalizeToolCall } from './tool-normalizer.js';
 import type {
   ApprovalRequestDraft,
@@ -46,9 +46,14 @@ export class PermissionPipeline {
     }
   >();
 
-  constructor(options?: { auditFilePath?: string; autoAllowWorkspaceWrite?: boolean }) {
+  constructor(options?: {
+    auditFilePath?: string;
+    autoAllowWorkspaceWrite?: boolean;
+    defaultMode?: ApprovalMode;
+  }) {
     this.policy = new PolicyEngine({
       autoAllowWorkspaceWrite: options?.autoAllowWorkspaceWrite,
+      defaultMode: options?.defaultMode,
     });
     this.audit = new AuditLog(options?.auditFilePath);
   }
@@ -136,9 +141,7 @@ export class PermissionPipeline {
       riskLevel: entry.info.assessment.level,
       outcome: decision === 'deny' ? 'denied' : 'approved',
       summary: redactSecrets(entry.info.draft.summary),
-      command: entry.info.draft.command
-        ? redactSecrets(entry.info.draft.command)
-        : undefined,
+      command: entry.info.draft.command ? redactSecrets(entry.info.draft.command) : undefined,
       affectedPaths: entry.info.draft.affectedPaths,
       reasons: entry.info.draft.reasons,
       decision,

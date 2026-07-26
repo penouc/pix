@@ -1,44 +1,560 @@
 @import 'tailwindcss';
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Organic — tokens transcribed from the Claude Design project
+   "Loam 桌面应用设计" (`Loam Desktop.dc.html` + _ds/organic-…/styles.css).
+
+   The desktop screen's <helmet> retunes the design system's warm cream ground
+   to a white/neutral one and keeps only the two accents — terracotta and sage —
+   from the base sheet. It also ships a THEME_DARK map, so this file carries
+   both themes: JS resolves the user's light/dark/system preference to a
+   concrete `data-theme` on <html>, and every token re-points from there.
+
+   Role names match the previous theme so existing Tailwind utilities
+   (bg-surface, text-muted, border-border, …) keep working and simply re-tone.
+
+   NOTE ON TYPE: headings use the body face (Figtree) bold — the screen
+   overrides the design system's display face. Fonts are not fetched from
+   Google Fonts: index.html ships `default-src 'self'` and a local-first agent
+   must not need the network to render text. Figtree is used when installed,
+   otherwise the system face.
+   ═══════════════════════════════════════════════════════════════════════ */
+
 @theme {
-  --color-background: #0b0f14;
-  --color-surface: #121821;
-  --color-surface-raised: #1a2230;
-  --color-border: #243041;
-  --color-border-strong: #334155;
-  --color-foreground: #e8eef7;
-  --color-muted: #94a3b8;
-  --color-accent: #38bdf8;
-  --color-accent-soft: #0ea5e933;
-  --color-success: #34d399;
-  --color-warning: #fbbf24;
-  --color-danger: #f87171;
-  --font-sans: 'SF Pro Text', 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-mono: 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
-  --radius-panel: 12px;
+  /* — roles (light) — */
+  --color-background: #ffffff;
+  --color-surface: #f6f6f7;
+  --color-surface-raised: #fafafa;
+  --color-border: #e4e4e5;
+  --color-border-strong: #c8c9cc;
+  --color-foreground: #17181a;
+  --color-muted: #7f8082;
+  --color-accent: #c67139;
+  --color-accent-soft: rgba(198, 113, 57, 0.14);
+
+  /* The system has no red role: sage reads as "good", deep terracotta as
+     "failed" — the design's own `fail` tone. */
+  --color-success: #7a8a5e;
+  --color-warning: #c67139;
+  --color-danger: #8c491a;
+
+  /* — neutral ramp (light) — */
+  --color-neutral-100: #fafafa;
+  --color-neutral-200: #f1f1f2;
+  --color-neutral-300: #e6e6e8;
+  --color-neutral-400: #c8c9cc;
+  --color-neutral-500: #a1a2a6;
+  --color-neutral-600: #78797e;
+  --color-neutral-700: #55565b;
+  --color-neutral-800: #37383c;
+  --color-neutral-900: #1d1e21;
+
+  /* — accent ramp (terracotta) — 100/200 retuned by the screen, rest from the
+     design system's base sheet — */
+  --color-accent-100: #fdf2ea;
+  --color-accent-200: #f9dfcd;
+  --color-accent-300: #ffc6a5;
+  --color-accent-400: #f6a06b;
+  --color-accent-500: #d67f48;
+  --color-accent-600: #b2622d;
+  --color-accent-700: #8c491a;
+  --color-accent-800: #643312;
+  --color-accent-900: #402310;
+
+  /* — second accent ramp (sage) — */
+  --color-accent-2: #7a8a5e;
+  --color-accent-2-100: #f1f5ec;
+  --color-accent-2-200: #e2ead9;
+  --color-accent-2-300: #ccdbb2;
+  --color-accent-2-400: #aebf92;
+  --color-accent-2-500: #8fa073;
+  --color-accent-2-600: #728157;
+  --color-accent-2-700: #56633f;
+  --color-accent-2-800: #3d472b;
+  --color-accent-2-900: #272e1b;
+
+  /* Terminal / tool-output surface. Declared as its own pair rather than
+     reusing neutral-900 + neutral-200: the dark theme inverts the neutral
+     ramp, so the design's literal `neutral-200 on neutral-900` would render
+     dark-on-dark there. These stay light-on-dark in both themes. */
+  --color-output: #1d1e21;
+  --color-output-foreground: #f1f1f2;
+
+  --font-sans: 'Figtree', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --text-base: 13px;
+  --leading-base: 1.5;
+  --radius-panel: 16px;
 }
 
-* {
-  box-sizing: border-box;
+/* Aliases under the design system's own names, so markup transcribed from the
+   design file can use var(--color-bg) / var(--space-3) verbatim. */
+:root {
+  --color-bg: var(--color-background);
+  --color-text: var(--color-foreground);
+  --color-divider: rgba(20, 21, 24, 0.1);
+
+  --font-body: var(--font-sans);
+
+  --space-1: 4.4px;
+  --space-2: 8.8px;
+  --space-3: 13.2px;
+  --space-4: 17.6px;
+  --space-6: 26.4px;
+  --space-8: 35.2px;
+
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 28px;
+
+  --shadow-sm: 0 1px 2px rgba(20, 21, 24, 0.07);
+  --shadow-md: 0 3px 10px rgba(20, 21, 24, 0.09);
+  --shadow-lg: 0 12px 32px rgba(20, 21, 24, 0.14);
+
+  color-scheme: light;
 }
 
-html,
-body,
-#root {
-  height: 100%;
+/* ── Dark theme (the design's THEME_DARK map) ──────────────────────────────
+   Set by the theme store on <html data-theme="dark">. The neutral ramp
+   inverts: 100 is the darkest surface, 800 the lightest text.
+   ─────────────────────────────────────────────────────────────────────── */
+:root[data-theme='dark'] {
+  --color-background: #1b1c1e;
+  --color-surface: #232427;
+  --color-surface-raised: #2b2c2f;
+  --color-border: #35363a;
+  --color-border-strong: #4d4e53;
+  --color-foreground: #f2f2f3;
+  --color-muted: #909196;
+  --color-divider: rgba(255, 255, 255, 0.1);
+
+  --color-neutral-100: #232427;
+  --color-neutral-200: #2b2c2f;
+  --color-neutral-300: #38393d;
+  --color-neutral-400: #4d4e53;
+  --color-neutral-500: #6b6c71;
+  --color-neutral-600: #909196;
+  --color-neutral-700: #b3b4b8;
+  --color-neutral-800: #d6d7da;
+  --color-neutral-900: #0e0f10;
+
+  --color-accent-100: #3a2c22;
+  --color-accent-200: #4d3626;
+  --color-accent-2-100: #28301f;
+  --color-accent-2-200: #334027;
+
+  /* The design's dark map darkens the accent *tints* (100/200) but leaves the
+     deep steps alone, while its markup keeps using 700–900 as the text colour
+     on those tints — which is unreadable on a dark ground. On a dark theme the
+     readable accent is a light one, so the deep steps invert here. Every use of
+     these three in this app is a foreground on an accent tint. */
+  --color-accent-700: #f0a97a;
+  --color-accent-800: #ffc6a5;
+  --color-accent-900: #ffe1d0;
+  --color-accent-2-700: #b6c79a;
+  --color-accent-2-800: #ccdbb2;
+  --color-accent-2-900: #e1eecc;
+
+  --color-output: #0e0f10;
+  --color-output-foreground: #d6d7da;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 3px 10px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
+
+  color-scheme: dark;
 }
 
-body {
-  margin: 0;
-  font-family: var(--font-sans);
-  background: var(--color-background);
-  color: var(--color-foreground);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.5;
+    background: var(--color-background);
+    color: var(--color-foreground);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    margin: 0;
+    font-family: var(--font-body);
+    font-weight: 700;
+    line-height: 1.16;
+    letter-spacing: -0.015em;
+  }
+  h1 {
+    font-size: 30px;
+  }
+  h2 {
+    font-size: 23px;
+  }
+  h3 {
+    font-size: 19px;
+  }
+  h4 {
+    font-size: 15.5px;
+  }
+  h5 {
+    font-size: 13.5px;
+  }
+  h6 {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  :focus {
+    outline: none;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--color-neutral-700) 22%, transparent);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
 }
 
-button,
-input,
-textarea {
-  font: inherit;
+/* ── Component layer ──────────────────────────────────────────────────────
+   The design system's component classes. Kept in @layer components so
+   Tailwind utilities passed at call sites still win.
+   ─────────────────────────────────────────────────────────────────────── */
+@layer components {
+  .text-muted {
+    color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  }
+
+  /* — buttons — */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: pointer;
+    text-decoration: none;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 13px;
+    line-height: 1.2;
+    color: var(--color-text);
+    background: transparent;
+    border: 1px solid transparent;
+    padding: var(--space-2) calc(var(--space-3) * 1.2);
+    border-radius: 999px;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease;
+  }
+  .btn svg {
+    display: block;
+  }
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: var(--color-accent);
+    color: #fff;
+  }
+  .btn-primary:not(:disabled):hover {
+    background: var(--color-accent-600);
+  }
+  .btn-primary:not(:disabled):active {
+    background: var(--color-accent-700);
+  }
+  .btn-secondary {
+    border-color: var(--color-divider);
+  }
+  .btn-secondary:not(:disabled):hover {
+    background: color-mix(in srgb, var(--color-text) 7%, transparent);
+  }
+  .btn-secondary:not(:disabled):active {
+    background: color-mix(in srgb, var(--color-text) 14%, transparent);
+  }
+  .btn-ghost {
+    color: var(--color-accent-700);
+    padding-inline: var(--space-2);
+  }
+  .btn-ghost:not(:disabled):hover {
+    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  }
+  .btn-ghost:not(:disabled):active {
+    background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  }
+  .btn-quiet {
+    color: color-mix(in srgb, var(--color-text) 68%, transparent);
+  }
+  .btn-quiet:not(:disabled):hover {
+    background: color-mix(in srgb, var(--color-text) 8%, transparent);
+    color: var(--color-text);
+  }
+  .btn-icon {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+  }
+  .btn-block {
+    width: 100%;
+  }
+
+  /* — tags — */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    padding: 3px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .tag-accent {
+    background: var(--color-accent-100);
+    color: var(--color-accent-800);
+  }
+  .tag-accent-2 {
+    background: var(--color-accent-2-100);
+    color: var(--color-accent-2-800);
+  }
+  .tag-neutral {
+    background: var(--color-neutral-200);
+    color: var(--color-neutral-800);
+  }
+  .tag-outline {
+    border: 1px solid var(--color-accent);
+    color: var(--color-accent-700);
+  }
+
+  /* — cards — */
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border-radius: calc(var(--radius-lg) * 1.15);
+    background: var(--color-surface);
+  }
+  .card-kicker {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-accent);
+  }
+  .card-title {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 15px;
+    line-height: 1.2;
+  }
+  .card-body {
+    margin: 0;
+    font-size: 12.5px;
+    opacity: 0.8;
+  }
+  .card-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: color-mix(in srgb, var(--color-text) 50%, transparent);
+  }
+  .elev-sm {
+    box-shadow: var(--shadow-sm);
+  }
+  .elev-md {
+    box-shadow: var(--shadow-md);
+  }
+  .elev-lg {
+    box-shadow: var(--shadow-lg);
+  }
+
+  /* — inputs — */
+  .input {
+    width: 100%;
+    min-height: 32px;
+    padding: 6px 14px;
+    font: inherit;
+    font-size: 13px;
+    color: var(--color-text);
+    caret-color: var(--color-accent);
+    background: var(--color-surface);
+    border: 1px solid var(--color-divider);
+    border-radius: 999px;
+  }
+  .input::placeholder {
+    color: color-mix(in srgb, var(--color-text) 45%, transparent);
+  }
+  .input:hover {
+    border-color: color-mix(in srgb, var(--color-text) 45%, transparent);
+  }
+  .input:focus-visible {
+    border-color: var(--color-accent);
+    outline-offset: 0;
+  }
+
+  /* — dialog — */
+  .dialog-backdrop {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: var(--space-4);
+    background: rgba(23, 24, 26, 0.42);
+  }
+  .dialog {
+    width: min(470px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    border-radius: calc(var(--radius-lg) * 1.15);
+    background: var(--color-bg);
+    box-shadow: var(--shadow-lg);
+  }
+  .dialog-title {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 18px;
+    line-height: 1.2;
+  }
+  .dialog-body {
+    font-size: 13px;
+    opacity: 0.85;
+  }
+
+  /* Terminal / tool-output surface — always light-on-dark. */
+  .output-pre {
+    margin: 0;
+    background: var(--color-output);
+    color: var(--color-output-foreground);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    overflow-x: auto;
+  }
+}
+
+/* ── Motion ─────────────────────────────────────────────────────────────── */
+@keyframes pi-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.82);
+  }
+}
+@keyframes pi-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes pi-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes pi-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+@keyframes pi-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── Density ───────────────────────────────────────────────────────────────
+   The Appearance tab's Density control. Applied here rather than threaded
+   through every component: compact tightens the scannable lists and the
+   composer, which is what the setting promises.
+   ─────────────────────────────────────────────────────────────────────── */
+:root[data-density='compact'] {
+  --density-row-y: 4px;
+}
+:root[data-density='compact'] .density-row {
+  padding-top: var(--density-row-y);
+  padding-bottom: var(--density-row-y);
+}
+:root[data-density='compact'] .density-gap {
+  gap: 2px;
+}
+:root[data-density='compact'] .density-composer textarea {
+  min-height: 38px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+/* The Appearance tab's "Reduce motion" sets data-motion="reduced"; the OS
+   setting is honoured unconditionally. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+:root[data-motion='reduced'] *,
+:root[data-motion='reduced'] *::before,
+:root[data-motion='reduced'] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
 }

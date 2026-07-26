@@ -19,7 +19,7 @@ import type {
 } from '@pi-desktop/agent-domain';
 import { DomainError, agentError } from '@pi-desktop/agent-domain';
 import type { ApprovalDecision, DesktopAgentEvent, ModelRef, RunRef } from '@pi-desktop/protocol';
-import { PermissionPipeline } from '@pi-desktop/security';
+import { PermissionPipeline, type ApprovalMode, type RememberedRule } from '@pi-desktop/security';
 
 import {
   describeAuthSources,
@@ -91,6 +91,9 @@ export class PiAgentRuntime implements AgentRuntime {
   private readonly hydrateEnvAuth: boolean;
   private authSummaries: ProviderAuthSummary[] = [];
   private permissionPipeline: PermissionPipeline | null = null;
+  /** Mode chosen before the pipeline exists; applied when it is constructed. */
+  private pendingDefaultMode: ApprovalMode | null = null;
+  private readonly pendingSessionModes = new Map<string, ApprovalMode>();
   private beforeWriteToolHandler: BeforeWriteToolHandler | null = null;
   private afterWriteToolHandler: AfterWriteToolHandler | null = null;
   private disposed = false;
@@ -353,6 +356,38 @@ export class PiAgentRuntime implements AgentRuntime {
     record.desktop.updatedAt = Date.now();
   }
 
+  async setApprovalMode(mode: ApprovalMode, sessionId?: string): Promise<void> {
+    if (!sessionId) {
+      this.pendingDefaultMode = mode;
+      this.permissionPipeline?.policy.setDefaultMode(mode);
+      return;
+    }
+    if (this.permissionPipeline) {
+      this.permissionPipeline.policy.setSessionMode(sessionId, mode);
+    } else {
+      this.pendingSessionModes.set(sessionId, mode);
+    }
+  }
+
+  async getApprovalMode(sessionId?: string): Promise<ApprovalMode> {
+    if (this.permissionPipeline) return this.permissionPipeline.policy.getMode(sessionId);
+    if (sessionId && this.pendingSessionModes.has(sessionId)) {
+      return this.pendingSessionModes.get(sessionId)!;
+    }
+    return this.pendingDefaultMode ?? 'auto-reads';
+  }
+
+  async listRememberedDecisions(): Promise<RememberedRule[]> {
+    return this.permissionPipeline?.policy.listRemembered() ?? [];
+  }
+
+  async clearRememberedDecisions(filter?: {
+    scope?: 'session' | 'project';
+    scopeId?: string;
+  }): Promise<number> {
+    return this.permissionPipeline?.policy.clearRemembered(filter) ?? 0;
+  }
+
   async configureProvider(providerId: string, apiKey: string): Promise<void> {
     this.assertAlive();
     await this.ensureRuntime(process.cwd());
@@ -549,7 +584,12 @@ export class PiAgentRuntime implements AgentRuntime {
       }
       this.permissionPipeline = new PermissionPipeline({
         auditFilePath: path.join(this.agentDir!, 'security-audit.jsonl'),
+        ...(this.pendingDefaultMode ? { defaultMode: this.pendingDefaultMode } : {}),
       });
+      for (const [sessionId, mode] of this.pendingSessionModes) {
+        this.permissionPipeline.policy.setSessionMode(sessionId, mode);
+      }
+      this.pendingSessionModes.clear();
     })();
 
     try {

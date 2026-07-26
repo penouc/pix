@@ -1,18 +1,35 @@
-import type {
-  NormalizedToolCall,
-  PolicyAction,
-  PolicyContext,
-  RiskAssessment,
-} from './types.js';
+import type { NormalizedToolCall, PolicyAction, PolicyContext, RiskAssessment } from './types.js';
 import { classifyRisk } from './risk-classifier.js';
 import type { ApprovalDecision, RiskLevel } from './types.js';
 
+/**
+ * How much a session may do without asking.
+ *
+ * - `ask` — every mutation (write/edit and bash) waits for a decision.
+ * - `auto-reads` — reads run freely and workspace writes are allowed; bash and
+ *   anything sensitive or above still waits. This is the historical default.
+ * - `read-only` — nothing is written and no command runs; mutations are refused
+ *   outright rather than queued for approval.
+ */
+export type ApprovalMode = 'ask' | 'auto-reads' | 'read-only';
+
+export interface RememberedRule {
+  scope: 'session' | 'project';
+  scopeId: string;
+  toolName: string;
+  riskLevel: string;
+  /** The command word or path the rule was keyed on. */
+  focus: string;
+  key: string;
+}
+
 export interface PolicyEngineOptions {
   /**
-   * When true, workspace-write tools auto-allow (project trusted coding mode).
-   * Default true for trusted projects.
+   * Legacy switch, kept so existing callers keep their behaviour: it selects the
+   * starting default mode (`true` → 'auto-reads', `false` → 'ask').
    */
   autoAllowWorkspaceWrite?: boolean;
+  defaultMode?: ApprovalMode;
 }
 
 /**
@@ -22,10 +39,62 @@ export interface PolicyEngineOptions {
 export class PolicyEngine {
   private readonly sessionAllows = new Map<string, Set<string>>();
   private readonly projectAllows = new Map<string, Set<string>>();
-  private readonly autoAllowWorkspaceWrite: boolean;
+  private readonly sessionModes = new Map<string, ApprovalMode>();
+  private defaultMode: ApprovalMode;
 
   constructor(options: PolicyEngineOptions = {}) {
-    this.autoAllowWorkspaceWrite = options.autoAllowWorkspaceWrite ?? true;
+    this.defaultMode =
+      options.defaultMode ?? ((options.autoAllowWorkspaceWrite ?? true) ? 'auto-reads' : 'ask');
+  }
+
+  /** Mode for new sessions. */
+  setDefaultMode(mode: ApprovalMode): void {
+    this.defaultMode = mode;
+  }
+
+  getDefaultMode(): ApprovalMode {
+    return this.defaultMode;
+  }
+
+  setSessionMode(sessionId: string, mode: ApprovalMode): void {
+    this.sessionModes.set(sessionId, mode);
+  }
+
+  getMode(sessionId?: string): ApprovalMode {
+    if (sessionId) return this.sessionModes.get(sessionId) ?? this.defaultMode;
+    return this.defaultMode;
+  }
+
+  /** Remembered allow rules, for the Settings screen. Never includes secrets. */
+  listRemembered(): RememberedRule[] {
+    const rules: RememberedRule[] = [];
+    const push = (scope: 'session' | 'project', scopeId: string, key: string) => {
+      const [toolName = key, riskLevel = 'unknown', focus = ''] = key.split('|');
+      rules.push({ scope, scopeId, toolName, riskLevel, focus, key });
+    };
+    for (const [sessionId, keys] of this.sessionAllows) {
+      for (const key of keys) push('session', sessionId, key);
+    }
+    for (const [projectId, keys] of this.projectAllows) {
+      for (const key of keys) push('project', projectId, key);
+    }
+    return rules;
+  }
+
+  /** Forget remembered rules. Returns how many were dropped. */
+  clearRemembered(filter?: { scope?: 'session' | 'project'; scopeId?: string }): number {
+    let removed = 0;
+    const sweep = (store: Map<string, Set<string>>, scope: 'session' | 'project') => {
+      if (filter?.scope && filter.scope !== scope) return;
+      for (const [id, keys] of [...store]) {
+        if (filter?.scopeId && filter.scopeId !== id) continue;
+        removed += keys.size;
+        store.delete(id);
+      }
+    };
+    sweep(this.sessionAllows, 'session');
+    sweep(this.projectAllows, 'project');
+    return removed;
   }
 
   evaluate(tool: NormalizedToolCall, ctx: PolicyContext): PolicyAction {
@@ -43,9 +112,18 @@ export class PolicyEngine {
     }
 
     const assessment = classifyRisk(tool);
+    const mode = this.getMode(ctx.sessionId);
 
-    if (tool.escapesWorkspace && assessment.level !== 'external-side-effect') {
-      // Escape is always at least sensitive and requires confirmation.
+    // Read-only refuses rather than queues: the point of the mode is that
+    // nothing can be written even by answering a prompt. Checked before the
+    // remembered-rules lookup so an earlier allow cannot re-open the door.
+    if (mode === 'read-only' && assessment.level !== 'safe') {
+      return {
+        action: 'deny',
+        assessment,
+        message:
+          'This session is read-only. Switch the approval mode to let the agent write or run commands.',
+      };
     }
 
     const memoryKey = memoryKeyFor(tool, assessment.level);
@@ -57,7 +135,8 @@ export class PolicyEngine {
       case 'safe':
         return { action: 'allow', assessment };
       case 'workspace-write':
-        if (this.autoAllowWorkspaceWrite) {
+        // Only 'auto-reads' lets workspace writes through unprompted.
+        if (mode === 'auto-reads') {
           return { action: 'allow', assessment };
         }
         return requireApproval(tool, assessment);
@@ -112,10 +191,7 @@ function memoryKeyFor(tool: NormalizedToolCall, level: RiskLevel): string {
   return `${tool.toolName}|${level}|${focus}`;
 }
 
-function requireApproval(
-  tool: NormalizedToolCall,
-  assessment: RiskAssessment,
-): PolicyAction {
+function requireApproval(tool: NormalizedToolCall, assessment: RiskAssessment): PolicyAction {
   return {
     action: 'require-approval',
     assessment,

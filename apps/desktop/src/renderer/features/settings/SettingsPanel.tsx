@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { X, MessageSquare, Key, ExternalLink } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import type { ModelInfo, ProviderSetting, Settings } from '@pi-desktop/protocol';
@@ -7,30 +8,40 @@ import { Button } from '@/components/ui/button';
 import { invoke } from '@/lib/ipc';
 
 const PROVIDERS = [
-  'openai',
-  'anthropic',
-  'google',
-  'xai',
-  'openrouter',
-  'opencode',
-  'opencode-go',
-  'groq',
-  'deepseek',
-  'mistral',
-  'together',
-  'fireworks',
-  'moonshotai',
-  'minimax',
-  'minimax-cn',
-  'zai',
+  { id: 'openai', label: 'OpenAI' },
+  { id: 'anthropic', label: 'Anthropic' },
+  { id: 'google', label: 'Google' },
+  { id: 'xai', label: 'xAI' },
+  { id: 'openrouter', label: 'OpenRouter' },
+  { id: 'groq', label: 'Groq' },
+  { id: 'deepseek', label: 'DeepSeek' },
+  { id: 'mistral', label: 'Mistral' },
+  { id: 'together', label: 'Together AI' },
+  { id: 'fireworks', label: 'Fireworks' },
+  { id: 'moonshotai', label: 'Moonshot AI' },
+  { id: 'minimax', label: 'MiniMax' },
+  { id: 'minimax-cn', label: 'MiniMax (CN)' },
+  { id: 'opencode', label: 'OpenCode' },
+  { id: 'opencode-go', label: 'OpenCode Go' },
+  { id: 'zai', label: 'Zai' },
 ];
 
-export function SettingsPanel() {
+interface SettingsPanelProps {
+  onClose?: () => void;
+}
+
+export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const queryClient = useQueryClient();
-  const [providerId, setProviderId] = useState(PROVIDERS[0]);
+  const [providerId, setProviderId] = useState(PROVIDERS[0]!.id);
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeType, setNoticeType] = useState<'ok' | 'err'>('ok');
+
+  // ChatGPT subscription state
+  const [chatgptKey, setChatgptKey] = useState('');
+  const [chatgptTab, setChatgptTab] = useState<'apikey' | 'subscription'>('apikey');
+  const [chatgptNotice, setChatgptNotice] = useState<string | null>(null);
 
   const providers = useQuery({
     queryKey: ['provider.settings'],
@@ -51,25 +62,24 @@ export function SettingsPanel() {
   }, [model, settings.data?.defaultModel]);
 
   const configured = new Set(
-    providers.data?.filter((entry) => entry.configured).map((entry) => entry.providerId),
+    providers.data?.filter((e) => e.configured).map((e) => e.providerId),
   );
 
   async function saveKey() {
     if (!providerId || !apiKey.trim()) return;
     setNotice(null);
     try {
-      await invoke({
-        method: 'provider.saveApiKey',
-        params: { providerId, apiKey: apiKey.trim() },
-      });
+      await invoke({ method: 'provider.saveApiKey', params: { providerId, apiKey: apiKey.trim() } });
       setApiKey('');
-      setNotice(`${providerId} is configured.`);
+      setNoticeType('ok');
+      setNotice(`${providerId} configured.`);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['provider.settings'] }),
         queryClient.invalidateQueries({ queryKey: ['agent.models'] }),
       ]);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Unable to save Provider key.');
+      setNoticeType('err');
+      setNotice(error instanceof Error ? error.message : 'Unable to save key.');
     }
   }
 
@@ -82,86 +92,240 @@ export function SettingsPanel() {
         queryClient.invalidateQueries({ queryKey: ['agent.models'] }),
       ]);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Unable to remove Provider key.');
+      setNoticeType('err');
+      setNotice(error instanceof Error ? error.message : 'Unable to remove key.');
+    }
+  }
+
+  async function saveChatGptKey() {
+    if (!chatgptKey.trim()) return;
+    setChatgptNotice(null);
+    try {
+      await invoke({
+        method: 'provider.saveApiKey',
+        params: { providerId: 'openai', apiKey: chatgptKey.trim() },
+      });
+      setChatgptKey('');
+      setChatgptNotice('ChatGPT / OpenAI connected.');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['provider.settings'] }),
+        queryClient.invalidateQueries({ queryKey: ['agent.models'] }),
+      ]);
+    } catch (error) {
+      setChatgptNotice(error instanceof Error ? error.message : 'Unable to save key.');
     }
   }
 
   async function saveDefaultModel(value: string) {
     setModel(value);
-    const [providerId, ...modelParts] = value.split('/');
-    const modelId = modelParts.join('/');
+    const [pid, ...modelParts] = value.split('/');
+    const mid = modelParts.join('/');
     await invoke({
       method: 'settings.setDefaultModel',
-      params: { model: providerId && modelId ? { providerId, modelId } : undefined },
+      params: { model: pid && mid ? { providerId: pid, modelId: mid } : undefined },
     });
     await queryClient.invalidateQueries({ queryKey: ['settings'] });
   }
 
+  const chatgptConfigured = configured.has('openai');
+
   return (
-    <div className="h-full overflow-auto px-8 py-7">
-      <div className="mx-auto max-w-2xl space-y-8">
-        <header>
-          <p className="text-xs font-semibold tracking-[0.12em] text-muted uppercase">
-            Preferences
-          </p>
-          <h1 className="mt-2 text-xl font-semibold text-foreground">Providers & models</h1>
-          <p className="mt-2 max-w-xl text-sm leading-6 text-muted">
-            API keys are encrypted with macOS Keychain before they are saved locally. Saved keys are
-            never shown again.
-          </p>
+    <div className="h-full overflow-auto">
+      <div className="mx-auto max-w-2xl px-8 py-7 space-y-8">
+        {/* Header */}
+        <header className="flex items-start justify-between">
+          <div>
+            <p className="text-[11px] font-semibold tracking-widest text-muted uppercase">
+              Preferences
+            </p>
+            <h1 className="mt-2 text-xl font-semibold text-foreground">Providers & models</h1>
+            <p className="mt-1.5 max-w-md text-sm leading-6 text-muted">
+              API keys are encrypted with macOS Keychain and never shown again.
+            </p>
+          </div>
+          {onClose ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-1 flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
         </header>
 
-        <section className="space-y-4 border-y border-border py-5">
+        {/* ── ChatGPT subscription card ── */}
+        <section className="rounded-2xl border border-border bg-surface p-5 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-foreground/5 border border-border">
+              <MessageSquare className="h-4.5 w-4.5 text-foreground" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                ChatGPT
+                {chatgptConfigured ? (
+                  <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-medium text-success">
+                    Connected
+                  </span>
+                ) : null}
+              </h2>
+              <p className="text-xs text-muted mt-0.5">
+                Connect your ChatGPT subscription to use GPT-4o and o-series models.
+              </p>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-1 border-b border-border">
+            <TabButton active={chatgptTab === 'apikey'} onClick={() => setChatgptTab('apikey')}>
+              <Key className="h-3.5 w-3.5" />
+              API Key
+            </TabButton>
+            <TabButton
+              active={chatgptTab === 'subscription'}
+              onClick={() => setChatgptTab('subscription')}
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+              Subscription
+            </TabButton>
+          </div>
+
+          {chatgptTab === 'apikey' ? (
+            <div className="space-y-3">
+              <p className="text-xs text-muted">
+                Use an API key from{' '}
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-0.5 text-foreground underline underline-offset-2"
+                  onClick={() =>
+                    window.open?.('https://platform.openai.com/api-keys', '_blank')
+                  }
+                >
+                  platform.openai.com
+                  <ExternalLink className="h-3 w-3" />
+                </button>
+                . This works with any OpenAI plan.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 rounded-xl border border-border bg-surface-raised px-3 py-2 text-sm outline-none focus:border-border-strong"
+                  type="password"
+                  autoComplete="off"
+                  placeholder="sk-…"
+                  value={chatgptKey}
+                  onChange={(e) => setChatgptKey(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') void saveChatGptKey(); }}
+                />
+                <Button disabled={!chatgptKey.trim()} onClick={() => void saveChatGptKey()}>
+                  Connect
+                </Button>
+              </div>
+              {chatgptNotice ? (
+                <p className="text-xs text-muted">{chatgptNotice}</p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="rounded-xl border border-border bg-surface-raised p-4 space-y-2">
+                <p className="text-sm font-medium text-foreground">ChatGPT Plus / Pro</p>
+                <p className="text-xs text-muted leading-5">
+                  ChatGPT subscriptions give you access to ChatGPT.com. To use those models here,
+                  create a separate API key at{' '}
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-0.5 text-foreground underline underline-offset-2"
+                    onClick={() =>
+                      window.open?.('https://platform.openai.com/api-keys', '_blank')
+                    }
+                  >
+                    platform.openai.com
+                    <ExternalLink className="h-3 w-3" />
+                  </button>{' '}
+                  (you can add credits separately, starting from $5).
+                </p>
+                <Button
+                  variant="secondary"
+                  className="w-full mt-2"
+                  onClick={() =>
+                    window.open?.('https://platform.openai.com/api-keys', '_blank')
+                  }
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Open OpenAI Platform
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted/70">
+                Direct ChatGPT account sign-in (OAuth) is coming soon.
+              </p>
+            </div>
+          )}
+
+          {chatgptConfigured ? (
+            <div className="flex items-center justify-between pt-2 border-t border-border">
+              <span className="text-xs text-muted">OpenAI / ChatGPT is connected.</span>
+              <Button variant="ghost" size="sm" onClick={() => void removeKey('openai')}>
+                Disconnect
+              </Button>
+            </div>
+          ) : null}
+        </section>
+
+        {/* ── Other providers ── */}
+        <section className="space-y-4 border-y border-border py-6">
           <div>
-            <h2 className="text-sm font-medium">Connect a Provider</h2>
-            <p className="mt-1 text-xs text-muted">
-              Add or replace an API key for a supported Provider.
-            </p>
+            <h2 className="text-sm font-semibold">Other providers</h2>
+            <p className="mt-1 text-xs text-muted">Add an API key for any supported provider.</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)_auto]">
             <select
-              className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+              className="rounded-xl border border-border bg-surface-raised px-3 py-2 text-sm outline-none focus:border-border-strong"
               value={providerId}
-              onChange={(event) => setProviderId(event.target.value)}
+              onChange={(e) => setProviderId(e.target.value)}
             >
-              {PROVIDERS.map((id) => (
+              {PROVIDERS.map(({ id, label }) => (
                 <option key={id} value={id}>
-                  {id}
+                  {label}
                 </option>
               ))}
             </select>
             <input
-              className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+              className="rounded-xl border border-border bg-surface-raised px-3 py-2 text-sm outline-none focus:border-border-strong"
               type="password"
               autoComplete="off"
               placeholder="API key"
               value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
+              onChange={(e) => setApiKey(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void saveKey(); }}
             />
             <Button disabled={!apiKey.trim()} onClick={() => void saveKey()}>
-              Save key
+              Save
             </Button>
           </div>
-          {notice ? <p className="text-xs text-muted">{notice}</p> : null}
+          {notice ? (
+            <p className={`text-xs ${noticeType === 'err' ? 'text-danger' : 'text-muted'}`}>
+              {notice}
+            </p>
+          ) : null}
         </section>
 
+        {/* ── Configured providers ── */}
         <section className="space-y-3">
           <div>
-            <h2 className="text-sm font-medium">Configured Providers</h2>
-            <p className="mt-1 text-xs text-muted">
-              Remove a stored key to disconnect it from this app.
-            </p>
+            <h2 className="text-sm font-semibold">Configured providers</h2>
+            <p className="mt-1 text-xs text-muted">Remove a stored key to disconnect.</p>
           </div>
           {configured.size === 0 ? (
-            <p className="text-sm text-muted">No API keys saved in Keychain.</p>
+            <p className="text-sm text-muted">No API keys saved.</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1">
               {[...configured].map((id) => (
                 <div
                   key={id}
-                  className="flex items-center justify-between border-b border-border py-2"
+                  className="flex items-center justify-between rounded-xl border border-border bg-surface px-3 py-2.5"
                 >
-                  <span className="text-sm text-foreground">{id}</span>
+                  <span className="text-sm text-foreground">
+                    {PROVIDERS.find((p) => p.id === id)?.label ?? id}
+                  </span>
                   <Button variant="ghost" size="sm" onClick={() => void removeKey(id)}>
                     Remove
                   </Button>
@@ -171,15 +335,16 @@ export function SettingsPanel() {
           )}
         </section>
 
-        <section className="space-y-3 border-t border-border pt-5">
+        {/* ── Default model ── */}
+        <section className="space-y-3 border-t border-border pt-6">
           <div>
-            <h2 className="text-sm font-medium">Default model</h2>
+            <h2 className="text-sm font-semibold">Default model</h2>
             <p className="mt-1 text-xs text-muted">Used when creating a new session.</p>
           </div>
           <select
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+            className="w-full rounded-xl border border-border bg-surface-raised px-3 py-2 text-sm outline-none focus:border-border-strong"
             value={model}
-            onChange={(event) => void saveDefaultModel(event.target.value)}
+            onChange={(e) => void saveDefaultModel(e.target.value)}
           >
             <option value="">Choose automatically</option>
             {(models.data ?? []).map((entry) => {
@@ -194,5 +359,29 @@ export function SettingsPanel() {
         </section>
       </div>
     </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors -mb-px ${
+        active
+          ? 'border-foreground text-foreground'
+          : 'border-transparent text-muted hover:text-foreground'
+      }`}
+    >
+      {children}
+    </button>
   );
 }

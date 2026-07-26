@@ -1,3 +1,5 @@
+import { ChevronLeft } from 'lucide-react';
+
 import { parsePatchFiles } from '@pierre/diffs';
 import { CodeView, type CodeViewDiffItem, type CodeViewHandle } from '@pierre/diffs/react';
 import { useQuery } from '@tanstack/react-query';
@@ -6,8 +8,10 @@ import { type ReactNode, useMemo, useRef, useState } from 'react';
 import type { WorkingTreeDiff } from '@pi-desktop/protocol';
 
 import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import { invoke } from '@/lib/ipc';
 import { useAgentStreamStore } from '@/stores/agent-stream-store';
+import { useUiPrefsStore } from '@/stores/ui-prefs-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 
 interface RecoveryConflict {
@@ -30,17 +34,21 @@ export function DiffPanel({
   onContinue,
   recoveryRunId,
   onRecoveryResolved,
+  onBack,
 }: {
   onContinue: () => void;
   recoveryRunId?: string;
   onRecoveryResolved: () => void;
+  onBack?: () => void;
 }) {
   const project = useWorkspaceStore((s) => s.project);
   const activeRunId = useAgentStreamStore((s) => s.activeRunId);
   const reviewRunId = recoveryRunId ?? activeRunId;
   const codeViewRef = useRef<CodeViewHandle<undefined>>(null);
-  const [diffStyle, setDiffStyle] = useState<'unified' | 'split'>('unified');
-  const [compactContext, setCompactContext] = useState(true);
+  const diffStyle = useUiPrefsStore((s) => s.diffStyle);
+  const setDiffStyle = useUiPrefsStore((s) => s.set);
+  const compactContext = useUiPrefsStore((s) => s.collapseContext);
+  const resolvedTheme = useUiPrefsStore((s) => s.resolvedTheme);
   const [recoveryConflicts, setRecoveryConflicts] = useState<RecoveryConflict[]>([]);
   const enabled = Boolean(project?.trusted && project.isGit);
   const diff = useQuery({
@@ -166,32 +174,35 @@ export function DiffPanel({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex items-center justify-between gap-4 border-b border-border px-5 py-3">
-        <div>
-          <div className="text-sm font-medium">Review changes</div>
-          <div className="text-xs text-muted">
-            {changedFiles.length} changed {changedFiles.length === 1 ? 'file' : 'files'} · compared
-            with HEAD
+        <div className="flex items-center gap-3">
+          {onBack ? (
+            <Button variant="quiet" size="icon" onClick={onBack} title="Back">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          ) : null}
+          <div>
+            <div className="text-sm font-medium">Review changes</div>
+            <div className="text-xs text-muted">
+              {changedFiles.length} changed {changedFiles.length === 1 ? 'file' : 'files'} ·
+              compared with HEAD
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <Button
-            variant={diffStyle === 'unified' ? 'default' : 'ghost'}
+          <Segmented
             size="sm"
-            onClick={() => setDiffStyle('unified')}
-          >
-            Unified
-          </Button>
-          <Button
-            variant={diffStyle === 'split' ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => setDiffStyle('split')}
-          >
-            Split
-          </Button>
+            aria-label="Diff style"
+            options={[
+              { value: 'unified', label: 'Unified' },
+              { value: 'split', label: 'Split' },
+            ]}
+            value={diffStyle}
+            onChange={(value) => setDiffStyle('diffStyle', value)}
+          />
           <Button
             variant={compactContext ? 'secondary' : 'ghost'}
             size="sm"
-            onClick={() => setCompactContext((current) => !current)}
+            onClick={() => setDiffStyle('collapseContext', !compactContext)}
           >
             {compactContext ? 'Compact context' : 'More context'}
           </Button>
@@ -221,9 +232,11 @@ export function DiffPanel({
           ) : null}
         </div>
       </header>
-      {(recoveryConflicts.length > 0 || (checkpoint.data?.conflicts.length ?? 0) > 0) ? (
+      {recoveryConflicts.length > 0 || (checkpoint.data?.conflicts.length ?? 0) > 0 ? (
         <div className="border-b border-warning/30 bg-warning/10 px-5 py-3 text-xs text-warning">
-          <div className="font-medium">Some files were not reverted. No automatic overwrite occurred.</div>
+          <div className="font-medium">
+            Some files were not reverted. No automatic overwrite occurred.
+          </div>
           <ul className="mt-1 list-disc pl-4">
             {[...recoveryConflicts, ...(checkpoint.data?.conflicts ?? [])]
               .filter(
@@ -296,8 +309,8 @@ export function DiffPanel({
             items={items}
             className="min-h-full bg-background text-sm"
             options={{
-              theme: 'pierre-dark',
-              themeType: 'dark',
+              theme: { light: 'github-light', dark: 'pierre-dark' },
+              themeType: resolvedTheme,
               diffStyle,
               collapsedContextThreshold: compactContext ? 3 : 100,
             }}
@@ -354,7 +367,9 @@ function RecoveryPanel({
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-muted">No agent writes were captured before the interruption.</p>
+          <p className="text-sm text-muted">
+            No agent writes were captured before the interruption.
+          </p>
         )}
       </div>
       {checkpoint?.conflicts.length ? (

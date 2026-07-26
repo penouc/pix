@@ -23,6 +23,8 @@ extraMetadata:
 
 mac:
   category: public.app-category.developer-tools
+  # Generated from build/icon.svg by `pnpm icon:generate`.
+  icon: build/icon.icns
   target:
     - target: dir
       arch:
@@ -43,6 +45,7 @@ dmg:
     height: 380
 
 linux:
+  icon: build/icon.png
   target:
     - target: dir
       arch:

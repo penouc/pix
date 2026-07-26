@@ -2,14 +2,20 @@ import type { HTMLAttributes } from 'react';
 
 import { cn } from '@/lib/utils';
 
-export function Badge({ className, ...props }: HTMLAttributes<HTMLSpanElement>) {
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-full border border-border bg-surface-raised px-2 py-0.5 text-[11px] font-medium text-muted',
-        className,
-      )}
-      {...props}
-    />
-  );
+export type BadgeTone = 'accent' | 'accent-2' | 'neutral' | 'outline';
+
+const toneClass: Record<BadgeTone, string> = {
+  accent: 'tag-accent',
+  'accent-2': 'tag-accent-2',
+  neutral: 'tag-neutral',
+  outline: 'tag-outline',
+};
+
+export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
+  tone?: BadgeTone;
+}
+
+/** Organic `.tag` — small labels tinted from the ramps. */
+export function Badge({ className, tone = 'neutral', ...props }: BadgeProps) {
+  return <span className={cn('tag', toneClass[tone], className)} {...props} />;
 }

@@ -1,5 +1,6 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electron';
 import path from 'node:path';
+import fsp from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -24,6 +25,8 @@ import {
   type SessionSummary,
 } from '@pi-desktop/protocol';
 
+import { describeProtectedPaths } from '@pi-desktop/security';
+
 import { getWorkingTreeDiff } from './git/git-diff-service.js';
 import {
   captureCheckpointBaseline,
@@ -34,6 +37,16 @@ import { WriteSnapshotCoordinator } from './checkpoints/write-snapshot-coordinat
 import { ProviderSettingsStore } from './providers/provider-settings-store.js';
 import { DesktopLogger } from './observability/logger.js';
 import { RunMetricsStore } from './observability/run-metrics-store.js';
+import { NotificationService } from './observability/notification-service.js';
+import { readCurrentBranch, searchProjectFiles } from './git/file-search-service.js';
+import { SkillsService } from './skills/skills-service.js';
+import {
+  TerminalService,
+  DEFAULT_TIMEOUT_MS as TERMINAL_TIMEOUT_MS,
+  MAX_OUTPUT_BYTES as TERMINAL_OUTPUT_CAP_BYTES,
+} from './terminal/terminal-service.js';
+import { AutomationStore } from './automations/automation-store.js';
+import { AutomationScheduler } from './automations/automation-scheduler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -48,6 +61,16 @@ let persistedProviderKeysApplied = false;
 const RESOLVED_CHECKPOINT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 let desktopLogger: DesktopLogger | null = null;
 const runMetrics = new RunMetricsStore();
+let skillsService: SkillsService | null = null;
+let terminalService: TerminalService | null = null;
+let automationStore: AutomationStore | null = null;
+let automationScheduler: AutomationScheduler | null = null;
+let notifications: NotificationService | null = null;
+
+function getNotifications(): NotificationService {
+  notifications ??= new NotificationService(() => getProviderSettings().getUiFlags());
+  return notifications;
+}
 
 // M8-1: Message delta batching (§14.1) — coalesce rapid streaming deltas
 // to reduce IPC pressure without adding noticeable latency.
@@ -124,6 +147,60 @@ async function initializeCheckpointRecovery(): Promise<void> {
   }
 }
 
+/**
+ * Count local audit events for the Permissions tab. There are two writers: the
+ * agent pipeline (agentDir/security-audit.jsonl) and the Terminal panel's own
+ * pipeline (userData/audit/terminal.ndjson), so both are summed.
+ */
+async function readAuditSummary(): Promise<{
+  path: string;
+  events: number;
+  approvals: number;
+  exists: boolean;
+}> {
+  const targets = [
+    path.join(app.getPath('userData'), 'pi-agent', 'security-audit.jsonl'),
+    path.join(app.getPath('userData'), 'audit', 'terminal.ndjson'),
+  ];
+
+  let events = 0;
+  let approvals = 0;
+  let exists = false;
+
+  for (const target of targets) {
+    let contents: string;
+    try {
+      contents = await fsp.readFile(target, 'utf8');
+    } catch {
+      continue;
+    }
+    exists = true;
+    for (const line of contents.split('\n')) {
+      if (!line.trim()) continue;
+      events += 1;
+      if (line.includes('"kind":"approval"')) approvals += 1;
+    }
+  }
+
+  return { path: targets[0]!, events, approvals, exists };
+}
+
+/**
+ * In development the dock shows Electron's own icon because there is no bundle
+ * to read Info.plist from. Packaged builds get it from build/icon.icns via
+ * electron-builder, so this only runs unpackaged.
+ */
+function applyDevDockIcon(): void {
+  if (app.isPackaged || process.platform !== 'darwin' || !app.dock) return;
+  const iconPath = path.join(__dirname, '..', '..', 'build', 'icon.png');
+  try {
+    const icon = nativeImage.createFromPath(iconPath);
+    if (!icon.isEmpty()) app.dock.setIcon(icon);
+  } catch (error) {
+    console.warn('[main] could not set the dev dock icon', error);
+  }
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -131,7 +208,9 @@ function createWindow(): void {
     minWidth: 1024,
     minHeight: 680,
     title: 'Pi Agent Desktop',
-    backgroundColor: '#0b0f14',
+    // Organic ground (--color-bg) — avoids a flash of a different colour on show.
+    backgroundColor: '#ffffff',
+    titleBarStyle: 'hiddenInset',
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.mjs'),
       contextIsolation: true,
@@ -167,6 +246,7 @@ function broadcastEvent(event: unknown): void {
 
   // Observe event for run metrics tracking before any buffering.
   runMetrics.observe(data);
+  getNotifications().observe(data);
 
   if (data.type === 'message.delta') {
     // Buffer streaming deltas; flush every 16ms to reduce IPC overhead.
@@ -183,9 +263,149 @@ function broadcastEvent(event: unknown): void {
   if (deltaBuffer.length > 0) {
     flushDeltaBuffer();
   }
+
+  // An approval raised by an automation-started run is answered by the
+  // scheduler per that automation's mode; only unanswered ones reach the user.
+  if (data.type === 'approval.requested' && automationScheduler) {
+    void automationScheduler
+      .handleApproval({
+        runId: data.runId,
+        sessionId: data.sessionId,
+        requestId: data.requestId,
+        summary: data.summary,
+      })
+      .then((handled) => {
+        if (handled) return;
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send(IpcChannels.event, data);
+        }
+      })
+      .catch((error) => {
+        console.error('[main] automation approval handling failed', error);
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send(IpcChannels.event, data);
+        }
+      });
+    return;
+  }
+
+  if (
+    data.type === 'run.completed' ||
+    data.type === 'run.failed' ||
+    data.type === 'run.cancelled'
+  ) {
+    void automationScheduler
+      ?.handleRunFinished({
+        runId: data.runId,
+        projectId: data.projectId,
+        outcome:
+          data.type === 'run.completed'
+            ? 'completed'
+            : data.type === 'run.failed'
+              ? 'failed'
+              : 'cancelled',
+      })
+      .catch((error) => console.error('[main] automation run-finished handling failed', error));
+  }
+
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send(IpcChannels.event, data);
   }
+}
+
+function getSkillsService(): SkillsService {
+  skillsService ??= new SkillsService();
+  return skillsService;
+}
+
+function getTerminalService(): TerminalService {
+  terminalService ??= new TerminalService({
+    auditFilePath: path.join(app.getPath('userData'), 'audit', 'terminal.ndjson'),
+    requestApproval: ({ requestId, draft, projectId, sessionId, runId }) => {
+      // Reuse the agent approval channel so the Renderer needs one UI for both.
+      broadcastEvent({
+        type: 'approval.requested',
+        projectId,
+        sessionId,
+        runId,
+        sequence: nextTerminalSequence(),
+        timestamp: Date.now(),
+        requestId,
+        toolName: draft.toolName,
+        summary: draft.summary,
+        command: draft.command,
+        affectedPaths: draft.affectedPaths,
+        riskLevel: draft.riskLevel,
+        reasons: draft.reasons,
+        rememberable: draft.rememberable,
+      });
+    },
+  });
+  return terminalService;
+}
+
+let terminalSequence = 0;
+function nextTerminalSequence(): number {
+  return (terminalSequence += 1);
+}
+
+function getAutomationStore(): AutomationStore {
+  automationStore ??= new AutomationStore();
+  return automationStore;
+}
+
+/**
+ * Automations can start runs with no one watching. See
+ * docs/decisions/0003-unattended-automations.md for the risk this accepts and
+ * the floor it keeps: policy-engine denials are never auto-approved, because a
+ * denial is not an approval request.
+ */
+function getAutomationScheduler(): AutomationScheduler {
+  if (automationScheduler) return automationScheduler;
+  const store = getAutomationStore();
+  automationScheduler = new AutomationScheduler(store, {
+    startRun: async (automation, claimSession) => {
+      const agent = ensureRuntime();
+      const db = await getDb();
+      const project = db.projects.get(automation.projectId);
+      if (!project) throw new Error(`Project ${automation.projectId} not found`);
+      if (!project.trusted) {
+        throw new Error('Project is not trusted; automations do not bypass Workspace Trust.');
+      }
+      const runtimeSession = await agent.createSession({
+        projectId: project.id,
+        projectPath: project.path,
+        title: `Automation: ${automation.name}`,
+        model: getProviderSettings().getDefaultModel(),
+      });
+      await db.sessions.put({
+        id: runtimeSession.id,
+        projectId: runtimeSession.projectId,
+        title: runtimeSession.title,
+        createdAt: runtimeSession.createdAt,
+        updatedAt: runtimeSession.updatedAt,
+        archived: false,
+      });
+      // Claim before sending: the first turn can raise an approval before
+      // sendMessage resolves, and it must be auto-decided, not shown to nobody.
+      claimSession(runtimeSession.id);
+      const ref = await agent.sendMessage(runtimeSession.id, { text: automation.prompt });
+      return { sessionId: runtimeSession.id, runId: ref.runId };
+    },
+    decide: async (requestId, decision) => {
+      await ensureRuntime().approve(requestId, decision);
+    },
+    recordAudit: (entry) => {
+      desktopLogger?.write('info', '[automations] auto-approval', {
+        automationId: entry.automationId,
+        mode: entry.mode,
+        decision: entry.decision,
+        summary: entry.summary,
+      });
+    },
+    log: (message, meta) => desktopLogger?.write('info', message, meta ?? {}),
+  });
+  return automationScheduler;
 }
 
 function ensureRuntime(): AgentRuntime {
@@ -197,6 +417,9 @@ function ensureRuntime(): AgentRuntime {
       forceFake: process.env['PI_DESKTOP_FAKE_RUNTIME'] === '1',
     });
     runtime.subscribe((event) => broadcastEvent(event));
+    // Restore the approval mode the user chose in Settings.
+    const storedMode = getProviderSettings().getDefaultApprovalMode();
+    void runtime.setApprovalMode?.(storedMode);
     console.warn(
       `[main] AgentRuntime ready (Pi ${PI_SDK_PACKAGES.codingAgent}@${PI_SDK_PACKAGES.version}, agentDir=${agentDir})`,
     );
@@ -257,15 +480,41 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
           piSdk: `${PI_SDK_PACKAGES.codingAgent}@${PI_SDK_PACKAGES.version}`,
           runtimeMode: process.env['PI_DESKTOP_FAKE_RUNTIME'] === '1' ? 'fake' : 'pi',
           authProviders: describeAuthSources(auth),
+          paths: {
+            database: path.join(app.getPath('userData'), 'pi-desktop.sqlite'),
+            logs: app.getPath('logs'),
+            audit: path.join(app.getPath('userData'), 'audit'),
+            userData: app.getPath('userData'),
+          },
+          policy: {
+            ...(() => {
+              const described = describeProtectedPaths();
+              return {
+                protectedBasenames: described.basenames,
+                protectedDirectories: described.directories,
+              };
+            })(),
+            resolvedCheckpointRetentionDays: Math.round(
+              RESOLVED_CHECKPOINT_RETENTION_MS / (24 * 60 * 60 * 1000),
+            ),
+            terminalTimeoutSeconds: TERMINAL_TIMEOUT_MS / 1000,
+            terminalOutputCapBytes: TERMINAL_OUTPUT_CAP_BYTES,
+          },
         });
       }
       case 'project.open': {
-        const project = await projects.open(cmd.params.path);
+        let project = await projects.open(cmd.params.path);
+        // Settings → Projects & trust: "Trust new projects automatically".
+        if (!project.trusted && getProviderSettings().getUiFlags().trustNewProjects) {
+          project = await projects.setTrust(project.id, true);
+        }
         return okResult(project satisfies ProjectSummary);
       }
       case 'project.pickFolder': {
+        const configuredRoot = getProviderSettings().getUiFlags().defaultProjectsFolder;
         const result = mainWindow
           ? await dialog.showOpenDialog(mainWindow, {
+              defaultPath: configuredRoot || undefined,
               properties: ['openDirectory', 'createDirectory'],
               title: 'Open project folder',
             })
@@ -313,7 +562,10 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         return okResult({ configured: false });
       }
       case 'settings.get': {
-        return okResult({ defaultModel: getProviderSettings().getDefaultModel() });
+        return okResult({
+          defaultModel: getProviderSettings().getDefaultModel(),
+          uiFlags: getProviderSettings().getUiFlags(),
+        });
       }
       case 'settings.setDefaultModel': {
         getProviderSettings().setDefaultModel(cmd.params.model);
@@ -348,6 +600,7 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
           updatedAt: runtimeSession.updatedAt,
           archived: false,
         });
+        getNotifications().setSessionTitle(summary.id, summary.title);
         return okResult(summary satisfies SessionSummary);
       }
       case 'session.list': {
@@ -441,6 +694,11 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         return okResult({ ok: true });
       }
       case 'agent.resolveApproval': {
+        // The Terminal panel raises approvals through its own pipeline; try it
+        // first so one Renderer UI can answer both sources.
+        if (terminalService?.resolveApproval(cmd.params.requestId, cmd.params.decision)) {
+          return okResult({ ok: true });
+        }
         await agent.approve(cmd.params.requestId, cmd.params.decision);
         return okResult({ ok: true });
       }
@@ -484,6 +742,141 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       case 'checkpoint.revertAll': {
         return okResult(await checkpointRecovery.revertAll(cmd.params.runId));
       }
+      case 'git.getBranch': {
+        const project = projects.get(cmd.params.projectId);
+        if (!project?.trusted || !project.isGit) return okResult({ branch: null });
+        return okResult({ branch: await readCurrentBranch(project.path) });
+      }
+      case 'project.searchFiles': {
+        const project = projects.get(cmd.params.projectId);
+        if (!project) return errResult('PROJECT_NOT_FOUND', 'Project not found');
+        if (!project.trusted) return errResult('PROJECT_UNTRUSTED', 'Project is not trusted.');
+        return okResult(
+          await searchProjectFiles(project.path, cmd.params.query, cmd.params.limit ?? 40),
+        );
+      }
+      case 'skills.list': {
+        const projectId = cmd.params?.projectId;
+        const project = projectId ? projects.get(projectId) : undefined;
+        return okResult(await getSkillsService().list({ projectId, projectPath: project?.path }));
+      }
+      case 'skills.setEnabled': {
+        await getSkillsService().setEnabled(cmd.params);
+        const project = cmd.params.projectId ? projects.get(cmd.params.projectId) : undefined;
+        return okResult(
+          await getSkillsService().list({
+            projectId: cmd.params.projectId,
+            projectPath: project?.path,
+          }),
+        );
+      }
+      case 'skills.reveal': {
+        shell.showItemInFolder(cmd.params.path);
+        return okResult({ ok: true });
+      }
+      case 'terminal.exec': {
+        const project = projects.get(cmd.params.projectId);
+        if (!project) return errResult('PROJECT_NOT_FOUND', 'Project not found');
+        if (!project.trusted) {
+          return errResult('PROJECT_UNTRUSTED', 'Trust the project before running commands.');
+        }
+        return okResult(
+          await getTerminalService().exec({
+            projectId: project.id,
+            workspaceRoot: project.path,
+            projectTrusted: project.trusted,
+            command: cmd.params.command,
+            cwd: cmd.params.cwd,
+            sessionId: cmd.params.sessionId,
+          }),
+        );
+      }
+      case 'automation.list': {
+        const list = await getAutomationStore().list(cmd.params?.projectId);
+        return okResult(
+          list.map((automation) => ({
+            ...automation,
+            projectName: projects.get(automation.projectId)?.name,
+          })),
+        );
+      }
+      case 'automation.save': {
+        const project = projects.get(cmd.params.projectId);
+        if (!project) return errResult('PROJECT_NOT_FOUND', 'Project not found');
+        const saved = await getAutomationStore().save(cmd.params);
+        getAutomationScheduler().start();
+        return okResult({ ...saved, projectName: project.name });
+      }
+      case 'automation.delete': {
+        await getAutomationStore().remove(cmd.params.id);
+        return okResult({ ok: true });
+      }
+      case 'automation.setEnabled': {
+        const saved = await getAutomationStore().setEnabled(cmd.params.id, cmd.params.enabled);
+        if (cmd.params.enabled) getAutomationScheduler().start();
+        return okResult({
+          ...saved,
+          projectName: projects.get(saved.projectId)?.name,
+        });
+      }
+      case 'automation.runNow': {
+        const handle = await getAutomationScheduler().runNow(cmd.params.id);
+        return okResult({
+          automationId: cmd.params.id,
+          sessionId: handle.sessionId,
+          runId: handle.runId,
+        });
+      }
+      case 'agent.setApprovalMode': {
+        await agent.setApprovalMode?.(cmd.params.mode, cmd.params.sessionId);
+        // Read-only must mean read-only everywhere, including the Terminal panel.
+        if (!cmd.params.sessionId) {
+          getProviderSettings().setDefaultApprovalMode(cmd.params.mode);
+          getTerminalService().setApprovalMode(cmd.params.mode);
+        }
+        return okResult({ mode: cmd.params.mode });
+      }
+      case 'agent.getApprovalMode': {
+        const mode =
+          (await agent.getApprovalMode?.(cmd.params?.sessionId)) ??
+          getProviderSettings().getDefaultApprovalMode();
+        return okResult({ mode });
+      }
+      case 'permissions.listRemembered': {
+        return okResult((await agent.listRememberedDecisions?.()) ?? []);
+      }
+      case 'permissions.clearRemembered': {
+        const cleared = (await agent.clearRememberedDecisions?.(cmd.params)) ?? 0;
+        return okResult({ cleared });
+      }
+      case 'audit.summary': {
+        return okResult(await readAuditSummary());
+      }
+      case 'system.revealPath': {
+        shell.showItemInFolder(cmd.params.path);
+        return okResult({ ok: true });
+      }
+      case 'settings.setDefaultProjectsFolder': {
+        getProviderSettings().setDefaultProjectsFolder(cmd.params.path);
+        return okResult(getProviderSettings().getUiFlags());
+      }
+      case 'settings.pickProjectsFolder': {
+        const result = mainWindow
+          ? await dialog.showOpenDialog(mainWindow, {
+              properties: ['openDirectory', 'createDirectory'],
+              defaultPath: getProviderSettings().getUiFlags().defaultProjectsFolder || undefined,
+            })
+          : { canceled: true, filePaths: [] as string[] };
+        if (result.canceled || !result.filePaths[0]) {
+          return errResult('CANCELLED', 'Folder selection cancelled');
+        }
+        getProviderSettings().setDefaultProjectsFolder(result.filePaths[0]);
+        return okResult(getProviderSettings().getUiFlags());
+      }
+      case 'settings.setUiFlag': {
+        getProviderSettings().setUiFlag(cmd.params.key, cmd.params.value);
+        return okResult(getProviderSettings().getUiFlags());
+      }
       case 'diagnostics.export': {
         return okResult(exportDiagnostics());
       }
@@ -518,6 +911,19 @@ app.whenReady().then(() => {
   void initializeCheckpointRecovery().catch((error) => {
     console.error('[main] checkpoint recovery initialization failed', error);
   });
+
+  // Start the automation scheduler only if something is actually enabled, and
+  // never fire on boot — see docs/decisions/0003-unattended-automations.md.
+  void getAutomationStore()
+    .list()
+    .then((automations) => {
+      if (automations.some((automation) => automation.enabled)) {
+        getAutomationScheduler().start();
+      }
+    })
+    .catch((error) => console.error('[main] automation scheduler start failed', error));
+
+  applyDevDockIcon();
   createWindow();
 
   app.on('activate', () => {

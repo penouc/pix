@@ -127,6 +127,27 @@ export class FakeAgentRuntime implements AgentRuntime {
     session.updatedAt = Date.now();
   }
 
+  private approvalMode: 'ask' | 'auto-reads' | 'read-only' = 'auto-reads';
+
+  async setApprovalMode(
+    mode: 'ask' | 'auto-reads' | 'read-only',
+    _sessionId?: string,
+  ): Promise<void> {
+    this.approvalMode = mode;
+  }
+
+  async getApprovalMode(): Promise<'ask' | 'auto-reads' | 'read-only'> {
+    return this.approvalMode;
+  }
+
+  async listRememberedDecisions(): Promise<[]> {
+    return [];
+  }
+
+  async clearRememberedDecisions(): Promise<number> {
+    return 0;
+  }
+
   async configureProvider(_providerId: string, _apiKey: string): Promise<void> {
     this.assertAlive();
   }

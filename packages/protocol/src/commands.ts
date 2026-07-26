@@ -109,6 +109,139 @@ export const CheckpointRevertFileInputSchema = CheckpointRunInputSchema.extend({
   path: z.string().min(1).max(4096),
 });
 
+export const SearchFilesInputSchema = z.object({
+  projectId: z.string().min(1),
+  query: z.string().max(512),
+  limit: z.number().int().positive().max(200).optional(),
+});
+export type SearchFilesInput = z.infer<typeof SearchFilesInputSchema>;
+
+export const SkillScopeSchema = z.enum(['global', 'project']);
+export type SkillScope = z.infer<typeof SkillScopeSchema>;
+
+export const ListSkillsInputSchema = z.object({
+  projectId: z.string().min(1).optional(),
+});
+export type ListSkillsInput = z.infer<typeof ListSkillsInputSchema>;
+
+export const SetSkillEnabledInputSchema = z.object({
+  skillId: z.string().min(1),
+  enabled: z.boolean(),
+  projectId: z.string().min(1).optional(),
+});
+export type SetSkillEnabledInput = z.infer<typeof SetSkillEnabledInputSchema>;
+
+export const RevealPathInputSchema = z.object({
+  path: z.string().min(1).max(4096),
+});
+export type RevealPathInput = z.infer<typeof RevealPathInputSchema>;
+
+export const TerminalExecInputSchema = z.object({
+  projectId: z.string().min(1),
+  command: z.string().min(1).max(8192),
+  /** Workspace-relative subdirectory to run in. Never escapes the root. */
+  cwd: z.string().max(4096).optional(),
+  sessionId: z.string().min(1).optional(),
+});
+export type TerminalExecInput = z.infer<typeof TerminalExecInputSchema>;
+
+/** How much an automation may do without a human in the loop. */
+export const AutomationApprovalModeSchema = z.enum([
+  /** Every elevated tool call waits for a person — an unattended run stalls. */
+  'ask',
+  /** Reads run freely; writes and bash still wait. */
+  'auto-reads',
+  /** No writes and no bash at all. */
+  'read-only',
+  /** Writes and bash are approved automatically, above the policy floor. */
+  'unattended',
+]);
+export type AutomationApprovalMode = z.infer<typeof AutomationApprovalModeSchema>;
+
+export const AutomationTriggerSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('manual') }),
+  z.object({
+    kind: z.literal('interval'),
+    everyMinutes: z
+      .number()
+      .int()
+      .min(5)
+      .max(60 * 24 * 14),
+  }),
+  z.object({
+    kind: z.literal('daily'),
+    /** Minutes past local midnight. */
+    atMinute: z
+      .number()
+      .int()
+      .min(0)
+      .max(24 * 60 - 1),
+  }),
+  z.object({
+    kind: z.literal('event'),
+    /** Fires after a run you started finishes — never after an automation's own. */
+    on: z.literal('run-completed'),
+  }),
+]);
+export type AutomationTrigger = z.infer<typeof AutomationTriggerSchema>;
+
+export const AutomationDraftSchema = z.object({
+  id: z.string().min(1).optional(),
+  name: z.string().min(1).max(200),
+  projectId: z.string().min(1),
+  prompt: z.string().min(1).max(8000),
+  trigger: AutomationTriggerSchema,
+  approvalMode: AutomationApprovalModeSchema,
+  note: z.string().max(1000).optional(),
+  enabled: z.boolean(),
+});
+export type AutomationDraft = z.infer<typeof AutomationDraftSchema>;
+
+export const AutomationIdInputSchema = z.object({ id: z.string().min(1) });
+export const SetAutomationEnabledInputSchema = z.object({
+  id: z.string().min(1),
+  enabled: z.boolean(),
+});
+export const ListAutomationsInputSchema = z.object({
+  projectId: z.string().min(1).optional(),
+});
+
+export const SetUiSettingInputSchema = z.object({
+  key: z.enum([
+    'trustNewProjects',
+    'reopenLastProject',
+    'notifyApprovalRequired',
+    'notifyRunFinished',
+    'notifyAutomationOpenedTask',
+    'notifyPlaySound',
+    'notifyBadgeDock',
+    'notifyOnlyWhenBackground',
+  ]),
+  value: z.boolean(),
+});
+
+export const ApprovalModeSchema = z.enum(['ask', 'auto-reads', 'read-only']);
+export type ApprovalMode = z.infer<typeof ApprovalModeSchema>;
+
+export const SetApprovalModeInputSchema = z.object({
+  mode: ApprovalModeSchema,
+  /** Omit to change the default applied to new sessions. */
+  sessionId: z.string().min(1).optional(),
+});
+export type SetApprovalModeInput = z.infer<typeof SetApprovalModeInputSchema>;
+
+export const ClearRememberedInputSchema = z.object({
+  scope: z.enum(['session', 'project']).optional(),
+  scopeId: z.string().min(1).optional(),
+});
+export type ClearRememberedInput = z.infer<typeof ClearRememberedInputSchema>;
+
+export const SetDefaultProjectsFolderInputSchema = z.object({
+  /** Empty string clears it back to the OS default. */
+  path: z.string().max(4096),
+});
+export type SetUiSettingInput = z.infer<typeof SetUiSettingInputSchema>;
+
 /** Discriminated command envelope for typed invoke. */
 export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('app.getInfo'), params: z.object({}).optional() }),
@@ -147,6 +280,38 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   }),
   z.object({ method: z.literal('checkpoint.revertAll'), params: CheckpointRunInputSchema }),
   z.object({ method: z.literal('diagnostics.export'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('project.searchFiles'), params: SearchFilesInputSchema }),
+  z.object({ method: z.literal('git.getBranch'), params: GetWorkingTreeDiffInputSchema }),
+  z.object({ method: z.literal('skills.list'), params: ListSkillsInputSchema.optional() }),
+  z.object({ method: z.literal('skills.setEnabled'), params: SetSkillEnabledInputSchema }),
+  z.object({ method: z.literal('skills.reveal'), params: RevealPathInputSchema }),
+  z.object({ method: z.literal('terminal.exec'), params: TerminalExecInputSchema }),
+  z.object({ method: z.literal('automation.list'), params: ListAutomationsInputSchema.optional() }),
+  z.object({ method: z.literal('automation.save'), params: AutomationDraftSchema }),
+  z.object({ method: z.literal('automation.delete'), params: AutomationIdInputSchema }),
+  z.object({
+    method: z.literal('automation.setEnabled'),
+    params: SetAutomationEnabledInputSchema,
+  }),
+  z.object({ method: z.literal('automation.runNow'), params: AutomationIdInputSchema }),
+  z.object({ method: z.literal('settings.setUiFlag'), params: SetUiSettingInputSchema }),
+  z.object({
+    method: z.literal('settings.setDefaultProjectsFolder'),
+    params: SetDefaultProjectsFolderInputSchema,
+  }),
+  z.object({ method: z.literal('settings.pickProjectsFolder'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('audit.summary'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('agent.setApprovalMode'), params: SetApprovalModeInputSchema }),
+  z.object({
+    method: z.literal('agent.getApprovalMode'),
+    params: z.object({ sessionId: z.string().min(1).optional() }).optional(),
+  }),
+  z.object({ method: z.literal('permissions.listRemembered'), params: z.object({}).optional() }),
+  z.object({
+    method: z.literal('permissions.clearRemembered'),
+    params: ClearRememberedInputSchema.optional(),
+  }),
+  z.object({ method: z.literal('system.revealPath'), params: RevealPathInputSchema }),
 ]);
 export type IpcCommand = z.infer<typeof IpcCommandSchema>;
 export type IpcMethod = IpcCommand['method'];

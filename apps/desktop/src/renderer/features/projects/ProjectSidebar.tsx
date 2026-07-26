@@ -1,25 +1,63 @@
 import { useQuery } from '@tanstack/react-query';
-import { FolderGit2, FolderOpen, Plus, ShieldCheck, ShieldAlert } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import {
+  FolderOpen,
+  Plus,
+  Search,
+  Settings,
+  SlidersHorizontal,
+  Sparkles,
+  SquareTerminal,
+  Zap,
+} from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import type { ProjectSummary, SessionSummary } from '@pi-desktop/protocol';
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
+import { useCreateTask } from '@/features/sessions/use-create-task';
 import { invoke, IpcError } from '@/lib/ipc';
+import { dotStyle, statusTone } from '@/lib/status';
+import { cn } from '@/lib/utils';
 import { useAgentStreamStore } from '@/stores/agent-stream-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 
-export function ProjectSidebar() {
+export type SidebarDestination = 'terminal' | 'automations' | 'skills';
+
+interface ProjectSidebarProps {
+  onOpenSettings: () => void;
+  onNewTask: () => void;
+  onSelectSession: () => void;
+  onOpenSearch: () => void;
+  onNavigate: (destination: SidebarDestination) => void;
+  /** Which nav entry reads as current. */
+  activeNav: string;
+}
+
+export function ProjectSidebar({
+  onOpenSettings,
+  onNewTask,
+  onSelectSession,
+  onOpenSearch,
+  onNavigate,
+  activeNav,
+}: ProjectSidebarProps) {
   const project = useWorkspaceStore((s) => s.project);
   const session = useWorkspaceStore((s) => s.session);
   const setProject = useWorkspaceStore((s) => s.setProject);
   const setSession = useWorkspaceStore((s) => s.setSession);
+  const status = useAgentStreamStore((s) => s.status);
+  const activeSessionId = useAgentStreamStore((s) => s.activeSessionId);
   const resetSessionView = useAgentStreamStore((s) => s.resetSessionView);
   const setScope = useAgentStreamStore((s) => s.setScope);
+
+  const { createTask, busy: creating, error: createError } = useCreateTask();
+  const [opening, setOpening] = useState(false);
+  const [showProjectPicker, setShowProjectPicker] = useState(false);
   const [pathInput, setPathInput] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [openError, setOpenError] = useState<string | null>(null);
+
+  const busy = creating || opening;
+  const error = openError ?? createError;
 
   const recent = useQuery({
     queryKey: ['project.listRecent'],
@@ -30,291 +68,294 @@ export function ProjectSidebar() {
     queryKey: ['session.list', project?.id],
     enabled: Boolean(project?.id),
     queryFn: () =>
-      invoke<SessionSummary[]>({
-        method: 'session.list',
-        params: { projectId: project!.id },
-      }),
+      invoke<SessionSummary[]>({ method: 'session.list', params: { projectId: project!.id } }),
   });
 
   useEffect(() => {
     if (project) setPathInput(project.path);
   }, [project]);
 
-  async function applyProject(opened: ProjectSummary) {
-    setProject(opened);
-    setSession(null);
-    resetSessionView();
-    setScope(opened.id, null);
-    setPathInput(opened.path);
-    void recent.refetch();
-  }
-
   async function openProjectPath(path: string) {
-    if (!path.trim()) {
-      setError('Enter a project path or use Browse');
-      return;
-    }
-    setBusy(true);
-    setError(null);
+    if (!path.trim()) return;
+    setOpening(true);
+    setOpenError(null);
     try {
       const opened = await invoke<ProjectSummary>({
         method: 'project.open',
         params: { path: path.trim() },
       });
-      await applyProject(opened);
+      setProject(opened);
+      setSession(null);
+      resetSessionView();
+      setScope(opened.id, null);
+      void recent.refetch();
+      setShowProjectPicker(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setOpenError(err instanceof Error ? err.message : String(err));
     } finally {
-      setBusy(false);
+      setOpening(false);
     }
   }
 
   async function browseFolder() {
-    setBusy(true);
-    setError(null);
+    setOpening(true);
+    setOpenError(null);
     try {
       const opened = await invoke<ProjectSummary>({ method: 'project.pickFolder' });
-      await applyProject(opened);
+      setProject(opened);
+      setSession(null);
+      resetSessionView();
+      setScope(opened.id, null);
+      void recent.refetch();
+      setShowProjectPicker(false);
     } catch (err) {
       if (err instanceof IpcError && err.code === 'CANCELLED') return;
-      setError(err instanceof Error ? err.message : String(err));
+      setOpenError(err instanceof Error ? err.message : String(err));
     } finally {
-      setBusy(false);
+      setOpening(false);
     }
   }
 
-  async function setTrust(trusted: boolean) {
-    if (!project) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const updated = await invoke<ProjectSummary>({
-        method: 'project.setTrust',
-        params: { projectId: project.id, trusted },
-      });
-      setProject(updated);
-      void recent.refetch();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function createSession() {
-    if (!project) return;
-    if (!project.trusted) {
-      setError('Trust this workspace before creating a session.');
+  async function handleNewTask() {
+    if (!project) {
+      setShowProjectPicker(true);
       return;
     }
-    setBusy(true);
-    setError(null);
-    try {
-      const created = await invoke<SessionSummary>({
-        method: 'session.create',
-        params: {
-          projectId: project.id,
-          title: 'Coding session',
-        },
-      });
-      setSession(created);
-      resetSessionView();
-      setScope(project.id, created.id);
-      void sessions.refetch();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
+    const created = await createTask();
+    if (created) onNewTask();
   }
 
   function selectSession(item: SessionSummary) {
     setSession(item);
     resetSessionView();
     setScope(item.projectId, item.id);
+    onSelectSession();
   }
 
-  async function archiveSession(item: SessionSummary) {
-    setBusy(true);
-    setError(null);
-    try {
-      await invoke({
-        method: 'session.archive',
-        params: { sessionId: item.id, archived: true },
-      });
-      if (session?.id === item.id) {
-        setSession(null);
-        resetSessionView();
-        if (project) setScope(project.id, null);
-      }
-      void sessions.refetch();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const tasks = sessions.data ?? [];
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-border px-4 py-4">
-        <div className="text-xs font-semibold tracking-[0.14em] text-muted uppercase">
-          Pi Agent
+    <div className="flex h-full min-h-0 flex-col">
+      {/* Navigation */}
+      <nav className="flex flex-col gap-px px-2 pt-1.5">
+        <NavItem
+          icon={<Plus className="h-[15px] w-[15px]" />}
+          label="New task"
+          shortcut="⌘N"
+          active={activeNav === 'run'}
+          disabled={busy}
+          onClick={() => void handleNewTask()}
+        />
+        <NavItem
+          icon={<Search className="h-[15px] w-[15px]" />}
+          label="Search"
+          shortcut="⌘K"
+          onClick={onOpenSearch}
+        />
+        <NavItem
+          icon={<SquareTerminal className="h-[15px] w-[15px]" />}
+          label="Terminal"
+          active={activeNav === 'terminal'}
+          onClick={() => onNavigate('terminal')}
+        />
+        <NavItem
+          icon={<Zap className="h-[15px] w-[15px]" />}
+          label="Automations"
+          active={activeNav === 'automations'}
+          onClick={() => onNavigate('automations')}
+        />
+        <NavItem
+          icon={<Sparkles className="h-[15px] w-[15px]" />}
+          label="Skills"
+          active={activeNav === 'skills'}
+          onClick={() => onNavigate('skills')}
+        />
+      </nav>
+
+      <div className="mx-3 mt-3 mb-2.5 h-px bg-border" />
+
+      {/* Scope + list actions */}
+      <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5">
+        <Segmented
+          size="sm"
+          aria-label="Group tasks by"
+          options={[{ value: 'project', label: 'Project' }]}
+          value="project"
+        />
+        <div className="flex gap-0.5">
+          <IconButton title="Filtering isn't implemented yet" disabled>
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+          </IconButton>
+          <IconButton title="Browse folder" disabled={busy} onClick={() => void browseFolder()}>
+            <FolderOpen className="h-3.5 w-3.5" />
+          </IconButton>
         </div>
-        <div className="mt-1 text-sm text-foreground">Desktop Workbench</div>
       </div>
 
-      <div className="flex flex-1 flex-col gap-4 overflow-auto p-4">
-        <section className="space-y-2">
-          <div className="text-xs font-medium text-muted">Project path</div>
+      {showProjectPicker ? (
+        <div className="px-2.5 pb-2.5">
           <input
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
-            placeholder="/path/to/git-project"
+            autoFocus
+            className="input h-8 text-xs"
+            placeholder="Path to a Git project…"
             value={pathInput}
-            onChange={(e) => setPathInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void openProjectPath(pathInput);
+            onChange={(event) => setPathInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') void openProjectPath(pathInput);
+              if (event.key === 'Escape') setShowProjectPicker(false);
             }}
           />
-          <div className="flex gap-2">
-            <Button
-              className="flex-1"
-              variant="secondary"
-              disabled={busy}
-              onClick={() => void browseFolder()}
-            >
-              <FolderOpen className="h-4 w-4" />
-              Browse
-            </Button>
-            <Button
-              className="flex-1"
-              variant="secondary"
-              disabled={busy}
-              onClick={() => void openProjectPath(pathInput)}
-            >
-              Open
-            </Button>
-          </div>
-        </section>
+        </div>
+      ) : null}
 
-        {recent.data && recent.data.length > 0 ? (
-          <section className="space-y-2">
-            <div className="text-xs font-medium text-muted">Recent</div>
-            <ul className="space-y-1">
-              {recent.data.slice(0, 6).map((item) => (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    className="w-full truncate rounded-lg border border-transparent px-2 py-1.5 text-left text-xs text-muted hover:border-border hover:bg-surface-raised hover:text-foreground"
-                    title={item.path}
-                    disabled={busy}
-                    onClick={() => void openProjectPath(item.path)}
-                  >
-                    {item.name}
-                    {!item.trusted ? ' · untrusted' : ''}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
+      {error ? (
+        <div className="px-3.5 pb-2 text-[11px] leading-snug text-danger">{error}</div>
+      ) : null}
 
-        {project ? (
-          <section className="space-y-2 rounded-xl border border-border bg-surface-raised p-3">
-            <div className="flex items-start gap-2">
-              <FolderGit2 className="mt-0.5 h-4 w-4 text-accent" />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium">{project.name}</div>
-                <div className="mt-0.5 truncate text-xs text-muted" title={project.path}>
-                  {project.path}
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  <Badge>{project.isGit ? 'Git' : 'No Git'}</Badge>
-                  <Badge className={project.trusted ? 'text-success' : 'text-warning'}>
-                    {project.trusted ? 'Trusted' : 'Untrusted'}
-                  </Badge>
-                </div>
-              </div>
-            </div>
-            {project.trusted ? (
-              <Button
-                className="w-full"
-                size="sm"
-                variant="ghost"
+      {/* Lists */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-2.5 pb-2">
+        <SectionLabel>Projects</SectionLabel>
+        <div className="mb-3.5 flex flex-col gap-px">
+          {recent.data?.length ? (
+            recent.data.slice(0, 6).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                title={item.path}
                 disabled={busy}
-                onClick={() => void setTrust(false)}
+                onClick={() => void openProjectPath(item.path)}
+                className={cn(
+                  'w-full cursor-pointer truncate rounded-xl px-2.5 py-1.5 text-left text-[12.5px] transition-colors',
+                  project?.id === item.id
+                    ? 'bg-accent-soft text-accent-800'
+                    : 'text-foreground/60 hover:bg-foreground/[0.07] hover:text-foreground',
+                )}
               >
-                <ShieldAlert className="h-4 w-4" />
-                Revoke trust
-              </Button>
-            ) : (
-              <Button
-                className="w-full"
-                size="sm"
-                disabled={busy}
-                onClick={() => void setTrust(true)}
-              >
-                <ShieldCheck className="h-4 w-4" />
-                Trust workspace
-              </Button>
-            )}
-          </section>
-        ) : null}
-
-        <section className="space-y-2">
-          <div className="text-xs font-medium text-muted">Sessions</div>
-          {sessions.data && sessions.data.length > 0 ? (
-            <ul className="space-y-1">
-              {sessions.data.map((item) => (
-                <li
-                  key={item.id}
-                  className={`flex items-center gap-1 rounded-lg border px-2 py-1.5 ${
-                    session?.id === item.id
-                      ? 'border-accent/40 bg-accent-soft'
-                      : 'border-border bg-background'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 truncate text-left text-xs"
-                    onClick={() => selectSession(item)}
-                  >
-                    {item.title}
-                  </button>
-                  <button
-                    type="button"
-                    className="text-[10px] text-muted hover:text-danger"
-                    title="Archive"
-                    disabled={busy}
-                    onClick={() => void archiveSession(item)}
-                  >
-                    ×
-                  </button>
-                </li>
-              ))}
-            </ul>
+                {item.name}
+              </button>
+            ))
           ) : (
-            <div className="text-xs text-muted">No saved sessions</div>
+            <EmptyHint>No projects yet</EmptyHint>
           )}
-          <Button
-            className="w-full"
-            disabled={!project || busy || !project.trusted}
-            onClick={() => void createSession()}
-          >
-            <Plus className="h-4 w-4" />
-            New session
-          </Button>
-          {project && !project.trusted ? (
-            <div className="text-[11px] text-warning">Trust the workspace to create a session.</div>
-          ) : null}
-        </section>
+        </div>
 
-        {error ? (
-          <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
-            {error}
-          </div>
-        ) : null}
+        <SectionLabel>Tasks</SectionLabel>
+        <div className="flex flex-col gap-px">
+          {tasks.length ? (
+            tasks.map((item) => {
+              const isSelected = session?.id === item.id;
+              // The pulsing dot marks the session that actually owns the run.
+              const isLive = item.id === activeSessionId;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => selectSession(item)}
+                  className={cn(
+                    'density-row flex w-full cursor-pointer items-center gap-2 rounded-xl px-2.5 py-1.5 text-[12.5px] transition-colors',
+                    isSelected
+                      ? 'bg-accent-soft text-foreground'
+                      : 'text-foreground/60 hover:bg-foreground/[0.07] hover:text-foreground',
+                  )}
+                >
+                  <span style={dotStyle(isLive ? statusTone(status) : 'done')} />
+                  <span className="min-w-0 flex-1 truncate text-left">{item.title}</span>
+                </button>
+              );
+            })
+          ) : (
+            <EmptyHint>{project ? 'No tasks yet' : 'Open a project first'}</EmptyHint>
+          )}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="flex flex-none items-center border-t border-border px-2.5 py-2">
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="flex h-[30px] w-full cursor-pointer items-center justify-start gap-2.5 rounded-full px-2.5 text-[12.5px] text-foreground/[0.68] transition-colors hover:bg-foreground/[0.08] hover:text-foreground"
+        >
+          <Settings className="h-[15px] w-[15px]" />
+          Settings
+        </button>
       </div>
     </div>
   );
+}
+
+function NavItem({
+  icon,
+  label,
+  shortcut,
+  onClick,
+  disabled,
+  active,
+  title,
+}: {
+  icon?: ReactNode;
+  label: string;
+  shortcut?: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  active?: boolean;
+  title?: string;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      title={title}
+      className={cn(
+        'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-[7px] text-[13px] transition-colors',
+        active
+          ? 'bg-background text-foreground shadow-[var(--shadow-sm)]'
+          : 'text-foreground/[0.68]',
+        disabled
+          ? 'cursor-not-allowed opacity-45'
+          : 'cursor-pointer hover:bg-foreground/[0.07] hover:text-foreground',
+      )}
+    >
+      {icon ? <span className="flex-none opacity-80">{icon}</span> : null}
+      <span className="flex-1 text-left">{label}</span>
+      {shortcut ? <span className="font-mono text-[11px] opacity-50">{shortcut}</span> : null}
+    </button>
+  );
+}
+
+function IconButton({
+  children,
+  title,
+  onClick,
+  disabled,
+}: {
+  children: ReactNode;
+  title?: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      disabled={disabled}
+      onClick={onClick}
+      className="flex h-6 w-6 items-center justify-center rounded-full text-muted transition-colors not-disabled:cursor-pointer not-disabled:hover:bg-foreground/[0.08] not-disabled:hover:text-foreground disabled:opacity-40"
+    >
+      {children}
+    </button>
+  );
+}
+
+function SectionLabel({ children }: { children: string }) {
+  return (
+    <div className="px-1.5 pt-0.5 pb-1 text-[10px] font-bold tracking-[0.14em] text-foreground/45 uppercase">
+      {children}
+    </div>
+  );
+}
+
+function EmptyHint({ children }: { children: string }) {
+  return <div className="px-1.5 py-1 text-[11.5px] text-foreground/40">{children}</div>;
 }

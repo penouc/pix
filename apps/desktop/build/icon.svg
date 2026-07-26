@@ -1,0 +1,75 @@
+<!--
+  Loam app icon — transcribed from the Claude Design file `Loam Icon.dc.html`.
+
+  A seed breaking into a sprout: terracotta ground, sage growth. Colours are the
+  Organic design system's own steps, inlined as literal hex because this file is
+  rasterised outside the app where CSS variables do not exist:
+
+    accent-400   #f6a06b   tile gradient start
+    accent-700   #8c491a   tile gradient end
+    accent-900   #402310   soil shadow
+    accent-2-200 #e1eecc   stem + left leaf
+    accent-2     #7a8a5e   right leaf
+
+  Canvas is 1024 with the tile inset 100px on each side, per the macOS
+  convention that an app icon leaves margin around its tile rather than
+  bleeding to the edge. The artwork is the design's 256-unit viewBox scaled
+  onto the tile (824 / 256 = 3.21875).
+
+  Regenerate the PNG/icns set with `pnpm icon:generate`.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <!--
+      CSS `linear-gradient(160deg, …)` on a square: the gradient line points
+      (sin160, -cos160) = (0.342, 0.940), so it runs from upper-left to
+      lower-right. Endpoints are the CSS gradient line's, in bounding-box units.
+    -->
+    <linearGradient id="tile" x1="0.281" y1="-0.103" x2="0.719" y2="1.103">
+      <stop offset="0" stop-color="#f6a06b" />
+      <stop offset="1" stop-color="#8c491a" />
+    </linearGradient>
+
+    <!-- The design's ::after sheen: white 22% fading out by 45%. -->
+    <linearGradient id="sheen" x1="0.281" y1="-0.103" x2="0.719" y2="1.103">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22" />
+      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+
+    <clipPath id="tileClip">
+      <rect x="100" y="100" width="824" height="824" rx="184" ry="184" />
+    </clipPath>
+  </defs>
+
+  <!-- Tile -->
+  <rect x="100" y="100" width="824" height="824" rx="184" ry="184" fill="url(#tile)" />
+
+  <!-- Artwork, clipped to the tile so nothing spills over the rounded corners. -->
+  <g clip-path="url(#tileClip)">
+    <g transform="translate(100 100) scale(3.21875)">
+      <!--
+        Soil mound behind the stem. The design shows this only on its large
+        preview and drops it at small sizes, so the generator strips this
+        element (by id) below 128px where it would read as mud.
+      -->
+      <ellipse id="mound" cx="128" cy="176" rx="34" ry="26" fill="#402310" opacity="0.18" />
+      <!-- Stem -->
+      <path
+        d="M128 190 C128 150 128 130 128 108"
+        stroke="#e1eecc"
+        stroke-width="12"
+        stroke-linecap="round"
+        fill="none"
+      />
+      <!-- Left leaf -->
+      <path d="M128 138 C128 108 96 96 70 100 C74 128 96 146 128 138 Z" fill="#e1eecc" />
+      <!-- Right leaf -->
+      <path d="M128 118 C128 92 156 78 184 82 C180 110 156 130 128 118 Z" fill="#7a8a5e" />
+      <!-- Ground shadow -->
+      <ellipse cx="128" cy="192" rx="46" ry="16" fill="#402310" opacity="0.22" />
+    </g>
+
+    <!-- Sheen last, over the artwork, exactly as the CSS ::after sits on top. -->
+    <rect x="100" y="100" width="824" height="824" fill="url(#sheen)" />
+  </g>
+</svg>

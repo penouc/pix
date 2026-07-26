@@ -35,6 +35,18 @@ const PROTECTED_DIR_SEGMENTS = new Set([
 /**
  * Returns true if the absolute path looks like a sensitive credential or secret location.
  */
+/**
+ * The rules `isProtectedPath` enforces, for display. Exported so the Settings
+ * screen can show what is actually refused instead of a transcribed copy that
+ * drifts as these sets change.
+ */
+export function describeProtectedPaths(): { basenames: string[]; directories: string[] } {
+  return {
+    basenames: [...PROTECTED_BASENAMES].sort(),
+    directories: [...PROTECTED_DIR_SEGMENTS].sort(),
+  };
+}
+
 export function isProtectedPath(absolutePath: string): boolean {
   const normalized = path.normalize(absolutePath);
   const base = path.basename(normalized).toLowerCase();

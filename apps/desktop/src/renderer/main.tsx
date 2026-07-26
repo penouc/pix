@@ -3,7 +3,11 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { App } from './app/App';
+import { initUiPrefs } from './stores/ui-prefs-store';
 import './styles/globals.css';
+
+// Resolve theme/density before the first paint so there is no flash.
+initUiPrefs();
 
 const queryClient = new QueryClient({
   defaultOptions: {
