@@ -43,15 +43,15 @@ interface StoredSettings {
   uiFlags?: Partial<UiFlags>;
   defaultApprovalMode?: StoredApprovalMode;
   /**
-   * `provider/model` keys the model picker should offer, chosen in Settings.
+   * `provider/model` keys pinned to the top of the model picker.
    *
-   * This exists because "configured" is not a usable filter on its own. Pi knows
-   * ~1100 models; credentials (a key here, an env var, or another tool's auth
-   * store) make ~90 of them runnable, and nothing narrows that further. An empty
-   * list means "no choice made yet" and every runnable model is offered — the
-   * picker must not be empty just because this has never been touched.
+   * These *order* the picker, they do not filter it. An earlier version used the
+   * same list to hide everything unselected, which made one starred model hide
+   * the other eighty-eight — a pin and a filter are different things and only
+   * one of them is what "favourite" means. The picker reaches every runnable
+   * model through provider drill-down and search regardless of this list.
    */
-  visibleModels?: string[];
+  favoriteModels?: string[];
 }
 
 export interface ProviderSettingSummary {
@@ -120,15 +120,14 @@ export class ProviderSettingsStore {
     this.write({ ...this.read(), defaultModel: model });
   }
 
-  getVisibleModels(): string[] {
-    return this.read().visibleModels ?? [];
+  getFavoriteModels(): string[] {
+    return this.read().favoriteModels ?? [];
   }
 
-  /** Empty array restores "offer everything runnable". */
-  setVisibleModels(keys: string[]): void {
+  setFavoriteModels(keys: string[]): void {
     const settings = this.read();
     // De-duplicated and sorted so the stored list is stable to diff and read.
-    settings.visibleModels = [...new Set(keys)].sort();
+    settings.favoriteModels = [...new Set(keys)].sort();
     this.write(settings);
   }
 
@@ -141,7 +140,7 @@ export class ProviderSettingsStore {
       /*
        * Every field has to be carried through. This used to return only
        * `providers` and `defaultModel`, so `uiFlags`, `defaultApprovalMode` and
-       * `visibleModels` were dropped on every read — which meant not only that
+       * `favoriteModels` were dropped on every read — which meant not only that
        * they never survived a restart, but that any *other* setting being written
        * silently reset them, because a write starts from `read()`.
        */
@@ -152,7 +151,13 @@ export class ProviderSettingsStore {
         ...(parsed.defaultApprovalMode
           ? { defaultApprovalMode: parsed.defaultApprovalMode }
           : {}),
-        ...(Array.isArray(parsed.visibleModels) ? { visibleModels: parsed.visibleModels } : {}),
+        // `visibleModels` is the previous name for this list; read it so a
+        // selection made before the rename is not silently discarded.
+        ...(Array.isArray(parsed.favoriteModels)
+          ? { favoriteModels: parsed.favoriteModels }
+          : Array.isArray((parsed as { visibleModels?: string[] }).visibleModels)
+            ? { favoriteModels: (parsed as { visibleModels?: string[] }).visibleModels }
+            : {}),
       };
     } catch {
       return { providers: [] };

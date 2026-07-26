@@ -942,12 +942,12 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         if (!agent.listProviders) return okResult([]);
         return okResult(await agent.listProviders());
       }
-      case 'settings.getVisibleModels': {
-        return okResult({ keys: getProviderSettings().getVisibleModels() });
+      case 'settings.getFavoriteModels': {
+        return okResult({ keys: getProviderSettings().getFavoriteModels() });
       }
-      case 'settings.setVisibleModels': {
-        getProviderSettings().setVisibleModels(cmd.params.keys);
-        return okResult({ keys: getProviderSettings().getVisibleModels() });
+      case 'settings.setFavoriteModels': {
+        getProviderSettings().setFavoriteModels(cmd.params.keys);
+        return okResult({ keys: getProviderSettings().getFavoriteModels() });
       }
       case 'agent.authStatus': {
         return okResult(await readAuthStatus(agent));

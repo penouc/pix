@@ -10,18 +10,13 @@ import { invoke } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 
 /**
- * Choose which models the composer's picker offers.
+ * Pick favourites in bulk — the same list the composer's star toggles.
  *
- * This is here because credentials alone do not narrow the list usefully. Pi
- * knows on the order of a thousand models; a credential — a key saved here, an
- * environment variable, or another tool's auth store — makes roughly ninety of
- * them runnable, and there is nothing further to filter on. Ninety options in a
- * dropdown is not a choice, it is a wall.
- *
- * Nothing selected means "offer everything runnable", so the picker is never
- * empty just because this screen has not been visited.
+ * Favourites pin to the top of the picker; they never hide anything. The picker
+ * itself handles length with search and provider drill-down, so this screen is
+ * for setting up the handful you use rather than for filtering the rest away.
  */
-export function VisibleModelsSection() {
+export function FavoriteModelsSection() {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState('');
 
@@ -30,18 +25,15 @@ export function VisibleModelsSection() {
     queryFn: () => invoke<ModelInfo[]>({ method: 'agent.listModels' }),
   });
   const visible = useQuery({
-    queryKey: ['settings.getVisibleModels'],
-    queryFn: () => invoke<{ keys: string[] }>({ method: 'settings.getVisibleModels' }),
+    queryKey: ['settings.getFavoriteModels'],
+    queryFn: () => invoke<{ keys: string[] }>({ method: 'settings.getFavoriteModels' }),
   });
 
   const save = useMutation({
     mutationFn: (keys: string[]) =>
-      invoke<{ keys: string[] }>({ method: 'settings.setVisibleModels', params: { keys } }),
-    onSuccess: (next) => {
-      queryClient.setQueryData(['settings.getVisibleModels'], next);
-      // The composer's picker reads the same two queries.
-      void queryClient.invalidateQueries({ queryKey: ['agent.models'] });
-    },
+      invoke<{ keys: string[] }>({ method: 'settings.setFavoriteModels', params: { keys } }),
+    // The composer's picker reads this exact query key, so it updates with it.
+    onSuccess: (next) => queryClient.setQueryData(['settings.getFavoriteModels'], next),
   });
 
   const runnable = useMemo(
@@ -95,13 +87,11 @@ export function VisibleModelsSection() {
           onChange={(event) => setFilter(event.target.value)}
         />
         <span className="flex-none text-[11px] text-muted">
-          {showingAll
-            ? `all ${runnable.length} offered`
-            : `${selected.size} of ${runnable.length} offered`}
+          {showingAll ? `none pinned of ${runnable.length}` : `${selected.size} pinned`}
         </span>
         {!showingAll ? (
           <Button variant="ghost" size="sm" onClick={() => save.mutate([])}>
-            Reset
+            Clear
           </Button>
         ) : null}
       </div>
@@ -160,7 +150,8 @@ export function VisibleModelsSection() {
 
       <p className="mt-2.5 text-[11.5px] leading-relaxed text-muted">
         Only models with usable credentials are listed — a key saved here, an environment variable,
-        or another tool&apos;s auth store. With nothing ticked the picker offers all of them.
+        or another tool&apos;s auth store. Pinning changes the order of the composer&apos;s picker,
+        never what it contains.
       </p>
     </>
   );

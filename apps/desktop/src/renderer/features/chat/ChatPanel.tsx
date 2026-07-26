@@ -26,7 +26,7 @@ import { Button } from '@/components/ui/button';
 import { PiAvatar } from '@/components/ui/pi-mark';
 import { Segmented } from '@/components/ui/segmented';
 import { Markdown } from '@/features/chat/Markdown';
-import { ModelPill } from '@/features/models/ModelPill';
+import { ModelPicker } from '@/features/models/ModelPicker';
 import { useCreateTask } from '@/features/sessions/use-create-task';
 import { invoke } from '@/lib/ipc';
 import {
@@ -519,18 +519,27 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
             ref={composerRef}
             className="max-h-44 min-h-[52px] w-full resize-none bg-transparent px-4 py-3 text-[13.5px] leading-normal outline-none placeholder:text-muted"
             placeholder={
-              session
-                ? 'Describe the change you want, $ for skills…'
-                : 'Open a project and start a task to begin…'
+              project
+                ? 'Describe the change you want, $ for skills… (⏎ to send, ⇧⏎ for a new line)'
+                : 'Open a project to begin…'
             }
-            disabled={!session || sending}
+            disabled={!project || sending}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-                event.preventDefault();
-                void send();
+              if (event.key !== 'Enter') return;
+              // Shift+Enter is the newline. Enter sends, which is what a chat
+              // composer is expected to do; ⌘/Ctrl+Enter keeps working for the
+              // muscle memory it was built with.
+              if (event.shiftKey) return;
+              event.preventDefault();
+              // With the skill list open, Enter takes the highlighted skill
+              // rather than sending a half-typed `$re`.
+              if (skillMenuOpen && skillMatches.length) {
+                applySkill(skillMatches[0]!);
+                return;
               }
+              void send();
             }}
           />
 
@@ -550,8 +559,8 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
             </span>
             {/* Model choice belongs with the send button: it is a property of the
                 message you are about to send, not of the window. */}
-            <ModelPill />
-            <span className="flex-none font-mono text-[11px] text-muted">⌘↵</span>
+            <ModelPicker />
+            <span className="flex-none font-mono text-[11px] text-muted">↵</span>
             <Button
               size="icon"
               className="h-[30px] w-[30px] flex-none"
@@ -560,7 +569,7 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
               // next to a working ⌘↵.
               disabled={!project || !draft.trim() || sending}
               onClick={() => void send()}
-              title="Send (⌘↵)"
+              title="Send (⏎ — use ⇧⏎ for a new line)"
             >
               <ArrowUp className="h-3.5 w-3.5" />
             </Button>

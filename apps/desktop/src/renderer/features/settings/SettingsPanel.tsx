@@ -6,7 +6,7 @@ import type { ProviderCatalogEntry, ProviderSetting, Settings } from '@pi-deskto
 
 import { Button } from '@/components/ui/button';
 import { useOfferedModels } from '@/features/models/use-offered-models';
-import { VisibleModelsSection } from '@/features/models/VisibleModelsSection';
+import { FavoriteModelsSection } from '@/features/models/FavoriteModelsSection';
 import { SubscriptionsSection } from '@/features/settings/SubscriptionsSection';
 import { invoke } from '@/lib/ipc';
 
@@ -303,12 +303,12 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
         {/* ── Which models the picker offers ── */}
         <section className="space-y-3 border-t border-border pt-6">
           <div>
-            <h2 className="text-sm font-semibold">Models in the picker</h2>
+            <h2 className="text-sm font-semibold">Favourite models</h2>
             <p className="mt-1 text-xs text-muted">
-              Which of your runnable models the composer offers.
+              Pinned to the top of the composer&apos;s picker. You can also star them there.
             </p>
           </div>
-          <VisibleModelsSection />
+          <FavoriteModelsSection />
         </section>
 
         {/* ── Default model ── */}

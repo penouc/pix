@@ -148,11 +148,11 @@ export const ProviderLoginSubmitInputSchema = ProviderLoginIdInputSchema.extend(
 });
 export type ProviderLoginSubmitInput = z.infer<typeof ProviderLoginSubmitInputSchema>;
 
-export const SetVisibleModelsInputSchema = z.object({
-  /** `provider/model` keys. Empty restores "offer every runnable model". */
+export const SetFavoriteModelsInputSchema = z.object({
+  /** `provider/model` keys pinned to the top of the picker. */
   keys: z.array(z.string().min(1)).max(500),
 });
-export type SetVisibleModelsInput = z.infer<typeof SetVisibleModelsInputSchema>;
+export type SetFavoriteModelsInput = z.infer<typeof SetFavoriteModelsInputSchema>;
 
 export const IndexTreeInputSchema = z.object({
   projectId: z.string().min(1),
@@ -351,10 +351,10 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('agent.setModel'), params: SetModelInputSchema }),
   z.object({ method: z.literal('agent.resolveApproval'), params: ResolveApprovalInputSchema }),
   z.object({ method: z.literal('agent.listModels'), params: z.object({}).optional() }),
-  z.object({ method: z.literal('settings.getVisibleModels'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('settings.getFavoriteModels'), params: z.object({}).optional() }),
   z.object({
-    method: z.literal('settings.setVisibleModels'),
-    params: SetVisibleModelsInputSchema,
+    method: z.literal('settings.setFavoriteModels'),
+    params: SetFavoriteModelsInputSchema,
   }),
   z.object({ method: z.literal('agent.authStatus'), params: z.object({}).optional() }),
   z.object({ method: z.literal('checkpoint.listRecoverable'), params: z.object({}).optional() }),
