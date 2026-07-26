@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronLeft, ChevronRight, Search, Star } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import type { ModelInfo } from '@pi-desktop/protocol';
 
@@ -10,6 +11,7 @@ import {
   useOfferedModels,
 } from '@/features/models/use-offered-models';
 import { invoke } from '@/lib/ipc';
+import { useAnchorAbove, useDismiss } from '@/lib/use-dismiss';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 
@@ -50,22 +52,11 @@ export function ModelPicker() {
     setSelectedModel(modelKey(preferred));
   }, [models, favorites, selectedModel, setSelectedModel]);
 
-  // Close on an outside click or Escape, like every other menu in the app.
-  useEffect(() => {
-    if (!open) return;
-    function onPointerDown(event: PointerEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    }
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false);
-    }
-    window.addEventListener('pointerdown', onPointerDown);
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('pointerdown', onPointerDown);
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [open]);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(open, [rootRef, menuRef], close);
+  // Right-aligned: the picker sits at the right end of the composer footer.
+  const anchor = useAnchorAbove(open, rootRef, 'right');
 
   const needle = query.trim().toLowerCase();
   const searchHits = useMemo(
@@ -122,113 +113,125 @@ export function ModelPicker() {
         <ChevronDown className="h-3 w-3 flex-none text-muted" />
       </button>
 
-      {open ? (
-        // Anchored above: the composer sits at the bottom of the window, so a
-        // menu opening downwards would be clipped.
-        <div className="absolute bottom-[calc(100%+6px)] right-0 z-50 flex max-h-[380px] w-[320px] flex-col overflow-hidden rounded-[16px] border border-border bg-background shadow-[var(--shadow-lg)]">
-          <div className="flex flex-none items-center gap-2 border-b border-border px-3 py-2">
-            {provider && !needle ? (
-              <button
-                type="button"
-                onClick={() => setProvider(null)}
-                title="All providers"
-                className="flex cursor-pointer items-center gap-0.5 border-0 bg-transparent p-0 text-[11px] text-muted hover:text-foreground"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </button>
-            ) : (
-              <Search className="h-3.5 w-3.5 flex-none opacity-45" />
-            )}
-            <input
-              autoFocus
-              className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[12.5px] outline-none placeholder:text-muted"
-              placeholder={provider && !needle ? `Search ${provider}…` : 'Search all models…'}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </div>
+      {open && anchor
+        ? createPortal(
+            // Portalled and anchored above: the composer card clips its overflow, and
+            // it sits at the bottom of the window, so neither an in-flow menu nor a
+            // downward one would be fully visible.
+            <div
+              ref={menuRef}
+              style={anchor}
+              className="z-50 flex w-[320px] flex-col overflow-hidden rounded-[16px] border border-border bg-background shadow-[var(--shadow-lg)]"
+            >
+              <div className="flex flex-none items-center gap-2 border-b border-border px-3 py-2">
+                {provider && !needle ? (
+                  <button
+                    type="button"
+                    onClick={() => setProvider(null)}
+                    title="All providers"
+                    className="flex cursor-pointer items-center gap-0.5 border-0 bg-transparent p-0 text-[11px] text-muted hover:text-foreground"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                ) : (
+                  <Search className="h-3.5 w-3.5 flex-none opacity-45" />
+                )}
+                <input
+                  autoFocus
+                  className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[12.5px] outline-none placeholder:text-muted"
+                  placeholder={provider && !needle ? `Search ${provider}…` : 'Search all models…'}
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+              </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto py-1">
-            {needle ? (
-              searchHits.length ? (
-                <>
-                  <GroupLabel>{searchHits.length} match{searchHits.length === 1 ? '' : 'es'}</GroupLabel>
-                  {searchHits.map((model) => (
-                    <Row
-                      key={modelKey(model)}
-                      model={model}
-                      showProvider
-                      selected={modelKey(model) === selectedModel}
-                      starred={favorites.has(modelKey(model))}
-                      onChoose={() => choose(model)}
-                      onStar={() => toggleFavorite(modelKey(model))}
-                    />
-                  ))}
-                </>
-              ) : (
-                <Empty>No model matches “{query}”.</Empty>
-              )
-            ) : provider ? (
-              <>
-                <GroupLabel>{provider}</GroupLabel>
-                {drilled.map((model) => (
-                  <Row
-                    key={modelKey(model)}
-                    model={model}
-                    selected={modelKey(model) === selectedModel}
-                    starred={favorites.has(modelKey(model))}
-                    onChoose={() => choose(model)}
-                    onStar={() => toggleFavorite(modelKey(model))}
-                  />
-                ))}
-              </>
-            ) : (
-              <>
-                {favorited.length ? (
+              <div className="min-h-0 flex-1 overflow-y-auto py-1">
+                {needle ? (
+                  searchHits.length ? (
+                    <>
+                      <GroupLabel>
+                        {searchHits.length} match{searchHits.length === 1 ? '' : 'es'}
+                      </GroupLabel>
+                      {searchHits.map((model) => (
+                        <Row
+                          key={modelKey(model)}
+                          model={model}
+                          showProvider
+                          selected={modelKey(model) === selectedModel}
+                          starred={favorites.has(modelKey(model))}
+                          onChoose={() => choose(model)}
+                          onStar={() => toggleFavorite(modelKey(model))}
+                        />
+                      ))}
+                    </>
+                  ) : (
+                    <Empty>No model matches “{query}”.</Empty>
+                  )
+                ) : provider ? (
                   <>
-                    <GroupLabel>Favourites</GroupLabel>
-                    {favorited.map((model) => (
+                    <GroupLabel>{provider}</GroupLabel>
+                    {drilled.map((model) => (
                       <Row
                         key={modelKey(model)}
                         model={model}
-                        showProvider
                         selected={modelKey(model) === selectedModel}
-                        starred
+                        starred={favorites.has(modelKey(model))}
                         onChoose={() => choose(model)}
                         onStar={() => toggleFavorite(modelKey(model))}
                       />
                     ))}
                   </>
-                ) : null}
-                <GroupLabel>Providers</GroupLabel>
-                {providers.map(([id, group]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setProvider(id)}
-                    className="flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3 py-[7px] text-left hover:bg-foreground/[0.06]"
-                  >
-                    <span className="min-w-0 flex-1 truncate text-[12.5px]">{id}</span>
-                    <span className="flex-none text-[11px] text-muted">{group.length}</span>
-                    <ChevronRight className="h-3.5 w-3.5 flex-none text-muted" />
-                  </button>
-                ))}
-                {!providers.length ? (
-                  <Empty>
-                    {isLoading ? 'Loading models…' : 'Add a provider key or sign in under Settings.'}
-                  </Empty>
-                ) : null}
-              </>
-            )}
-          </div>
+                ) : (
+                  <>
+                    {favorited.length ? (
+                      <>
+                        <GroupLabel>Favourites</GroupLabel>
+                        {favorited.map((model) => (
+                          <Row
+                            key={modelKey(model)}
+                            model={model}
+                            showProvider
+                            selected={modelKey(model) === selectedModel}
+                            starred
+                            onChoose={() => choose(model)}
+                            onStar={() => toggleFavorite(modelKey(model))}
+                          />
+                        ))}
+                      </>
+                    ) : null}
+                    <GroupLabel>Providers</GroupLabel>
+                    {providers.map(([id, group]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setProvider(id)}
+                        className="flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3 py-[7px] text-left hover:bg-foreground/[0.06]"
+                      >
+                        <span className="min-w-0 flex-1 truncate text-[12.5px]">{id}</span>
+                        <span className="flex-none text-[11px] text-muted">{group.length}</span>
+                        <ChevronRight className="h-3.5 w-3.5 flex-none text-muted" />
+                      </button>
+                    ))}
+                    {!providers.length ? (
+                      <Empty>
+                        {isLoading
+                          ? 'Loading models…'
+                          : 'Add a provider key or sign in under Settings.'}
+                      </Empty>
+                    ) : null}
+                  </>
+                )}
+              </div>
 
-          {favorited.length === 0 && !needle ? (
-            <p className="m-0 flex-none border-t border-border px-3 py-2 text-[11px] leading-snug text-muted">
-              Star a model to pin it here.
-            </p>
-          ) : null}
-        </div>
-      ) : null}
+              {favorited.length === 0 && !needle ? (
+                <p className="m-0 flex-none border-t border-border px-3 py-2 text-[11px] leading-snug text-muted">
+                  Star a model to pin it here.
+                </p>
+              ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
@@ -286,9 +289,7 @@ function Row({
         title={starred ? 'Unpin' : 'Pin to the top'}
         className="flex-none cursor-pointer rounded-md border-0 bg-transparent p-1 hover:bg-foreground/[0.08]"
       >
-        <Star
-          className={cn('h-3.5 w-3.5', starred ? 'fill-accent text-accent' : 'text-muted')}
-        />
+        <Star className={cn('h-3.5 w-3.5', starred ? 'fill-accent text-accent' : 'text-muted')} />
       </button>
     </div>
   );

@@ -24,7 +24,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { PiAvatar } from '@/components/ui/pi-mark';
-import { Segmented } from '@/components/ui/segmented';
+import { ApprovalModePicker } from '@/features/chat/ApprovalModePicker';
 import { Markdown } from '@/features/chat/Markdown';
 import { ModelPicker } from '@/features/models/ModelPicker';
 import { useCreateTask } from '@/features/sessions/use-create-task';
@@ -49,13 +49,6 @@ const toolIcons: Record<string, ReactNode> = {
   grep: <Search className="h-3 w-3" />,
   find: <FolderSearch className="h-3 w-3" />,
   ls: <FolderSearch className="h-3 w-3" />,
-};
-
-/** What each mode actually does — matched to PolicyEngine, not to wishes. */
-const APPROVAL_HINT: Record<ApprovalMode, string> = {
-  ask: 'writes + bash need approval',
-  'auto-reads': 'writes run freely, bash asks',
-  'read-only': 'nothing is written',
 };
 
 interface ChatPanelProps {
@@ -544,19 +537,11 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
           />
 
           <div className="flex items-center gap-2 px-3 pb-2.5">
-            <Segmented
-              aria-label="Approval policy"
-              options={[
-                { value: 'ask', label: 'Ask before changes' },
-                { value: 'auto-reads', label: 'Auto-approve writes' },
-                { value: 'read-only', label: 'Read-only' },
-              ]}
-              value={approvalMode.data?.mode ?? 'auto-reads'}
+            <ApprovalModePicker
+              mode={approvalMode.data?.mode ?? 'auto-reads'}
               onChange={(mode) => setApprovalMode.mutate(mode)}
             />
-            <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted">
-              {APPROVAL_HINT[approvalMode.data?.mode ?? 'auto-reads']}
-            </span>
+            <span className="min-w-0 flex-1" />
             {/* Model choice belongs with the send button: it is a property of the
                 message you are about to send, not of the window. */}
             <ModelPicker />
