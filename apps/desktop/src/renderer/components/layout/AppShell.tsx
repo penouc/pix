@@ -16,8 +16,9 @@ interface AppShellProps {
 }
 
 /**
- * Chrome bar over a 210px sidebar, the working column, and the optional 336px
- * review panel — the widths the design lays out.
+ * Chrome bar over a 210px sidebar, the working column, and the optional
+ * right-hand dock. The dock brings its own width and resizer, so this lays out
+ * the row and stays out of it.
  */
 export function AppShell({
   sidebar,
@@ -41,11 +42,7 @@ export function AppShell({
           {sidebar}
         </aside>
         <main className="flex min-w-0 flex-1 flex-col">{main}</main>
-        {right && showRight ? (
-          <aside className="flex min-h-0 w-[336px] flex-none flex-col border-l border-border bg-surface">
-            {right}
-          </aside>
-        ) : null}
+        {right && showRight ? right : null}
       </div>
       {overlay}
     </div>

@@ -60,6 +60,13 @@ export interface IndexRepository {
   /** Full-text search over indexed bodies. */
   searchContent(input: { query: string; projectIds?: string[]; limit?: number }): IndexContentHit[];
 
+  /**
+   * Immediate children of `prefix` ('' for the project root), derived from the
+   * indexed paths. The tree therefore shows exactly what search can find, and
+   * inherits the index's `.gitignore` handling and trust gate for free.
+   */
+  listChildren(projectId: string, prefix: string): { directories: string[]; files: string[] };
+
   putState(state: IndexStateRecord): void;
   getState(projectId: string): IndexStateRecord | undefined;
   listStates(): IndexStateRecord[];

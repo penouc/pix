@@ -160,6 +160,29 @@ export class SqliteIndexRepository implements IndexRepository {
     }
   }
 
+  listChildren(projectId: string, prefix: string): { directories: string[]; files: string[] } {
+    const normalized = prefix.replace(/^\/+|\/+$/g, '');
+    const like = normalized ? `${escapeLike(normalized)}/%` : '%';
+    const rows = this.db
+      .prepare(
+        `SELECT path FROM index_files WHERE project_id = ? AND path LIKE ? ESCAPE '\\' ORDER BY path`,
+      )
+      .all(projectId, like) as unknown as Array<{ path: string }>;
+
+    const offset = normalized ? normalized.length + 1 : 0;
+    const directories = new Set<string>();
+    const files: string[] = [];
+    for (const row of rows) {
+      const remainder = row.path.slice(offset);
+      if (!remainder) continue;
+      const slash = remainder.indexOf('/');
+      // A remainder with a separator names a directory we have not walked into.
+      if (slash === -1) files.push(remainder);
+      else directories.add(remainder.slice(0, slash));
+    }
+    return { directories: [...directories].sort(), files };
+  }
+
   putState(state: IndexStateRecord): void {
     this.db
       .prepare(

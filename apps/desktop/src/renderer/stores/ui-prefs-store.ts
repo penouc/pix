@@ -4,6 +4,11 @@ export type ThemePreference = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
 export type Density = 'comfortable' | 'compact';
 export type DiffStyle = 'unified' | 'split';
+export type DockTab = 'files' | 'changes' | 'terminal' | 'browser';
+
+/** Narrower than this and the terminal wraps every line; wider crowds the thread. */
+export const DOCK_MIN_WIDTH = 300;
+export const DOCK_MAX_WIDTH = 900;
 
 interface UiPrefs {
   theme: ThemePreference;
@@ -11,6 +16,8 @@ interface UiPrefs {
   reduceMotion: boolean;
   diffStyle: DiffStyle;
   collapseContext: boolean;
+  dockTab: DockTab;
+  dockWidth: number;
 }
 
 interface UiPrefsState extends UiPrefs {
@@ -26,6 +33,9 @@ const DEFAULTS: UiPrefs = {
   reduceMotion: false,
   diffStyle: 'unified',
   collapseContext: true,
+  dockTab: 'changes',
+  // Wide enough for a terminal line and a diff hunk without horizontal scroll.
+  dockWidth: 440,
 };
 
 /**
@@ -44,10 +54,19 @@ function load(): UiPrefs {
       reduceMotion: parsed.reduceMotion ?? DEFAULTS.reduceMotion,
       diffStyle: parsed.diffStyle ?? DEFAULTS.diffStyle,
       collapseContext: parsed.collapseContext ?? DEFAULTS.collapseContext,
+      dockTab: parsed.dockTab ?? DEFAULTS.dockTab,
+      // Clamp on read: a stored width from a wider display would otherwise
+      // squeeze the thread to nothing on this one.
+      dockWidth: clampDockWidth(parsed.dockWidth ?? DEFAULTS.dockWidth),
     };
   } catch {
     return DEFAULTS;
   }
+}
+
+function clampDockWidth(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULTS.dockWidth;
+  return Math.round(Math.min(DOCK_MAX_WIDTH, Math.max(DOCK_MIN_WIDTH, value)));
 }
 
 function prefersDark(): boolean {
@@ -83,6 +102,8 @@ export const useUiPrefsStore = create<UiPrefsState>((set, get) => ({
       reduceMotion: next.reduceMotion,
       diffStyle: next.diffStyle,
       collapseContext: next.collapseContext,
+      dockTab: next.dockTab,
+      dockWidth: next.dockWidth,
     };
     const resolved = resolve(prefs.theme);
     set({ resolvedTheme: resolved });

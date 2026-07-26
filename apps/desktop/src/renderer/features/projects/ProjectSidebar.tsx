@@ -30,6 +30,8 @@ interface ProjectSidebarProps {
   onSelectSession: () => void;
   onOpenSearch: () => void;
   onOpenProjectDialog: () => void;
+  /** Switched to another project — land on the unstarted-task screen. */
+  onProjectSwitched: () => void;
   onNavigate: (destination: SidebarDestination) => void;
   /** Which nav entry reads as current. */
   activeNav: string;
@@ -43,6 +45,7 @@ export function ProjectSidebar({
   onSelectSession,
   onOpenSearch,
   onOpenProjectDialog,
+  onProjectSwitched,
   onNavigate,
   activeNav,
   isBlankRun,
@@ -91,6 +94,9 @@ export function ProjectSidebar({
       resetSessionView();
       setScope(opened.id, null);
       void recent.refetch();
+      // No task is selected in the project you just switched to, so the run
+      // screen would otherwise keep showing the previous project's thread.
+      onProjectSwitched();
     } catch (err) {
       setOpenError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -98,12 +104,33 @@ export function ProjectSidebar({
     }
   }
 
+  /**
+   * New task, always. When no project is open this used to raise the project
+   * picker instead — a button labelled "New task" that asked for a folder — so
+   * it now falls back to the playground workspace and puts the task there.
+   */
   async function handleNewTask() {
-    if (!project) {
-      onOpenProjectDialog();
-      return;
+    let target = project;
+    if (!target) {
+      setOpening(true);
+      setOpenError(null);
+      try {
+        target = await invoke<ProjectSummary>({ method: 'project.openPlayground' });
+        setProject(target);
+        setSession(null);
+        resetSessionView();
+        setScope(target.id, null);
+        void recent.refetch();
+      } catch (err) {
+        setOpenError(err instanceof Error ? err.message : String(err));
+        return;
+      } finally {
+        setOpening(false);
+      }
     }
-    const created = await createTask();
+    // Passed explicitly: the store selector above is still the old value in this
+    // tick when the playground was only just opened.
+    const created = await createTask(target);
     if (created) onNewTask();
   }
 

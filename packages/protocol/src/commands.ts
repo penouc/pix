@@ -131,6 +131,19 @@ export const IndexSearchInputSchema = z.object({
 });
 export type IndexSearchInput = z.infer<typeof IndexSearchInputSchema>;
 
+export const IndexTreeInputSchema = z.object({
+  projectId: z.string().min(1),
+  /** Project-relative directory; omitted or empty means the project root. */
+  prefix: z.string().max(4096).optional(),
+});
+export type IndexTreeInput = z.infer<typeof IndexTreeInputSchema>;
+
+export const OpenExternalInputSchema = z.object({
+  /** http/https only — checked in Main, not here, so the reason can be reported. */
+  url: z.string().min(1).max(4096),
+});
+export type OpenExternalInput = z.infer<typeof OpenExternalInputSchema>;
+
 export const IndexRebuildInputSchema = z.object({
   projectId: z.string().min(1),
   /** Discard and re-read everything instead of an incremental pass. */
@@ -286,6 +299,7 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('project.open'), params: OpenProjectInputSchema }),
   z.object({ method: z.literal('project.pickFolder'), params: z.object({}).optional() }),
   z.object({ method: z.literal('project.listRecent'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('project.openPlayground'), params: z.object({}).optional() }),
   z.object({ method: z.literal('project.setTrust'), params: SetProjectTrustInputSchema }),
   z.object({ method: z.literal('git.getWorkingTreeDiff'), params: GetWorkingTreeDiffInputSchema }),
   z.object({ method: z.literal('provider.list'), params: z.object({}).optional() }),
@@ -323,6 +337,8 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('git.getBranch'), params: GetWorkingTreeDiffInputSchema }),
   z.object({ method: z.literal('index.search'), params: IndexSearchInputSchema }),
   z.object({ method: z.literal('index.status'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('index.tree'), params: IndexTreeInputSchema }),
+  z.object({ method: z.literal('system.openExternal'), params: OpenExternalInputSchema }),
   z.object({ method: z.literal('index.rebuild'), params: IndexRebuildInputSchema }),
   z.object({
     method: z.literal('index.forget'),

@@ -261,7 +261,11 @@ function createWindow(): void {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    // Never a new Electron window — and only schemes the OS should be handed.
+    // The Browser panel can frame remote pages now, so an unvalidated url here
+    // would let a framed page hand the OS a file:// or an app-registered scheme.
+    if (isExternallyOpenable(url)) void shell.openExternal(url);
+    else console.warn('[main] refused to open non-http(s) url');
     return { action: 'deny' };
   });
 
@@ -275,6 +279,16 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+}
+
+/** http/https only. Shared by the window-open handler and `system.openExternal`. */
+export function isExternallyOpenable(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 function broadcastEvent(event: unknown): void {
@@ -646,6 +660,20 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       case 'project.listRecent': {
         return okResult(projects.listRecent());
       }
+      case 'project.openPlayground': {
+        // A scratch workspace so "New task" works before you have picked a
+        // folder. It lives under userData rather than in the user's home: we
+        // create it, so we should not be putting directories where they keep
+        // their own work. Auto-trusted for the same reason — it is our own empty
+        // directory, not something of theirs we are claiming permission over.
+        const dir = path.join(app.getPath('userData'), 'playground');
+        await fsp.mkdir(dir, { recursive: true });
+        let playground = await projects.open(dir);
+        if (!playground.trusted) {
+          playground = await projects.setTrust(playground.id, true);
+        }
+        return okResult(playground satisfies ProjectSummary);
+      }
       case 'project.setTrust': {
         const project = await projects.setTrust(cmd.params.projectId, cmd.params.trusted);
         // Revoking trust drops the index: it is a stored copy of file contents,
@@ -902,6 +930,23 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       }
       case 'index.status': {
         return okResult(getIndexService(db).status());
+      }
+      case 'index.tree': {
+        const project = projects.get(cmd.params.projectId);
+        if (!project) return errResult('PROJECT_NOT_FOUND', 'Project not found');
+        // Same gate as the index itself: an untrusted project is not readable,
+        // and that includes reading its shape.
+        if (!project.trusted) return errResult('PROJECT_UNTRUSTED', 'Project is not trusted.');
+        return okResult(db.index.listChildren(project.id, cmd.params.prefix ?? ''));
+      }
+      case 'system.openExternal': {
+        // Anything but http/https could hand the OS a file:// or a custom scheme
+        // registered by another app.
+        if (!isExternallyOpenable(cmd.params.url)) {
+          return errResult('UNSUPPORTED_SCHEME', 'Only http and https links can be opened.');
+        }
+        await shell.openExternal(cmd.params.url);
+        return okResult({ ok: true });
       }
       case 'index.rebuild': {
         const project = projects.get(cmd.params.projectId);

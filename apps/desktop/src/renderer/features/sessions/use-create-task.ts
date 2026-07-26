@@ -9,7 +9,11 @@ import { useWorkspaceStore } from '@/stores/workspace-store';
 
 /**
  * Trust the project if needed, create a session, and point the stream store at
- * it. Shared by the sidebar's and the home screen's "New task".
+ * it.
+ *
+ * `into` exists because the caller sometimes opens a project and creates a task
+ * in it in the same tick — the store selector below would still hold the old
+ * value at that point, and the task would land in the previous project.
  */
 export function useCreateTask() {
   const queryClient = useQueryClient();
@@ -22,16 +26,17 @@ export function useCreateTask() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function createTask(): Promise<SessionSummary | null> {
-    if (!project) return null;
+  async function createTask(into?: ProjectSummary): Promise<SessionSummary | null> {
+    const target = into ?? project;
+    if (!target) return null;
     setBusy(true);
     setError(null);
     try {
-      const trusted = project.trusted
-        ? project
+      const trusted = target.trusted
+        ? target
         : await invoke<ProjectSummary>({
             method: 'project.setTrust',
-            params: { projectId: project.id, trusted: true },
+            params: { projectId: target.id, trusted: true },
           });
       setProject(trusted);
       const created = await invoke<SessionSummary>({

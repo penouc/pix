@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -92,4 +92,57 @@ describe('Main IPC with real Pi runtime (offline)', () => {
       await rm(projectPath, { recursive: true, force: true });
     }
   }, 30_000);
+
+  it('serves the file tree only for a trusted project', async () => {
+    const { handleInvoke } = await import('./index.js');
+
+    const projectPath = await mkdtemp(path.join(tmpdir(), 'pi-desktop-tree-'));
+    try {
+      await writeFile(path.join(projectPath, 'a.ts'), 'const a = 1;\n');
+      const opened = await handleInvoke({ method: 'project.open', params: { path: projectPath } });
+      if (!opened.ok) throw new Error('project.open failed');
+      const project = opened.data as { id: string; trusted: boolean };
+
+      // Untrusted is the default, and the shape of the project is as private as
+      // its contents.
+      if (!project.trusted) {
+        const refused = await handleInvoke({
+          method: 'index.tree',
+          params: { projectId: project.id },
+        });
+        expect(refused).toMatchObject({ ok: false, error: { code: 'PROJECT_UNTRUSTED' } });
+      }
+
+      await handleInvoke({
+        method: 'project.setTrust',
+        params: { projectId: project.id, trusted: true },
+      });
+      await handleInvoke({
+        method: 'index.rebuild',
+        params: { projectId: project.id, force: true },
+      });
+
+      const tree = await handleInvoke({ method: 'index.tree', params: { projectId: project.id } });
+      expect(tree).toMatchObject({ ok: true, data: { files: ['a.ts'], directories: [] } });
+    } finally {
+      await rm(projectPath, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('opens only http(s) links externally', async () => {
+    const { handleInvoke, isExternallyOpenable } = await import('./index.js');
+
+    expect(isExternallyOpenable('https://example.com')).toBe(true);
+    expect(isExternallyOpenable('http://localhost:5173/x')).toBe(true);
+    // A framed page must not be able to hand the OS one of these.
+    for (const url of ['file:///etc/passwd', 'javascript:alert(1)', 'zoommtg://x', 'not a url']) {
+      expect(isExternallyOpenable(url), url).toBe(false);
+    }
+
+    const refused = await handleInvoke({
+      method: 'system.openExternal',
+      params: { url: 'file:///etc/passwd' },
+    });
+    expect(refused).toMatchObject({ ok: false, error: { code: 'UNSUPPORTED_SCHEME' } });
+  });
 });

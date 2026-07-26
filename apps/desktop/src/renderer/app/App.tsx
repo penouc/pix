@@ -16,7 +16,6 @@ import { Button } from '@/components/ui/button';
 import { ApprovalDialog } from '@/features/approvals/ApprovalDialog';
 import { AutomationsView } from '@/features/automations/AutomationsView';
 import { ChatPanel } from '@/features/chat/ChatPanel';
-import { ReviewPanel } from '@/features/chat/ReviewPanel';
 import { DiffPanel } from '@/features/diff/DiffPanel';
 import { ModelPill } from '@/features/models/ModelPill';
 import { OpenProjectDialog } from '@/features/projects/OpenProjectDialog';
@@ -26,6 +25,7 @@ import { useCreateTask } from '@/features/sessions/use-create-task';
 import { SettingsView } from '@/features/settings/SettingsView';
 import { SkillsView } from '@/features/skills/SkillsView';
 import { TerminalView } from '@/features/terminal/TerminalView';
+import { RightDock } from '@/features/workbench/RightDock';
 import { invoke, IpcError } from '@/lib/ipc';
 import { useAgentStreamStore } from '@/stores/agent-stream-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
@@ -340,14 +340,28 @@ export function App() {
             setProjectError(null);
             setProjectDialogOpen(true);
           }}
+          onProjectSwitched={() => {
+            setBlankRun(true);
+            setView('run');
+          }}
           onNavigate={(destination: SidebarDestination) => setView(destination)}
         />
       }
       main={main}
       right={
-        <ReviewPanel onOpenFullDiff={() => setView('diff')} onContinue={() => setView('run')} />
+        <RightDock
+          onOpenFullDiff={() => setView('diff')}
+          onContinue={() => setView('run')}
+          onInsertPath={(path) =>
+            // A trailing space so you can keep typing after the reference.
+            setComposerInsert({ text: `@${path} `, token: Date.now() })
+          }
+        />
       }
-      showRight={view === 'run' && panelOpen && !blankRun}
+      // The dock is not only about a finished run any more — files, terminal and
+      // the preview are useful before the first message, so `blankRun` no longer
+      // hides it.
+      showRight={view === 'run' && panelOpen}
       overlay={
         <>
           {searchOpen ? (

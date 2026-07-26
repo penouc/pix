@@ -111,6 +111,51 @@ describe('SqliteIndexRepository', () => {
     expect(repo.searchPaths({ query: 'ab' })).toHaveLength(1);
   });
 
+  describe('listChildren', () => {
+    beforeEach(() => {
+      put('p1', 'README.md');
+      put('p1', 'src/a.ts');
+      put('p1', 'src/deep/b.ts');
+      put('p1', 'src/deep/nested/c.ts');
+      put('p2', 'other/d.ts');
+    });
+
+    it('splits the project root into directories and files', () => {
+      expect(repo.listChildren('p1', '')).toEqual({
+        directories: ['src'],
+        files: ['README.md'],
+      });
+    });
+
+    it('descends one level at a time', () => {
+      expect(repo.listChildren('p1', 'src')).toEqual({
+        directories: ['deep'],
+        files: ['a.ts'],
+      });
+      expect(repo.listChildren('p1', 'src/deep')).toEqual({
+        directories: ['nested'],
+        files: ['b.ts'],
+      });
+    });
+
+    it('tolerates surrounding slashes in the prefix', () => {
+      expect(repo.listChildren('p1', '/src/')).toEqual(repo.listChildren('p1', 'src'));
+    });
+
+    it('never leaks another project into the tree', () => {
+      // `other/` belongs to p2 and must not appear under p1 at any depth.
+      expect(repo.listChildren('p1', '').directories).not.toContain('other');
+      expect(repo.listChildren('p2', '')).toEqual({ directories: ['other'], files: [] });
+    });
+
+    it('returns nothing for a directory that is not indexed', () => {
+      expect(repo.listChildren('p1', 'does/not/exist')).toEqual({
+        directories: [],
+        files: [],
+      });
+    });
+  });
+
   it('round-trips index state', () => {
     const state = {
       projectId: 'p1',

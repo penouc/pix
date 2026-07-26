@@ -25,6 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { PiAvatar } from '@/components/ui/pi-mark';
 import { Segmented } from '@/components/ui/segmented';
+import { useCreateTask } from '@/features/sessions/use-create-task';
 import { invoke } from '@/lib/ipc';
 import {
   dotStyle,
@@ -71,6 +72,7 @@ interface ChatPanelProps {
 export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: ChatPanelProps) {
   const session = useWorkspaceStore((s) => s.session);
   const project = useWorkspaceStore((s) => s.project);
+  const { createTask } = useCreateTask();
   const messages = useAgentStreamStore((s) => s.messages);
   const tools = useAgentStreamStore((s) => s.tools);
   const status = useAgentStreamStore((s) => s.status);
@@ -173,19 +175,36 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
   );
 
   async function send() {
-    if (!session || !draft.trim()) return;
+    if (!draft.trim()) return;
     const text = draft.trim();
     setDraft('');
     appendUserMessage(text);
     setSending(true);
     try {
+      /*
+       * The unstarted-task screen can be reached with no session behind it —
+       * switching to a project that has no tasks lands there. Sending is what
+       * creates the task in that case; before this, Enter did nothing at all.
+       */
+      let active = session;
+      if (!active) {
+        active = await createTask();
+        if (!active) {
+          useAgentStreamStore.setState({
+            status: 'failed',
+            error: 'Open a project before sending.',
+            errorRetryable: false,
+          });
+          return;
+        }
+      }
       if (running) {
-        await invoke({ method: 'agent.followUp', params: { sessionId: session.id, text } });
+        await invoke({ method: 'agent.followUp', params: { sessionId: active.id, text } });
       } else {
         useAgentStreamStore.setState({ status: 'starting', error: null, errorRetryable: false });
         await invoke<RunRef>({
           method: 'agent.sendMessage',
-          params: { sessionId: session.id, text },
+          params: { sessionId: active.id, text },
         });
       }
     } catch (err) {
