@@ -101,6 +101,13 @@ export const SessionSummarySchema = z.object({
 });
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;
 
+/** One stored turn, for replaying a task's transcript. */
+export const StoredMessageSchema = z.object({
+  role: z.enum(['user', 'assistant', 'system']),
+  text: z.string(),
+});
+export type StoredMessage = z.infer<typeof StoredMessageSchema>;
+
 export const RunRefSchema = z.object({
   runId: z.string(),
   sessionId: z.string(),

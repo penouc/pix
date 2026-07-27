@@ -570,9 +570,9 @@ function ensureRuntime(): AgentRuntime {
 }
 
 /**
- * Pi SDK sessions are intentionally in-memory. Rebuild the SDK-side session
- * lazily from the SQLite record after a desktop restart, retaining the
- * Desktop session id so all subsequent IPC/events keep the persisted scope.
+ * Rebuild the SDK-side session lazily from the SQLite record after a restart,
+ * keeping the desktop session id so all subsequent IPC and events stay in the
+ * persisted scope — and so the runtime finds that id's stored transcript.
  */
 async function ensurePersistedRuntimeSession(
   agent: AgentRuntime,
@@ -776,6 +776,17 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       }
       case 'session.list': {
         return okResult(sessions.listByProject(cmd.params.projectId));
+      }
+      case 'session.messages': {
+        const session = sessions.get(cmd.params.sessionId);
+        if (!session) return errResult('SESSION_NOT_FOUND', 'Session not found');
+        const project = projects.get(session.projectId);
+        if (!project) return errResult('PROJECT_NOT_FOUND', 'Project not found');
+        if (!agent.listMessages) return okResult([]);
+        // The SDK session may not exist yet after a restart; building it is what
+        // reopens the transcript file.
+        await ensurePersistedRuntimeSession(agent, session, project.path);
+        return okResult(await agent.listMessages(session.id));
       }
       case 'session.rename': {
         const summary = await sessions.rename(cmd.params.sessionId, cmd.params.title);

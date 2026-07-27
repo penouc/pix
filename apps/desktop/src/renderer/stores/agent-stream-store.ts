@@ -64,6 +64,8 @@ interface AgentStreamState {
   lastSequenceByRun: Record<string, number>;
   appendUserMessage: (text: string) => void;
   resetSessionView: () => void;
+  /** Replace the thread with a stored transcript (oldest first). */
+  loadHistory: (messages: Array<{ role: 'user' | 'assistant' | 'system'; text: string }>) => void;
   setScope: (projectId: string | null, sessionId: string | null) => void;
   applyEvent: (event: DesktopAgentEvent) => void;
   setStopping: (runId: string) => void;
@@ -200,6 +202,26 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
     }));
   },
 
+  loadHistory: (history) => {
+    clearDeltaBatch();
+    // Restored turns take the first slots in the shared ordering, so anything
+    // that streams afterwards lands below them rather than above.
+    timelineSeq = history.length;
+    set({
+      messages: history.map((entry, index) => ({
+        id: `history-${index}`,
+        role: entry.role,
+        content: entry.text,
+        streaming: false,
+        order: index,
+      })),
+      tools: [],
+      status: 'idle',
+      activeRunId: null,
+      error: null,
+      errorRetryable: false,
+    });
+  },
   resetSessionView: () => {
     clearDeltaBatch();
     timelineSeq = 0;

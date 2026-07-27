@@ -8,6 +8,7 @@ import type {
   IndexHit,
   ProjectSummary,
   SessionSummary,
+  StoredMessage,
   SkillInfo,
 } from '@pi-desktop/protocol';
 
@@ -54,6 +55,7 @@ export function App() {
   const setScope = useAgentStreamStore((s) => s.setScope);
   const approval = useAgentStreamStore((s) => s.approval);
   const applyEvent = useAgentStreamStore((s) => s.applyEvent);
+  const loadHistory = useAgentStreamStore((s) => s.loadHistory);
   const { createTask } = useCreateTask();
 
   /**
@@ -98,8 +100,24 @@ export function App() {
       // Picking an existing task shows its run, not the unstarted state.
       setBlankRun(false);
       setView('run');
+      /*
+       * Reopening a task shows what was said in it. Before this the thread was
+       * empty every time, so past work was invisible even though the agent still
+       * had it in context — the single most disorienting thing about the app.
+       */
+      void invoke<StoredMessage[]>({
+        method: 'session.messages',
+        params: { sessionId: session.id },
+      })
+        .then((history) => {
+          // Ignore a late reply for a task the user has already navigated away
+          // from, or it would drop someone else's transcript into this thread.
+          if (useWorkspaceStore.getState().session?.id !== session.id) return;
+          if (history.length) loadHistory(history);
+        })
+        .catch((error) => console.error('[app] loading the transcript failed', error));
     },
-    [setSession, resetSessionView, setScope],
+    [setSession, resetSessionView, setScope, loadHistory],
   );
 
   /**

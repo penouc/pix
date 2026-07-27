@@ -167,6 +167,16 @@ export interface AgentRuntime {
   }): Promise<void>;
   /** Optional: forget a stored credential for this provider. */
   logoutProvider?(providerId: string): Promise<void>;
+  /**
+   * Optional: the stored transcript for a session, oldest first.
+   *
+   * Reopening a task has to show what was said in it. Without this the thread
+   * started empty every time, which made past work invisible even though the
+   * agent still had it in context.
+   */
+  listMessages?(
+    sessionId: string,
+  ): Promise<Array<{ role: 'user' | 'assistant' | 'system'; text: string }>>;
   /** Optional: which providers currently have usable credentials (no secrets). */
   getAuthStatus?(): Promise<Array<{ providerId: string; hasAuth: boolean; source: string }>>;
   /** Optional: choose a default model when the session has none. */

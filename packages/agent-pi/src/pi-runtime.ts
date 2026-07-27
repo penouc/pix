@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
 import {
@@ -192,7 +193,7 @@ export class PiAgentRuntime implements AgentRuntime {
         cwd: options.projectPath,
         agentDir: this.agentDir!,
         modelRuntime: this.modelRuntime!,
-        sessionManager: SessionManager.inMemory(),
+        sessionManager: this.sessionManagerFor(desktopId, options.projectPath),
         resourceLoader,
       });
       piSession = result.session;
@@ -240,6 +241,61 @@ export class PiAgentRuntime implements AgentRuntime {
 
     this.sessions.set(desktopId, record);
     return { ...desktop };
+  }
+
+  /**
+   * A persisted session manager for this desktop session, reopening the existing
+   * transcript when there is one.
+   *
+   * This used to be `SessionManager.inMemory()`, which meant Pi never wrote a
+   * transcript: reopening a task after a restart showed an empty thread, and the
+   * model was handed no history either, so it had no idea what had been discussed.
+   *
+   * Pi names files `<timestamp>_<id>.jsonl`, so the file for an id has to be found
+   * by suffix rather than constructed.
+   */
+  private sessionManagerFor(desktopId: string, projectPath: string): SessionManager {
+    const dir = path.join(this.agentDir!, 'desktop-sessions');
+    try {
+      mkdirSync(dir, { recursive: true });
+      const existing = readdirSync(dir).find(
+        (file) => file.endsWith(`_${desktopId}.jsonl`) && existsSync(path.join(dir, file)),
+      );
+      if (existing) return SessionManager.open(path.join(dir, existing), dir, projectPath);
+      return SessionManager.create(projectPath, dir, { id: desktopId });
+    } catch (error) {
+      // A session that cannot be persisted is still worth having; losing history
+      // beats refusing to open the task at all.
+      console.warn('[PiAgentRuntime] session persistence unavailable', error);
+      return SessionManager.inMemory(projectPath, { id: desktopId });
+    }
+  }
+
+  /**
+   * The stored transcript for a session, oldest first.
+   *
+   * Read from Pi's own message list so it reflects exactly what the model sees,
+   * including messages restored from disk. Tool calls are summarised rather than
+   * dumped: the renderer shows tool activity as cards and the raw arguments can be
+   * enormous.
+   */
+  async listMessages(sessionId: string): Promise<
+    Array<{ role: 'user' | 'assistant' | 'system'; text: string }>
+  > {
+    this.assertAlive();
+    const record = this.requireSession(sessionId);
+    const out: Array<{ role: 'user' | 'assistant' | 'system'; text: string }> = [];
+
+    for (const message of record.pi.messages as Array<{ role?: string; content?: unknown }>) {
+      const role =
+        message.role === 'user' ? 'user' : message.role === 'assistant' ? 'assistant' : 'system';
+      // Only user and assistant prose belongs in a transcript; system prompts and
+      // tool plumbing are not part of the conversation the user had.
+      if (role === 'system') continue;
+      const text = flattenMessageText(message.content);
+      if (text) out.push({ role, text });
+    }
+    return out;
   }
 
   async resumeSession(sessionId: string): Promise<AgentSession> {
@@ -790,4 +846,26 @@ export class PiAgentRuntime implements AgentRuntime {
       throw new DomainError(agentError('RUNTIME_DISPOSED', 'AgentRuntime has been disposed'));
     }
   }
+}
+
+/**
+ * Text of a Pi message, whatever shape its content takes.
+ *
+ * Content is a string for simple messages and an array of typed parts otherwise;
+ * anything that is not text (an image, a tool call) contributes nothing here.
+ */
+function flattenMessageText(content: unknown): string {
+  if (typeof content === 'string') return content.trim();
+  if (!Array.isArray(content)) return '';
+  return content
+    .map((part) => {
+      if (typeof part === 'string') return part;
+      if (part && typeof part === 'object' && 'text' in part) {
+        const text = (part as { text?: unknown }).text;
+        return typeof text === 'string' ? text : '';
+      }
+      return '';
+    })
+    .join('')
+    .trim();
 }

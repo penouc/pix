@@ -341,6 +341,10 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
     method: z.literal('session.list'),
     params: z.object({ projectId: z.string().min(1) }),
   }),
+  z.object({
+    method: z.literal('session.messages'),
+    params: z.object({ sessionId: z.string().min(1) }),
+  }),
   z.object({ method: z.literal('session.rename'), params: RenameSessionInputSchema }),
   z.object({ method: z.literal('session.archive'), params: ArchiveSessionInputSchema }),
   z.object({ method: z.literal('session.delete'), params: DeleteSessionInputSchema }),
