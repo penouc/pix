@@ -1,5 +1,5 @@
 /**
- * Rasterises apps/desktop/build/icon.svg into the PNG set and the macOS .icns
+ * Rasterises `apps/desktop/build/icon-source.png` (or falls back to icon.svg)
  * that electron-builder picks up from `buildResources`.
  *
  * Runs under Electron so the renderer is the same Chromium the app ships with.
@@ -15,15 +15,18 @@
  *   pnpm icon:generate
  */
 import { app, BrowserWindow } from 'electron';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const buildDir = path.join(here, '..', 'apps', 'desktop', 'build');
+const rootDir = path.join(here, '..');
+const buildDir = path.join(rootDir, 'apps', 'desktop', 'build');
+const prepareScript = path.join(here, 'prepare-mascot-icon.py');
 const source = path.join(buildDir, 'icon.svg');
+const pngSource = path.join(buildDir, 'icon-source.png');
 const iconsetDir = path.join(buildDir, 'icon.iconset');
 
 const RENDER_AT = 1024;
@@ -45,6 +48,88 @@ const ICONSET = {
 /** Below this the soil mound reads as mud, so the design drops it. */
 const SIMPLIFY_BELOW = 128;
 
+function generateIconsetFromMaster(masterPath) {
+  for (const [name, size] of Object.entries(ICONSET)) {
+    const out = path.join(iconsetDir, name);
+    if (size === RENDER_AT) {
+      fs.copyFileSync(masterPath, out);
+    } else {
+      execFileSync(
+        'sips',
+        ['-s', 'format', 'png', '-z', String(size), String(size), masterPath, '--out', out],
+        { stdio: 'ignore' },
+      );
+    }
+  }
+
+  fs.copyFileSync(masterPath, path.join(buildDir, 'icon.png'));
+
+  execFileSync('iconutil', ['-c', 'icns', iconsetDir, '-o', path.join(buildDir, 'icon.icns')], {
+    stdio: 'inherit',
+  });
+
+  fs.rmSync(iconsetDir, { recursive: true, force: true });
+}
+
+function preparePngSource(tmpDir) {
+  const prepared = path.join(tmpDir, 'prepared.png');
+  const result = spawnSync(
+    'python3',
+    [prepareScript, pngSource, prepared, '--size', String(RENDER_AT)],
+    { encoding: 'utf8' },
+  );
+  if (result.status !== 0) {
+    const detail = (result.stderr || result.stdout || '').trim();
+    throw new Error(`prepare-mascot-icon.py failed: ${detail || 'unknown error'}`);
+  }
+  process.stdout.write(`  flattened checkerboard corners in icon-source.png\n`);
+  return prepared;
+}
+
+function syncUiIcons(masterPath) {
+  const mascot = path.join(rootDir, 'apps', 'desktop', 'src', 'renderer', 'assets', 'pix-mascot.png');
+  const favicon = path.join(rootDir, 'apps', 'desktop', 'public', 'favicon.png');
+  fs.copyFileSync(masterPath, mascot);
+  execFileSync(
+    'sips',
+    ['-s', 'format', 'png', '-z', '32', '32', masterPath, '--out', favicon],
+    { stdio: 'ignore' },
+  );
+  process.stdout.write(`  synced pix-mascot.png and public/favicon.png\n`);
+}
+
+async function generateFromPng() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pix-icon-'));
+  fs.rmSync(iconsetDir, { recursive: true, force: true });
+  fs.mkdirSync(iconsetDir, { recursive: true });
+
+  const prepared = preparePngSource(tmp);
+  const master = path.join(tmp, `master-${RENDER_AT}.png`);
+  execFileSync(
+    'sips',
+    [
+      '-s',
+      'format',
+      'png',
+      '-z',
+      String(RENDER_AT),
+      String(RENDER_AT),
+      prepared,
+      '--out',
+      master,
+    ],
+    { stdio: 'ignore' },
+  );
+  process.stdout.write(`  rasterised icon-source.png → ${RENDER_AT}×${RENDER_AT}\n`);
+
+  generateIconsetFromMaster(master);
+  syncUiIcons(master);
+  fs.rmSync(tmp, { recursive: true, force: true });
+
+  const icns = fs.statSync(path.join(buildDir, 'icon.icns'));
+  process.stdout.write(`  wrote icon.icns (${Math.round(icns.size / 1024)} KB) and icon.png\n`);
+}
+
 function pageFor(simplified) {
   let svg = fs.readFileSync(source, 'utf8');
   if (simplified) svg = svg.replace(/<ellipse id="mound"[^>]*\/>/, '');
@@ -57,7 +142,12 @@ ${svg}`;
 }
 
 async function main() {
-  if (!fs.existsSync(source)) throw new Error(`missing ${source}`);
+  if (fs.existsSync(pngSource)) {
+    await generateFromPng();
+    return;
+  }
+
+  if (!fs.existsSync(source)) throw new Error(`missing ${source} or ${pngSource}`);
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'loam-icon-'));
   fs.rmSync(iconsetDir, { recursive: true, force: true });
@@ -103,27 +193,7 @@ async function main() {
   }
   win.destroy();
 
-  for (const [name, size] of Object.entries(ICONSET)) {
-    const master = size < SIMPLIFY_BELOW ? masters.simple : masters.full;
-    const out = path.join(iconsetDir, name);
-    if (size === RENDER_AT) {
-      fs.copyFileSync(master, out);
-    } else {
-      execFileSync('sips', ['-z', String(size), String(size), master, '--out', out], {
-        stdio: 'ignore',
-      });
-    }
-  }
-
-  // electron-builder reads build/icon.icns (mac) and build/icon.png (linux).
-  fs.copyFileSync(masters.full, path.join(buildDir, 'icon.png'));
-
-  execFileSync('iconutil', ['-c', 'icns', iconsetDir, '-o', path.join(buildDir, 'icon.icns')], {
-    stdio: 'inherit',
-  });
-
-  // The .iconset is an intermediate; the .icns is the artefact.
-  fs.rmSync(iconsetDir, { recursive: true, force: true });
+  generateIconsetFromMaster(masters.full);
   fs.rmSync(tmp, { recursive: true, force: true });
 
   const icns = fs.statSync(path.join(buildDir, 'icon.icns'));

@@ -14,7 +14,7 @@ export type RunStatus =
 
 /**
  * The design's four tones: `wait` (accent, pulsing), `run` (sage, pulsing),
- * `done` (neutral) and `fail` (outlined terracotta).
+ * `done` (neutral) and `fail` (muted rose).
  */
 export type Tone = 'wait' | 'run' | 'done' | 'fail';
 
@@ -29,7 +29,7 @@ export const toneDotColor: Record<Tone, string> = {
   wait: 'var(--color-accent)',
   run: 'var(--color-accent-2)',
   done: 'var(--color-neutral-400)',
-  fail: 'var(--color-accent-700)',
+  fail: 'var(--color-danger)',
 };
 
 export const tonePulses: Record<Tone, boolean> = {

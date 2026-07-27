@@ -8,8 +8,7 @@ import { cn } from '@/lib/utils';
  * semibold, themed hover/active/focus states) in globals.css; these variants
  * only pick the fill and the interface height.
  *
- * The system carries no red role: destructive actions read as deep terracotta
- * on a tinted outline, matching the design's Deny / Revert all buttons.
+ * Destructive actions use muted rose on a tinted outline.
  */
 const buttonVariants = cva('btn', {
   variants: {

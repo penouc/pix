@@ -14,10 +14,10 @@ import { spawnSync } from 'node:child_process';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const appRoot = path.join(
   root,
-  'apps/desktop/release/mac-arm64/Pi Agent Desktop.app',
+  'apps/desktop/release/mac-arm64/PiX.app',
 );
 const asarPath = path.join(appRoot, 'Contents/Resources/app.asar');
-const binary = path.join(appRoot, 'Contents/MacOS/Pi Agent Desktop');
+const binary = path.join(appRoot, 'Contents/MacOS/PiX');
 
 function fail(msg) {
   console.error(`FAIL: ${msg}`);

@@ -28,7 +28,7 @@ const argIdx = process.argv.indexOf('--app-path');
 const appRoot =
   argIdx !== -1
     ? process.argv[argIdx + 1]
-    : path.join(root, 'apps/desktop/release/mac-arm64/Pi Agent Desktop.app');
+    : path.join(root, 'apps/desktop/release/mac-arm64/PiX.app');
 
 let failures = 0;
 
@@ -53,7 +53,7 @@ if (!existsSync(appRoot)) {
 }
 pass('app bundle exists');
 
-const binary = path.join(appRoot, 'Contents/MacOS/Pi Agent Desktop');
+const binary = path.join(appRoot, 'Contents/MacOS/PiX');
 existsSync(binary) ? pass('main binary present') : fail('main binary missing');
 
 const asarPath = path.join(appRoot, 'Contents/Resources/app.asar');

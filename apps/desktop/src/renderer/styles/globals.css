@@ -5,8 +5,8 @@
    "Loam 桌面应用设计" (`Loam Desktop.dc.html` + _ds/organic-…/styles.css).
 
    The desktop screen's <helmet> retunes the design system's warm cream ground
-   to a white/neutral one and keeps only the two accents — terracotta and sage —
-   from the base sheet. It also ships a THEME_DARK map, so this file carries
+   to a white/neutral one with a sage-green primary accent — fresh, not
+   terracotta. It also ships a THEME_DARK map, so this file carries both
    both themes: JS resolves the user's light/dark/system preference to a
    concrete `data-theme` on <html>, and every token re-points from there.
 
@@ -22,70 +22,63 @@
 
 @theme {
   /* — roles (light) — */
-  --color-background: #ffffff;
-  --color-surface: #f6f6f7;
-  --color-surface-raised: #fafafa;
-  --color-border: #e4e4e5;
-  --color-border-strong: #c8c9cc;
+  --color-background: #f8faf8;
+  --color-surface: #f3f6f3;
+  --color-surface-raised: #fafcfa;
+  --color-border: #e0e8e0;
+  --color-border-strong: #c5d4c5;
   --color-foreground: #17181a;
-  --color-muted: #7f8082;
-  --color-accent: #c67139;
-  --color-accent-soft: rgba(198, 113, 57, 0.14);
+  --color-muted: #6f7a6f;
+  --color-accent: #6b8f5c;
+  --color-accent-soft: rgba(107, 143, 92, 0.14);
 
-  /* The system has no red role: sage reads as "good", deep terracotta as
-     "failed" — the design's own `fail` tone. */
-  --color-success: #7a8a5e;
-  --color-warning: #c67139;
-  --color-danger: #8c491a;
+  /* Sage primary for actions; muted rose for failure — no brown terracotta. */
+  --color-success: #5d9e82;
+  --color-warning: #8faa72;
+  --color-danger: #b85c5c;
 
   /* — neutral ramp (light) — */
-  --color-neutral-100: #fafafa;
-  --color-neutral-200: #f1f1f2;
-  --color-neutral-300: #e6e6e8;
-  --color-neutral-400: #c8c9cc;
-  --color-neutral-500: #a1a2a6;
-  --color-neutral-600: #78797e;
-  --color-neutral-700: #55565b;
-  --color-neutral-800: #37383c;
-  --color-neutral-900: #1d1e21;
+  --color-neutral-100: #fafcfa;
+  --color-neutral-200: #eef2ee;
+  --color-neutral-300: #e4eae4;
+  --color-neutral-400: #c5d0c5;
+  --color-neutral-500: #9aa89a;
+  --color-neutral-600: #6f7a6f;
+  --color-neutral-700: #4f5a4f;
+  --color-neutral-800: #343c34;
+  --color-neutral-900: #1d211d;
 
-  /* — accent ramp (terracotta) — 100/200 retuned by the screen, rest from the
-     design system's base sheet — */
-  --color-accent-100: #fdf2ea;
-  --color-accent-200: #f9dfcd;
-  --color-accent-300: #ffc6a5;
-  --color-accent-400: #f6a06b;
-  --color-accent-500: #d67f48;
-  --color-accent-600: #b2622d;
-  --color-accent-700: #8c491a;
-  --color-accent-800: #643312;
-  --color-accent-900: #402310;
+  /* — primary accent ramp (sage green) — */
+  --color-accent-100: #f1f5ec;
+  --color-accent-200: #e2ead9;
+  --color-accent-300: #ccdbb2;
+  --color-accent-400: #aebf92;
+  --color-accent-500: #8fa073;
+  --color-accent-600: #728157;
+  --color-accent-700: #56633f;
+  --color-accent-800: #3d472b;
+  --color-accent-900: #272e1b;
 
-  /* — second accent ramp (sage) — */
-  --color-accent-2: #7a8a5e;
-  --color-accent-2-100: #f1f5ec;
-  --color-accent-2-200: #e2ead9;
-  --color-accent-2-300: #ccdbb2;
-  --color-accent-2-400: #aebf92;
-  --color-accent-2-500: #8fa073;
-  --color-accent-2-600: #728157;
-  --color-accent-2-700: #56633f;
-  --color-accent-2-800: #3d472b;
-  --color-accent-2-900: #272e1b;
+  /* — second accent ramp (mint) — */
+  --color-accent-2: #5d9e82;
+  --color-accent-2-100: #edf6f1;
+  --color-accent-2-200: #d8ebe3;
+  --color-accent-2-300: #b8dcc8;
+  --color-accent-2-400: #93c4ad;
+  --color-accent-2-500: #6faa94;
+  --color-accent-2-600: #568f76;
+  --color-accent-2-700: #426f5c;
+  --color-accent-2-800: #2f5042;
+  --color-accent-2-900: #1e3429;
 
   /*
-   * Usage heatmap — a sequential single-hue ramp, light→dark on the light
-   * theme. Declared as its own five steps rather than reusing accent-100…800:
-   * the dark theme re-points those (tints go dark, deep steps go light so they
-   * stay readable as text), which would scramble a magnitude ramp. Per the
-   * sequential rule the empty step is allowed to recede toward the surface, and
-   * dark mode gets *selected* steps rather than a flip.
+   * Usage heatmap — sequential sage ramp on the light theme.
    */
-  --color-heat-0: #f1f1f2;
-  --color-heat-1: #f9dfcd;
-  --color-heat-2: #f6a06b;
-  --color-heat-3: #b2622d;
-  --color-heat-4: #8c491a;
+  --color-heat-0: #eef2ee;
+  --color-heat-1: #e2ead9;
+  --color-heat-2: #aebf92;
+  --color-heat-3: #728157;
+  --color-heat-4: #56633f;
 
   /* Terminal / tool-output surface. Declared as its own pair rather than
      reusing neutral-900 + neutral-200: the dark theme inverts the neutral
@@ -133,51 +126,46 @@
    inverts: 100 is the darkest surface, 800 the lightest text.
    ─────────────────────────────────────────────────────────────────────── */
 :root[data-theme='dark'] {
-  --color-background: #1b1c1e;
-  --color-surface: #232427;
-  --color-surface-raised: #2b2c2f;
-  --color-border: #35363a;
-  --color-border-strong: #4d4e53;
-  --color-foreground: #f2f2f3;
-  --color-muted: #909196;
+  --color-background: #1a1c1b;
+  --color-surface: #212523;
+  --color-surface-raised: #282c2a;
+  --color-border: #333a36;
+  --color-border-strong: #4a544f;
+  --color-foreground: #f2f4f2;
+  --color-muted: #8a968f;
   --color-divider: rgba(255, 255, 255, 0.1);
 
-  --color-neutral-100: #232427;
-  --color-neutral-200: #2b2c2f;
-  --color-neutral-300: #38393d;
-  --color-neutral-400: #4d4e53;
-  --color-neutral-500: #6b6c71;
-  --color-neutral-600: #909196;
-  --color-neutral-700: #b3b4b8;
-  --color-neutral-800: #d6d7da;
-  --color-neutral-900: #0e0f10;
+  --color-neutral-100: #212523;
+  --color-neutral-200: #282c2a;
+  --color-neutral-300: #333a36;
+  --color-neutral-400: #4a544f;
+  --color-neutral-500: #6b7770;
+  --color-neutral-600: #8a968f;
+  --color-neutral-700: #b0bbb4;
+  --color-neutral-800: #d4dad6;
+  --color-neutral-900: #0e100f;
 
-  --color-accent-100: #3a2c22;
-  --color-accent-200: #4d3626;
-  --color-accent-2-100: #28301f;
-  --color-accent-2-200: #334027;
+  --color-accent-100: #28301f;
+  --color-accent-200: #334027;
+  --color-accent-2-100: #1f2e28;
+  --color-accent-2-200: #2a4038;
 
-  /* The design's dark map darkens the accent *tints* (100/200) but leaves the
-     deep steps alone, while its markup keeps using 700–900 as the text colour
-     on those tints — which is unreadable on a dark ground. On a dark theme the
-     readable accent is a light one, so the deep steps invert here. Every use of
-     these three in this app is a foreground on an accent tint. */
-  --color-accent-700: #f0a97a;
-  --color-accent-800: #ffc6a5;
-  --color-accent-900: #ffe1d0;
-  --color-accent-2-700: #b6c79a;
-  --color-accent-2-800: #ccdbb2;
-  --color-accent-2-900: #e1eecc;
+  /* Readable sage tints on dark ground. */
+  --color-accent-700: #b6c79a;
+  --color-accent-800: #ccdbb2;
+  --color-accent-900: #e1eecc;
+  --color-accent-2-700: #93c4ad;
+  --color-accent-2-800: #b8dcc8;
+  --color-accent-2-900: #d8ebe3;
 
-  --color-output: #0e0f10;
-  --color-output-foreground: #d6d7da;
+  --color-output: #0e100f;
+  --color-output-foreground: #d4dad6;
 
-  /* Dark: more activity reads lighter and warmer against the dark surface. */
-  --color-heat-0: #2b2c2f;
-  --color-heat-1: #4d3626;
-  --color-heat-2: #8c491a;
-  --color-heat-3: #d67f48;
-  --color-heat-4: #f6a06b;
+  --color-heat-0: #282c2a;
+  --color-heat-1: #334027;
+  --color-heat-2: #728157;
+  --color-heat-3: #8fa073;
+  --color-heat-4: #ccdbb2;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 3px 10px rgba(0, 0, 0, 0.45);

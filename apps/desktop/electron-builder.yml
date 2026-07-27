@@ -1,5 +1,5 @@
 appId: dev.pi.agent.desktop
-productName: Pi Agent Desktop
+productName: PiX
 copyright: Copyright © Pi Desktop
 
 directories:
@@ -23,7 +23,7 @@ extraMetadata:
 
 mac:
   category: public.app-category.developer-tools
-  # Generated from build/icon.svg by `pnpm icon:generate`.
+  # Generated from build/icon-source.png by `pnpm icon:generate`.
   icon: build/icon.icns
   target:
     - target: dir
@@ -41,7 +41,7 @@ mac:
   # Desktop". `node scripts/verify-packaged.mjs` prints the real paths.
 
 dmg:
-  title: Pi Agent Desktop
+  title: PiX
   window:
     width: 540
     height: 380

@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electron';
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import fsp from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -247,13 +248,24 @@ async function readAuditSummary(): Promise<{
 }
 
 /**
- * In development the dock shows Electron's own icon because there is no bundle
- * to read Info.plist from. Packaged builds get it from build/icon.icns via
- * electron-builder, so this only runs unpackaged.
+ * Mascot artwork lives in `build/icon-source.png`; run `pnpm icon:generate` for
+ * `icon.png` / `icon.icns`. Dev has no Info.plist, so we load those files here.
  */
+function resolveAppIconPath(): string | undefined {
+  const roots = [path.join(__dirname, '..', '..'), app.getAppPath()];
+  for (const root of roots) {
+    for (const name of ['build/icon.png', 'build/icon.icns']) {
+      const candidate = path.join(root, name);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return undefined;
+}
+
 function applyDevDockIcon(): void {
   if (app.isPackaged || process.platform !== 'darwin' || !app.dock) return;
-  const iconPath = path.join(__dirname, '..', '..', 'build', 'icon.png');
+  const iconPath = resolveAppIconPath();
+  if (!iconPath) return;
   try {
     const icon = nativeImage.createFromPath(iconPath);
     if (!icon.isEmpty()) app.dock.setIcon(icon);
@@ -263,15 +275,20 @@ function applyDevDockIcon(): void {
 }
 
 function createWindow(): void {
+  const iconPath = resolveAppIconPath();
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
     minWidth: 1024,
     minHeight: 680,
     title: 'PiX',
+    ...(iconPath ? { icon: iconPath } : {}),
     // Organic ground (--color-bg) — avoids a flash of a different colour on show.
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f8faf8',
     titleBarStyle: 'hiddenInset',
+    ...(process.platform === 'darwin'
+      ? { trafficLightPosition: { x: 14, y: 9 } as { x: number; y: number } }
+      : {}),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.mjs'),
       contextIsolation: true,
