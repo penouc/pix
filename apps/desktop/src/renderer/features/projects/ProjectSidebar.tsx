@@ -1,23 +1,22 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  ChevronRight,
   FolderOpen,
   Plus,
   Search,
   Settings,
-  SlidersHorizontal,
   Sparkles,
   SquareTerminal,
   X,
   Zap,
 } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import type { ProjectSummary, SessionSummary } from '@pi-desktop/protocol';
 
-import { Segmented } from '@/components/ui/segmented';
 import { useCreateTask } from '@/features/sessions/use-create-task';
 import { invoke } from '@/lib/ipc';
-import { dotStyle, statusTone } from '@/lib/status';
+import { dotStyle, statusTone, type RunStatus } from '@/lib/status';
 import { cn } from '@/lib/utils';
 import { useAgentStreamStore } from '@/stores/agent-stream-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
@@ -66,22 +65,36 @@ export function ProjectSidebar({
   const { createTask, busy: creating, error: createError } = useCreateTask();
   /** Last soft-deleted task, offered back as an Undo rather than a modal. */
   const [undoable, setUndoable] = useState<SessionSummary | null>(null);
+  /** Which projects show their tasks. The open one starts expanded. */
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
+
+  // Expanding the project you just opened, without fighting a manual collapse:
+  // this only ever adds, so closing it again sticks.
+  useEffect(() => {
+    if (!project?.id) return;
+    setExpanded((current) =>
+      current.has(project.id) ? current : new Set([...current, project.id]),
+    );
+  }, [project?.id]);
+
+  function toggleExpanded(projectId: string) {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
+      return next;
+    });
+  }
 
   const busy = creating || opening;
   const error = openError ?? createError ?? externalError ?? null;
 
+  const queryClient = useQueryClient();
   const recent = useQuery({
     queryKey: ['project.listRecent'],
     queryFn: () => invoke<ProjectSummary[]>({ method: 'project.listRecent' }),
-  });
-
-  const sessions = useQuery({
-    queryKey: ['session.list', project?.id],
-    enabled: Boolean(project?.id),
-    queryFn: () =>
-      invoke<SessionSummary[]>({ method: 'session.list', params: { projectId: project!.id } }),
   });
 
   async function openProjectPath(path: string) {
@@ -113,8 +126,14 @@ export function ProjectSidebar({
    * picker instead — a button labelled "New task" that asked for a folder — so
    * it now falls back to the playground workspace and puts the task there.
    */
-  async function handleNewTask() {
-    let target = project;
+  async function handleNewTask(into?: ProjectSummary) {
+    let target = into ?? project;
+    // Creating a task in a project you are not in switches to it first, or the
+    // task would open behind the wrong workspace.
+    if (into && into.id !== project?.id) {
+      await openProjectPath(into.path);
+      target = into;
+    }
     if (!target) {
       setOpening(true);
       setOpenError(null);
@@ -150,7 +169,7 @@ export function ProjectSidebar({
         resetSessionView();
         if (project) setScope(project.id, null);
       }
-      await sessions.refetch();
+      await queryClient.invalidateQueries({ queryKey: ['session.list'] });
     } catch (err) {
       setOpenError(err instanceof Error ? err.message : String(err));
     }
@@ -162,8 +181,6 @@ export function ProjectSidebar({
     setScope(item.projectId, item.id);
     onSelectSession();
   }
-
-  const tasks = sessions.data ?? [];
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -205,104 +222,46 @@ export function ProjectSidebar({
 
       <div className="mx-3 mt-3 mb-2.5 h-px bg-border" />
 
-      {/* Scope + list actions */}
-      <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5">
-        <Segmented
-          size="sm"
-          aria-label="Group tasks by"
-          options={[{ value: 'project', label: 'Project' }]}
-          value="project"
-        />
-        <div className="flex gap-0.5">
-          <IconButton title="Filtering isn't implemented yet" disabled>
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-          </IconButton>
-          <IconButton title="Open project folder" disabled={busy} onClick={onBrowseForProject}>
-            <FolderOpen className="h-3.5 w-3.5" />
-          </IconButton>
-        </div>
+      {/*
+        The "group tasks by: Project" control and the disabled filter button are
+        gone. The first had a single option and so could never change anything —
+        and grouping by project is now the structure of the list itself, not a
+        setting. The second only ever said it was not implemented.
+      */}
+      <div className="flex items-center justify-end px-2.5 pb-2.5">
+        <IconButton title="Open project folder" disabled={busy} onClick={onBrowseForProject}>
+          <FolderOpen className="h-3.5 w-3.5" />
+        </IconButton>
       </div>
 
       {error ? (
         <div className="px-3.5 pb-2 text-[11px] leading-snug text-danger">{error}</div>
       ) : null}
 
-      {/* Lists */}
+      {/* Projects, each owning its own task list */}
       <div className="min-h-0 flex-1 overflow-y-auto px-2.5 pb-2">
         <SectionLabel>Projects</SectionLabel>
-        <div className="mb-3.5 flex flex-col gap-px">
+        <div className="flex flex-col gap-px">
           {recent.data?.length ? (
-            recent.data.slice(0, 6).map((item) => (
-              <button
+            recent.data.slice(0, 12).map((item) => (
+              <ProjectBranch
                 key={item.id}
-                type="button"
-                title={item.path}
-                disabled={busy}
-                onClick={() => void openProjectPath(item.path)}
-                className={cn(
-                  'w-full cursor-pointer truncate rounded-xl px-2.5 py-1.5 text-left text-[12.5px] transition-colors',
-                  project?.id === item.id
-                    ? 'bg-accent-soft text-accent-800'
-                    : 'text-foreground/60 hover:bg-foreground/[0.07] hover:text-foreground',
-                )}
-              >
-                {item.name}
-              </button>
+                project={item}
+                isActive={project?.id === item.id}
+                expanded={expanded.has(item.id)}
+                busy={busy}
+                activeSessionId={activeSessionId}
+                runStatus={status}
+                selectedSessionId={session?.id ?? null}
+                onToggle={() => toggleExpanded(item.id)}
+                onOpenProject={() => void openProjectPath(item.path)}
+                onSelectSession={selectSession}
+                onDeleteSession={(item) => void setSessionDeleted(item, true)}
+                onNewTask={() => void handleNewTask(item)}
+              />
             ))
           ) : (
             <EmptyHint>No projects yet</EmptyHint>
-          )}
-        </div>
-
-        <div className="flex items-center justify-between py-1 pr-0.5 pl-1.5">
-          <span className="text-[10px] font-bold tracking-[0.14em] text-foreground/45 uppercase">
-            Tasks
-          </span>
-          <IconButton title="New task" disabled={busy} onClick={() => void handleNewTask()}>
-            <Plus className="h-3 w-3" />
-          </IconButton>
-        </div>
-        <div className="flex flex-col gap-px">
-          {tasks.length ? (
-            tasks.map((item) => {
-              const isSelected = session?.id === item.id;
-              // The pulsing dot marks the session that actually owns the run.
-              const isLive = item.id === activeSessionId;
-              return (
-                <div
-                  key={item.id}
-                  className={cn(
-                    'density-row group flex items-center gap-1 rounded-xl pr-1 transition-colors',
-                    isSelected ? 'bg-accent-soft' : 'hover:bg-foreground/[0.07]',
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={() => selectSession(item)}
-                    className={cn(
-                      'flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-xl px-2.5 py-1.5 text-[12.5px]',
-                      isSelected
-                        ? 'text-foreground'
-                        : 'text-foreground/60 group-hover:text-foreground',
-                    )}
-                  >
-                    <span style={dotStyle(isLive ? statusTone(status) : 'done')} />
-                    <span className="min-w-0 flex-1 truncate text-left">{item.title}</span>
-                  </button>
-                  <button
-                    type="button"
-                    title="Delete task (recoverable — nothing is erased)"
-                    aria-label={`Delete ${item.title}`}
-                    onClick={() => void setSessionDeleted(item, true)}
-                    className="hidden h-5 w-5 flex-none cursor-pointer items-center justify-center rounded-full text-muted group-hover:flex hover:bg-foreground/[0.1] hover:text-foreground"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              );
-            })
-          ) : (
-            <EmptyHint>{project ? 'No tasks yet' : 'Open a project first'}</EmptyHint>
           )}
         </div>
 
@@ -409,4 +368,149 @@ function SectionLabel({ children }: { children: string }) {
 
 function EmptyHint({ children }: { children: string }) {
   return <div className="px-1.5 py-1 text-[11.5px] text-foreground/40">{children}</div>;
+}
+
+/**
+ * One project and, when expanded, its tasks.
+ *
+ * Tasks used to live in a single flat list below the projects, showing only the
+ * open project's — so the other projects' work was invisible and the heading was
+ * the only thing telling you which project you were looking at. Nesting them puts
+ * each task under the thing it belongs to, and lets you see more than one at once.
+ *
+ * The query lives here rather than in the parent so a collapsed project costs
+ * nothing: `enabled` keeps it from fetching until it is opened.
+ */
+function ProjectBranch({
+  project,
+  isActive,
+  expanded,
+  busy,
+  activeSessionId,
+  runStatus,
+  selectedSessionId,
+  onToggle,
+  onOpenProject,
+  onSelectSession,
+  onDeleteSession,
+  onNewTask,
+}: {
+  project: ProjectSummary;
+  isActive: boolean;
+  expanded: boolean;
+  busy: boolean;
+  activeSessionId: string | null;
+  runStatus: RunStatus;
+  selectedSessionId: string | null;
+  onToggle: () => void;
+  onOpenProject: () => void;
+  onSelectSession: (session: SessionSummary) => void;
+  onDeleteSession: (session: SessionSummary) => void;
+  onNewTask: () => void;
+}) {
+  const sessions = useQuery({
+    queryKey: ['session.list', project.id],
+    enabled: expanded,
+    queryFn: () =>
+      invoke<SessionSummary[]>({ method: 'session.list', params: { projectId: project.id } }),
+  });
+  const tasks = sessions.data ?? [];
+
+  return (
+    <div>
+      <div
+        className={cn(
+          'density-row group flex items-center gap-0.5 rounded-xl pr-1 transition-colors',
+          isActive ? 'bg-accent-soft' : 'hover:bg-foreground/[0.07]',
+        )}
+      >
+        <button
+          type="button"
+          title={expanded ? 'Hide tasks' : 'Show tasks'}
+          aria-expanded={expanded}
+          onClick={onToggle}
+          className="flex h-6 w-5 flex-none cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:text-foreground"
+        >
+          <ChevronRight
+            className={cn('h-3.5 w-3.5 transition-transform', expanded && 'rotate-90')}
+          />
+        </button>
+        <button
+          type="button"
+          title={project.path}
+          disabled={busy}
+          // Clicking the name opens the project and reveals its tasks: wanting one
+          // without the other is not a thing anybody wants here.
+          onClick={() => {
+            if (!isActive) onOpenProject();
+            if (!expanded) onToggle();
+          }}
+          className={cn(
+            'min-w-0 flex-1 cursor-pointer truncate rounded-xl py-1.5 pr-1 text-left text-[12.5px] transition-colors',
+            isActive ? 'text-accent-800' : 'text-foreground/60 group-hover:text-foreground',
+          )}
+        >
+          {project.name}
+        </button>
+        <button
+          type="button"
+          title={`New task in ${project.name}`}
+          aria-label={`New task in ${project.name}`}
+          disabled={busy}
+          onClick={onNewTask}
+          className="hidden h-5 w-5 flex-none cursor-pointer items-center justify-center rounded-full text-muted group-hover:flex hover:bg-foreground/[0.1] hover:text-foreground"
+        >
+          <Plus className="h-3 w-3" />
+        </button>
+      </div>
+
+      {expanded ? (
+        <div className="mb-0.5 flex flex-col gap-px pl-4">
+          {sessions.isLoading ? (
+            <EmptyHint>Loading…</EmptyHint>
+          ) : tasks.length ? (
+            tasks.map((item) => {
+              const isSelected = selectedSessionId === item.id;
+              // The pulsing dot marks the session that actually owns the run.
+              const isLive = item.id === activeSessionId;
+              return (
+                <div
+                  key={item.id}
+                  className={cn(
+                    'density-row group/task flex items-center gap-1 rounded-xl pr-1 transition-colors',
+                    isSelected ? 'bg-accent-soft' : 'hover:bg-foreground/[0.07]',
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onSelectSession(item)}
+                    className={cn(
+                      'flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-[12.5px]',
+                      isSelected
+                        ? 'text-foreground'
+                        : 'text-foreground/60 group-hover/task:text-foreground',
+                    )}
+                  >
+                    <span style={dotStyle(isLive ? statusTone(runStatus) : 'done')} />
+                    <span className="min-w-0 flex-1 truncate text-left">{item.title}</span>
+                  </button>
+                  <button
+                    type="button"
+                    title="Delete task (recoverable — nothing is erased)"
+                    aria-label={`Delete ${item.title}`}
+                    onClick={() => onDeleteSession(item)}
+                    className="hidden h-5 w-5 flex-none cursor-pointer items-center justify-center rounded-full text-muted group-hover/task:flex hover:bg-foreground/[0.1] hover:text-foreground"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              );
+            })
+          ) : (
+            <EmptyHint>No tasks yet</EmptyHint>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
 }
