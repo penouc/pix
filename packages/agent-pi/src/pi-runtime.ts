@@ -31,8 +31,13 @@ import {
   hydrateRuntimeAuthFromEnv,
   type ProviderAuthSummary,
 } from './credentials.js';
-import { mapPiSessionEvent, type PiSessionEventLike } from './event-mapper.js';
+import { extractTextContent, mapPiSessionEvent, type PiSessionEventLike } from './event-mapper.js';
 import { PermissionController } from './permission-controller.js';
+import {
+  buildSessionTitleUserPrompt,
+  sanitizeSessionTitle,
+  SESSION_TITLE_SYSTEM_PROMPT,
+} from './session-title.js';
 
 /** Maximum wall-clock time a single run may take before auto-abort (§14.1). */
 const DEFAULT_RUN_TIMEOUT_MS = 10 * 60 * 1000;
@@ -682,6 +687,57 @@ export class PiAgentRuntime implements AgentRuntime {
     return { providerId: chosen.providerId, modelId: chosen.modelId };
   }
 
+  /**
+   * One cheap completion with the session's current model. Separate from the
+   * agent transcript so naming never pollutes the coding thread.
+   */
+  async generateSessionTitle(sessionId: string): Promise<string | null> {
+    this.assertAlive();
+    const record = this.sessions.get(sessionId);
+    if (!record) return null;
+    await this.ensureRuntime(record.projectPath);
+    const model = record.pi.model;
+    if (!model || !this.modelRuntime) return null;
+
+    const snippets = collectTitleSnippets(
+      record.pi.messages as Array<{ role?: string; content?: unknown }>,
+    );
+    if (!snippets.userText) return null;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20_000);
+    try {
+      const reply = await this.modelRuntime.completeSimple(
+        model,
+        {
+          systemPrompt: SESSION_TITLE_SYSTEM_PROMPT,
+          messages: [
+            {
+              role: 'user',
+              content: buildSessionTitleUserPrompt(snippets),
+              timestamp: Date.now(),
+            },
+          ],
+        },
+        {
+          maxTokens: 48,
+          temperature: 0.2,
+          reasoning: 'off',
+          signal: controller.signal,
+        },
+      );
+      if (reply.stopReason === 'error' || reply.stopReason === 'aborted') {
+        return null;
+      }
+      return sanitizeSessionTitle(extractTextContent(reply.content));
+    } catch (error) {
+      console.warn('[PiAgentRuntime] generateSessionTitle failed', error);
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   setBeforeWriteToolHandler(handler: BeforeWriteToolHandler): void {
     this.beforeWriteToolHandler = handler;
   }
@@ -999,4 +1055,21 @@ export function expandPiMessagesToTranscript(
   }
 
   return out;
+}
+
+
+function collectTitleSnippets(
+  messages: Array<{ role?: string; content?: unknown }>,
+): { userText: string; assistantText?: string } {
+  let userText = '';
+  let assistantText = '';
+  for (const message of messages) {
+    const role = message.role;
+    if (role !== 'user' && role !== 'assistant') continue;
+    const text = extractTextContent(message.content).trim();
+    if (!text) continue;
+    if (role === 'user' && !userText) userText = text;
+    if (role === 'assistant') assistantText = text;
+  }
+  return assistantText ? { userText, assistantText } : { userText };
 }

@@ -7,8 +7,10 @@ import { fileURLToPath } from 'node:url';
 
 import {
   createAgentRuntime,
+  deriveSessionTitle,
   describeAuthSources,
   PI_SDK_PACKAGES,
+  sanitizeSessionTitle,
   type ProviderAuthSummary,
 } from '@pi-desktop/agent-pi';
 import type { AgentRuntime } from '@pi-desktop/agent-domain';
@@ -115,39 +117,17 @@ function getProviderLogins(): ProviderLoginService {
 }
 
 /**
- * Titles waiting to be applied, keyed by session. A task is created before its
- * first message exists, so it starts as "New task"; the first prompt is the
- * best description of it we have. Applied when the first run finishes rather
- * than on send, so a task that fails immediately keeps its neutral name.
+ * Unnamed tasks waiting for a title after their first run. Value is a cheap
+ * offline fallback derived from the first prompt; on a successful completion
+ * we ask the session's current model first and only use this if that fails.
  */
 const pendingSessionTitles = new Map<string, string>();
 
 /** Names still considered "unnamed" and safe to replace. */
 const DEFAULT_SESSION_TITLES = new Set(['New task', 'Session']);
 
-/**
- * Derive a task name from the first prompt. Deliberately not an LLM call: it
- * would cost a request and a round-trip per task for a sidebar label, and this
- * is both free and predictable.
- */
-export function deriveSessionTitle(text: string): string | null {
-  const firstLine = text
-    .split('\n')
-    .map((line) => line.trim())
-    // Skip fences, quotes and headings — the first prose line is the intent.
-    .find((line) => line.length > 0 && !/^([`>#\-*]|\d+\.)/.test(line));
-  if (!firstLine) return null;
-
-  const cleaned = firstLine
-    // Drop inline markdown emphasis/code markers without touching the words.
-    .replace(/[`*_]+/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (cleaned.length < 3) return null;
-
-  const capped = cleaned.length > 72 ? `${cleaned.slice(0, 71).trimEnd()}…` : cleaned;
-  return capped.charAt(0).toUpperCase() + capped.slice(1);
-}
+/** Re-export for callers/tests that historically imported from main. */
+export { deriveSessionTitle } from '@pi-desktop/agent-pi';
 
 function getNotifications(): NotificationService {
   notifications ??= new NotificationService(() => getProviderSettings().getUiFlags());
@@ -500,17 +480,18 @@ function broadcastEvent(event: unknown): void {
     data.type === 'run.failed' ||
     data.type === 'run.cancelled'
   ) {
-    void applyPendingSessionTitle(data.sessionId);
+    const outcome =
+      data.type === 'run.completed'
+        ? 'completed'
+        : data.type === 'run.failed'
+          ? 'failed'
+          : 'cancelled';
+    void applyPendingSessionTitle(data.sessionId, data.projectId, outcome);
     void automationScheduler
       ?.handleRunFinished({
         runId: data.runId,
         projectId: data.projectId,
-        outcome:
-          data.type === 'run.completed'
-            ? 'completed'
-            : data.type === 'run.failed'
-              ? 'failed'
-              : 'cancelled',
+        outcome,
       })
       .catch((error) => console.error('[main] automation run-finished handling failed', error));
   }
@@ -655,23 +636,53 @@ function getAutomationScheduler(): AutomationScheduler {
 }
 
 /**
- * Rename an auto-named task once its first run finishes, and push the new
- * summary to the Renderer so the sidebar updates without a poll.
+ * Rename an auto-named task once its first run finishes.
+ *
+ * On a successful completion, ask the session's current model for a short
+ * title; fall back to the offline derivation from the first prompt on failure
+ * or cancelled/failed runs so we never leave "New task" stuck forever after a
+ * useful exchange, and never block the run path on the naming call.
  */
-async function applyPendingSessionTitle(sessionId: string): Promise<void> {
-  const title = pendingSessionTitles.get(sessionId);
-  if (!title) return;
+async function applyPendingSessionTitle(
+  sessionId: string,
+  projectId: string,
+  outcome: 'completed' | 'failed' | 'cancelled',
+): Promise<void> {
+  const fallback = pendingSessionTitles.get(sessionId);
+  if (!fallback) return;
+  // Claim immediately so a second terminal event cannot double-rename.
   pendingSessionTitles.delete(sessionId);
   try {
     const db = await getDb();
     const existing = db.sessions.get(sessionId);
     // Respect a name the user set while the run was in flight.
     if (!existing || !DEFAULT_SESSION_TITLES.has(existing.title)) return;
+
+    let title: string | null = null;
+    if (outcome === 'completed') {
+      try {
+        const agent = ensureRuntime();
+        if (agent.generateSessionTitle) {
+          title = sanitizeSessionTitle(await agent.generateSessionTitle(sessionId));
+        }
+      } catch (error) {
+        console.warn('[main] model title generation failed; using fallback', error);
+      }
+    }
+    title = title ?? sanitizeSessionTitle(fallback) ?? fallback;
+    if (!title || DEFAULT_SESSION_TITLES.has(title)) return;
+
     const renamed = await db.sessions.rename(sessionId, title);
     getNotifications().setSessionTitle(sessionId, renamed.title);
-    // No bespoke event: the Renderer already refetches the session list on the
-    // run's terminal event, and inventing one would mean an unvalidated event
-    // type on a channel that is Zod-checked end to end (§4.1 A2).
+    // LLM naming finishes after run.completed already refreshed the list, so
+    // push a dedicated (Zod-validated) event the sidebar can react to.
+    broadcastEvent({
+      type: 'session.updated',
+      projectId,
+      sessionId,
+      title: renamed.title,
+      timestamp: Date.now(),
+    });
   } catch (error) {
     console.error('[main] auto-naming the task failed', error);
   }
@@ -974,9 +985,14 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
           throw error;
         }
         persistSessionMessage(cmd.params.sessionId, 'user', cmd.params.text);
-        // Queue an auto-name if this task is still called "New task".
-        if (DEFAULT_SESSION_TITLES.has(meta.title)) {
-          const derived = deriveSessionTitle(cmd.params.text);
+        // Queue an auto-name if this task is still called "New task". The model
+        // title is requested after the first completed turn; this string is only
+        // the offline fallback.
+        if (DEFAULT_SESSION_TITLES.has(meta.title) && !pendingSessionTitles.has(meta.id)) {
+          const derived =
+            deriveSessionTitle(cmd.params.text) ??
+            sanitizeSessionTitle(cmd.params.text) ??
+            cmd.params.text.trim().slice(0, 72);
           if (derived) pendingSessionTitles.set(meta.id, derived);
         }
         writeSnapshots.associateRun(ref.runId, checkpoint.id, project.path);

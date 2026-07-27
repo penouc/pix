@@ -190,6 +190,12 @@ export interface AgentRuntime {
   /** Optional: choose a default model when the session has none. */
   pickDefaultModel?(): Promise<ModelRef | null>;
   /**
+   * Optional: ask the session's current model for a short sidebar title after
+   * the first completed turn of a still-unnamed task. Returns null when the
+   * model is unavailable or the reply is unusable — callers keep a fallback.
+   */
+  generateSessionTitle?(sessionId: string): Promise<string | null>;
+  /**
    * Installs Main's checkpoint hook. Implementations must await it before a
    * write/edit tool executes and must not expose SDK-specific event types.
    */

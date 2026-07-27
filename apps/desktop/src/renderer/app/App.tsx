@@ -68,9 +68,22 @@ export function App() {
   useEffect(() => {
     if (!window.piDesktop) return;
     return window.piDesktop.onAgentEvent((event) => {
+      // session.updated is metadata, not a run stream event — keep it out of the
+      // sequence/run-scoped store and refresh the surfaces that show the title.
+      if (event.type === 'session.updated') {
+        void queryClient.invalidateQueries({ queryKey: ['session.list', event.projectId] });
+        const current = useWorkspaceStore.getState().session;
+        if (current?.id === event.sessionId && current.title !== event.title) {
+          useWorkspaceStore.getState().setSession({
+            ...current,
+            title: event.title,
+            updatedAt: event.timestamp,
+          });
+        }
+        return;
+      }
       applyEvent(event);
-      // A finished run is also when Main applies an auto-generated task name,
-      // so refresh the list that shows it.
+      // Terminal run events also refresh the task list (status badges, order).
       if (
         event.type === 'run.completed' ||
         event.type === 'run.failed' ||

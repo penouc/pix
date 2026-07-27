@@ -400,7 +400,7 @@ function ProjectBranch({
 
   return (
     <div>
-      <div className="density-row group flex items-center gap-0.5 rounded-xl pr-1 transition-colors hover:bg-foreground/[0.07]">
+      <div className="density-row group flex items-center gap-0.5 rounded-xl pr-1 transition-colors">
         <button
           type="button"
           title={expanded ? 'Hide tasks' : 'Show tasks'}
@@ -419,7 +419,7 @@ function ProjectBranch({
           // without the other is not a thing anybody wants here.
           onClick={() => {
             if (!isActive) onOpenProject();
-            if (!expanded) onToggle();
+            onToggle();
           }}
           className="min-w-0 flex-1 cursor-pointer truncate rounded-xl py-1.5 pr-1 text-left text-[12.5px] text-foreground/60 transition-colors group-hover:text-foreground"
         >

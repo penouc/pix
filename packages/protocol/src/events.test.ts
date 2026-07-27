@@ -27,6 +27,17 @@ describe('DesktopAgentEventSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('accepts session.updated without a run scope', () => {
+    const result = DesktopAgentEventSchema.safeParse({
+      type: 'session.updated',
+      projectId: 'p1',
+      sessionId: 's1',
+      title: 'Fix login button',
+      timestamp: Date.now(),
+    });
+    expect(result.success).toBe(true);
+  });
 });
 
 describe('parseIpcCommand', () => {

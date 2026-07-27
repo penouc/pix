@@ -84,7 +84,7 @@ function shouldAccept(
     AgentStreamState,
     'lastSequenceByRun' | 'activeRunId' | 'activeProjectId' | 'activeSessionId'
   >,
-  event: DesktopAgentEvent,
+  event: Exclude<DesktopAgentEvent, { type: 'session.updated' }>,
 ): boolean {
   if (state.activeProjectId && event.projectId !== state.activeProjectId) return false;
 
@@ -394,6 +394,9 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
   },
 
   applyEvent: (event) => {
+    // Metadata events are handled by the shell (sidebar / active session title).
+    if (event.type === 'session.updated') return;
+
     const state = get();
     if (!shouldAccept(state, event)) {
       return;

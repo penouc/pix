@@ -10,6 +10,8 @@ import type {
 import { DomainError, agentError } from '@pi-desktop/agent-domain';
 import type { ApprovalDecision, DesktopAgentEvent, ModelRef, RunRef, ThinkingLevel, ThinkingLevelState } from '@pi-desktop/protocol';
 
+import { deriveSessionTitle, sanitizeSessionTitle } from './session-title.js';
+
 const ALL_THINKING_LEVELS: ThinkingLevel[] = [
   'off',
   'minimal',
@@ -24,6 +26,9 @@ interface SessionRecord extends AgentSession {
   projectPath: string;
   model?: ModelRef;
   thinkingLevel: ThinkingLevel;
+  /** First user prompt — used for offline auto-naming. */
+  firstUserText?: string;
+  lastAssistantText?: string;
 }
 
 interface ActiveRun {
@@ -95,6 +100,7 @@ export class FakeAgentRuntime implements AgentRuntime {
     this.runs.set(runId, active);
     session.updatedAt = Date.now();
     if (input.model) session.model = input.model;
+    session.firstUserText ??= input.text.trim();
 
     void this.simulateRun(active, session, input.text);
     return { runId, sessionId };
@@ -221,6 +227,14 @@ export class FakeAgentRuntime implements AgentRuntime {
     return { providerId: 'fake', modelId: 'fake-demo' };
   }
 
+  /** Offline stand-in: same heuristic Main falls back to when the model fails. */
+  async generateSessionTitle(sessionId: string): Promise<string | null> {
+    this.assertAlive();
+    const session = this.sessions.get(sessionId);
+    if (!session?.firstUserText) return null;
+    return sanitizeSessionTitle(deriveSessionTitle(session.firstUserText));
+  }
+
   subscribe(listener: AgentEventListener): () => void {
     this.listeners.add(listener);
     return () => {
@@ -302,6 +316,7 @@ export class FakeAgentRuntime implements AgentRuntime {
 
     const messageId = randomUUID();
     const reply = `${DEMO_REPLY}\n\nYou said: "${userText.trim()}"`;
+    session.lastAssistantText = reply;
     const chunks = chunkText(reply, 24);
 
     for (const delta of chunks) {

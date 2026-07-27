@@ -20,3 +20,9 @@ export {
   loadOpenCodeAuthFromDisk,
   type ProviderAuthSummary,
 } from './credentials.js';
+export {
+  deriveSessionTitle,
+  sanitizeSessionTitle,
+  buildSessionTitleUserPrompt,
+  SESSION_TITLE_SYSTEM_PROMPT,
+} from './session-title.js';

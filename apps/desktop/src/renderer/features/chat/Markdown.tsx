@@ -22,7 +22,8 @@ export const Markdown = memo(function Markdown({
   return (
     <div
       className={cn(
-        'pi-md w-full max-w-full min-w-0 overflow-x-hidden break-words text-[13.5px] leading-[1.62]',
+        /* Match Codex chat prose: 13px body, line-height = size + 8px. */
+        'pi-md w-full max-w-full min-w-0 overflow-x-hidden break-words',
         className,
       )}
     >

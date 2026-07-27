@@ -746,14 +746,13 @@ function ToolCard({
   const summary = tool.inputSummary.replace(new RegExp(`^${tool.toolName}:\\s*`, 'i'), '');
 
   return (
-    <div className="flex w-full min-w-0 max-w-full flex-col gap-1.5">
+    <div className="flex w-full min-w-0 max-w-full flex-col gap-1 my-0.5">
       <button
         type="button"
         onClick={canExpand ? onToggle : undefined}
         className={cn(
-          'flex w-fit max-w-full items-center gap-2 rounded-full border border-border bg-foreground/[0.04] px-3 py-1.5 text-left transition-colors',
-          canExpand ? 'cursor-pointer hover:bg-foreground/[0.07]' : 'cursor-default',
-          runningNow && 'border-accent/25 bg-accent-100/40',
+          'flex w-full min-w-0 items-center gap-2 py-1 px-0.5 text-left transition-opacity',
+          canExpand ? 'cursor-pointer hover:opacity-80' : 'cursor-default',
         )}
       >
         <span
@@ -784,7 +783,7 @@ function ToolCard({
         ) : null}
       </button>
       {expanded ? (
-        <div className="flex w-full min-w-0 max-w-full flex-col gap-2 rounded-[14px] border border-border/60 bg-foreground/[0.02] px-3.5 py-2.5 font-mono text-[11.5px] leading-relaxed">
+        <div className="flex w-full min-w-0 max-w-full flex-col gap-2 my-1 pl-3 border-l-2 border-foreground/20 font-mono text-[11.5px] leading-relaxed">
           {tool.inputSummary ? (
             <div className="min-w-0 max-w-full">
               <div className="mb-1 text-[10px] font-bold tracking-wider text-muted uppercase">Input</div>

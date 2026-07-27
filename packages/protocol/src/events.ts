@@ -143,5 +143,16 @@ export const DesktopAgentEventSchema = z.discriminatedUnion('type', [
       costUsd: z.number().nonnegative().optional(),
     })
     .merge(EventScopeSchema),
+  /**
+   * Session metadata changed outside a run stream (e.g. auto-named after the
+   * first completed turn). Not run-scoped — no runId/sequence.
+   */
+  z.object({
+    type: z.literal('session.updated'),
+    projectId: z.string().min(1),
+    sessionId: z.string().min(1),
+    title: z.string().min(1),
+    timestamp: z.number().int().nonnegative(),
+  }),
 ]);
 export type DesktopAgentEvent = z.infer<typeof DesktopAgentEventSchema>;

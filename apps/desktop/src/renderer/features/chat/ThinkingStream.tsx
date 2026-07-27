@@ -30,24 +30,24 @@ export function ThinkingStreamRow({
   const hasBody = Boolean(content.trim());
 
   return (
-    <div className="flex max-w-full flex-col gap-1.5">
+    <div className="flex w-full min-w-0 max-w-full flex-col gap-1 my-0.5">
       <button
         type="button"
         onClick={hasBody ? onToggle : undefined}
         className={cn(
-          'flex w-full max-w-full min-w-0 items-center gap-2 rounded-[14px] border border-border/70 bg-foreground/[0.03] px-3 py-2 text-left transition-colors',
-          hasBody && 'cursor-pointer hover:bg-foreground/[0.05]',
+          'flex w-full min-w-0 items-center gap-2 py-1 px-0.5 text-left transition-colors',
+          hasBody && 'cursor-pointer hover:opacity-80',
           !hasBody && 'cursor-default',
         )}
         title={hasBody ? (expanded ? 'Collapse reasoning' : 'Expand reasoning') : 'Thinking'}
       >
         <span
           className={cn(
-            'flex h-6 w-6 flex-none items-center justify-center rounded-full bg-accent/10',
+            'flex h-5 w-5 flex-none items-center justify-center rounded-full bg-accent/10',
             streaming && 'animate-[pi-think-pulse_1.8s_ease-in-out_infinite]',
           )}
         >
-          <Brain className="h-3.5 w-3.5 text-accent-700" />
+          <Brain className="h-3 w-3 text-accent-700" />
         </span>
 
         <span className="min-w-0 flex-1 overflow-hidden">
@@ -88,7 +88,7 @@ export function ThinkingStreamRow({
       </button>
 
       {expanded && hasBody ? (
-        <div className="max-h-56 overflow-y-auto rounded-[14px] border border-border/60 bg-foreground/[0.02] px-3 py-2.5">
+        <div className="max-h-60 overflow-y-auto pl-3 my-1 border-l-2 border-accent/25">
           <Markdown streaming={streaming} className="pi-md-think">
             {content.trim()}
           </Markdown>
