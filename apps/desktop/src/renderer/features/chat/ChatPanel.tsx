@@ -666,22 +666,9 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
 }
 
 function AssistantMessage({ content, streaming }: { content: string; streaming: boolean }) {
-  // Re-parsing Markdown on every token delta is what made streaming feel broken:
-  // half-built fences flicker, code blocks jump, and the thread stutters. Plain
-  // text while tokens arrive; render Markdown once the message is complete.
-  if (streaming) {
-    return (
-      <div className="min-w-0 flex-1 text-[13.5px] leading-[1.62] whitespace-pre-wrap">
-        {content}
-        <span className="ml-0.5 inline-block" style={{ animation: 'pi-blink 1.1s infinite' }}>
-          ▍
-        </span>
-      </div>
-    );
-  }
   return (
     <div className="min-w-0 flex-1">
-      <Markdown>{content}</Markdown>
+      <Markdown streaming={streaming}>{content}</Markdown>
     </div>
   );
 }
