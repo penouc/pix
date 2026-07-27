@@ -40,6 +40,7 @@ import { ProviderSettingsStore } from './providers/provider-settings-store.js';
 import { ProviderLoginService } from './providers/provider-login-service.js';
 import { DesktopLogger } from './observability/logger.js';
 import { RunMetricsStore } from './observability/run-metrics-store.js';
+import { SessionLogSyncService } from './observability/session-log-sync.js';
 import { NotificationService } from './observability/notification-service.js';
 import { readCurrentBranch, searchProjectFiles } from './git/file-search-service.js';
 import { IndexService } from './indexing/index-service.js';
@@ -76,6 +77,15 @@ let automationStore: AutomationStore | null = null;
 let automationScheduler: AutomationScheduler | null = null;
 let notifications: NotificationService | null = null;
 let providerLogins: ProviderLoginService | null = null;
+let sessionLogSync: SessionLogSyncService | null = null;
+
+function getSessionLogSync(): SessionLogSyncService {
+  sessionLogSync ??= new SessionLogSyncService(
+    path.join(app.getPath('userData'), 'pi-agent', 'desktop-sessions'),
+    getDb,
+  );
+  return sessionLogSync;
+}
 
 function getProviderLogins(): ProviderLoginService {
   providerLogins ??= new ProviderLoginService({
@@ -188,6 +198,14 @@ async function getDb(): Promise<DesktopDatabase> {
       console.error('[main] legacy JSON migration failed', error);
     }
     desktopDb = db;
+    void getSessionLogSync()
+      .sync()
+      .then(({ imported }) => {
+        if (imported > 0) {
+          console.warn(`[main] session log backfill imported ${imported} usage row(s)`);
+        }
+      })
+      .catch((error) => console.error('[main] session log sync failed', error));
     return db;
   })();
 
@@ -1231,6 +1249,7 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         const days = cmd.params?.days ?? 365;
         const to = Date.now();
         const from = to - days * 24 * 60 * 60 * 1000;
+        await getSessionLogSync().sync();
         return okResult(
           db.runMetrics.summary({
             from,

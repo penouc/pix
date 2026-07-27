@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { extractTextContent, extractUsage, mapPiSessionEvent, type MapContext } from './event-mapper.js';
+import { extractTextContent, mapPiSessionEvent, type MapContext } from './event-mapper.js';
+import { extractUsage } from './session-usage.js';
 
 function makeCtx(): MapContext & { seq: number; messageId: string | null } {
   const state = { seq: 0, messageId: null as string | null };

@@ -244,4 +244,16 @@ CREATE INDEX IF NOT EXISTS idx_session_messages_session_sequence
   ON session_messages (session_id, sequence);
 `,
   },
+  {
+    version: 12,
+    name: 'session_log_sync',
+    sql: `
+CREATE TABLE IF NOT EXISTS session_log_sync (
+  file_path TEXT PRIMARY KEY NOT NULL,
+  last_modified INTEGER NOT NULL,
+  last_line_count INTEGER NOT NULL DEFAULT 0,
+  last_synced_at INTEGER NOT NULL
+);
+`,
+  },
 ];

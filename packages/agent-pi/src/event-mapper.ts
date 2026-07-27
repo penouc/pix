@@ -1,5 +1,7 @@
 import type { DesktopAgentEvent, RiskLevel } from '@pi-desktop/protocol';
 
+import { extractUsage } from './session-usage.js';
+
 // M8-1: Output truncation limits (plan §14.1).
 const MAX_TOOL_PROGRESS_CHUNK = 4_000;
 const MAX_TOOL_OUTPUT_SUMMARY = 500;
@@ -177,55 +179,6 @@ export function mapPiSessionEvent(
     default:
       return [];
   }
-}
-
-function pickNumber(record: Record<string, unknown>, keys: string[]): number | undefined {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-  }
-  return undefined;
-}
-
-/** Pi assistant messages carry per-turn usage; map into desktop usage.updated fields. */
-export function extractUsage(usage: unknown): {
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
-  costUsd?: number;
-} | null {
-  if (!usage || typeof usage !== 'object') return null;
-  const record = usage as Record<string, unknown>;
-
-  const inputTokens = pickNumber(record, ['input', 'inputTokens', 'input_tokens']);
-  const outputTokens = pickNumber(record, ['output', 'outputTokens', 'output_tokens']);
-  const totalTokens = pickNumber(record, ['totalTokens', 'total_tokens', 'total']);
-
-  let costUsd: number | undefined;
-  const cost = record['cost'];
-  if (typeof cost === 'number' && Number.isFinite(cost)) {
-    costUsd = cost;
-  } else if (cost && typeof cost === 'object') {
-    costUsd = pickNumber(cost as Record<string, unknown>, ['total', 'totalUsd', 'usd']);
-  }
-
-  if (
-    inputTokens == null &&
-    outputTokens == null &&
-    totalTokens == null &&
-    costUsd == null
-  ) {
-    return null;
-  }
-
-  return {
-    inputTokens,
-    outputTokens,
-    totalTokens:
-      totalTokens ??
-      (inputTokens != null && outputTokens != null ? inputTokens + outputTokens : undefined),
-    costUsd,
-  };
 }
 
 export function extractTextContent(content: unknown): string {
