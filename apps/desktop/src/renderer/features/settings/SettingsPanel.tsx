@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import type { ProviderCatalogEntry, ProviderSetting, Settings } from '@pi-desktop/protocol';
 
 import { Button } from '@/components/ui/button';
+import { SearchableSelect, type SearchableSelectOption } from '@/components/SearchableSelect';
 import { useOfferedModels } from '@/features/models/use-offered-models';
 import { FavoriteModelsSection } from '@/features/models/FavoriteModelsSection';
 import { SubscriptionsSection } from '@/features/settings/SubscriptionsSection';
@@ -238,20 +239,17 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)_auto]">
-            <select
-              className="rounded-xl border border-border bg-surface-raised px-3 py-2 text-sm outline-none focus:border-border-strong"
+            <SearchableSelect
+              options={available.map((entry) => ({
+                value: entry.id,
+                label: `${entry.name}${entry.hasAuth ? ' ✓' : ''}`,
+                sublabel: entry.modelCount ? `${entry.modelCount} models` : undefined,
+              }))}
               value={providerId}
-              onChange={(e) => setProviderId(e.target.value)}
-            >
-              <option value="">Choose a provider…</option>
-              {available.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.name}
-                  {entry.hasAuth ? ' ✓' : ''}
-                  {entry.modelCount ? ` · ${entry.modelCount}` : ''}
-                </option>
-              ))}
-            </select>
+              onChange={setProviderId}
+              placeholder="Choose a provider…"
+              searchPlaceholder="Search providers…"
+            />
             <input
               className="rounded-xl border border-border bg-surface-raised px-3 py-2 text-sm outline-none focus:border-border-strong"
               type="password"
@@ -317,22 +315,20 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
             <h2 className="text-sm font-semibold">Default model</h2>
             <p className="mt-1 text-xs text-muted">Used when creating a new session.</p>
           </div>
-          <select
-            className="w-full rounded-xl border border-border bg-surface-raised px-3 py-2 text-sm outline-none focus:border-border-strong"
+          <SearchableSelect
+            options={[
+              { value: '', label: 'Choose automatically' },
+              ...offered.map((entry) => ({
+                value: `${entry.providerId}/${entry.modelId}`,
+                label: entry.displayName,
+                sublabel: entry.providerId,
+              })),
+            ]}
             value={model}
-            onChange={(e) => void saveDefaultModel(e.target.value)}
-          >
-            <option value="">Choose automatically</option>
-            {/* The same offered list the composer uses, not the whole catalogue. */}
-            {offered.map((entry) => {
-              const value = `${entry.providerId}/${entry.modelId}`;
-              return (
-                <option key={value} value={value}>
-                  {entry.displayName} ({entry.providerId})
-                </option>
-              );
-            })}
-          </select>
+            onChange={(val) => void saveDefaultModel(val)}
+            placeholder="Choose automatically"
+            searchPlaceholder="Search models…"
+          />
         </section>
       </div>
 
