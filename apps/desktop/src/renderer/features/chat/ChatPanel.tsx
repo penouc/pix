@@ -6,7 +6,6 @@ import {
   FilePlus2,
   FileText,
   FolderSearch,
-  Folder,
   GitBranch,
   Lock,
   PanelRight,
@@ -30,7 +29,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { PiAvatar } from '@/components/ui/pi-mark';
 import { ApprovalModePicker } from '@/features/chat/ApprovalModePicker';
 import { Markdown } from '@/features/chat/Markdown';
 import { ModelPicker } from '@/features/models/ModelPicker';
@@ -41,6 +39,7 @@ import {
   formatDuration,
   formatTokens,
   NOT_REPORTED,
+  statusLabel,
   statusTone,
   toneBadge,
 } from '@/lib/status';
@@ -94,6 +93,7 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const nearBottomRef = useRef(true);
 
   const queryClient = useQueryClient();
   const approvalMode = useQuery({
@@ -184,6 +184,17 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
+    const onScroll = () => {
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+      nearBottomRef.current = distance < 96;
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el || !nearBottomRef.current) return;
     el.scrollTop = el.scrollHeight;
   }, [messages, tools, status, approval]);
 
@@ -192,6 +203,14 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
     status === 'starting' ||
     status === 'waiting_for_approval' ||
     status === 'stopping';
+
+  const hasStreamingAssistant = messages.some((m) => m.role === 'assistant' && m.streaming);
+  const hasRunningTools = tools.some((t) => t.status === 'running');
+  const showThinking =
+    (status === 'starting' || status === 'running' || status === 'stopping') &&
+    !hasStreamingAssistant &&
+    !hasRunningTools &&
+    !approval;
 
   /** Messages and tool calls share an arrival counter, so the thread reads in order. */
   const timeline = useMemo(
@@ -319,7 +338,7 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
         {!blank && status !== 'idle' ? (
           <Badge tone={toneBadge[tone]} className="gap-1.5">
             <span style={dotStyle(tone, 6)} />
-            {status}
+            {statusLabel(status)}
           </Badge>
         ) : null}
         {!blank && running ? (
@@ -341,10 +360,9 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
 
       {/* Thread */}
       <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto px-5 pt-5 pb-1.5">
-        <div className="mx-auto flex max-w-[700px] flex-col gap-4">
+        <div className="mx-auto flex max-w-[700px] flex-col gap-3">
           {!timeline.length && !approval ? (
             <div className="flex flex-col items-center gap-2 px-5 py-20 text-center">
-              <PiAvatar markSize={17} className="h-9 w-9" />
               <div className="text-sm font-bold">
                 {session ? 'Describe what it should do' : 'Open a project to start'}
               </div>
@@ -369,19 +387,11 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
                 // No avatar on either side: in a two-party conversation the
                 // alignment already says who is speaking, and a mark on every
                 // turn is repetition that crowds the text.
-                <div key={entry.message.id} className="flex items-start">
-                  <div className="min-w-0 flex-1">
-                    <Markdown>{entry.message.content}</Markdown>
-                    {entry.message.streaming ? (
-                      <span
-                        className="ml-0.5 inline-block"
-                        style={{ animation: 'pi-blink 1.1s infinite' }}
-                      >
-                        ▍
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
+                <AssistantMessage
+                  key={entry.message.id}
+                  content={entry.message.content}
+                  streaming={entry.message.streaming}
+                />
               )
             ) : (
               <ToolCard
@@ -397,7 +407,7 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
 
           {/* Approval */}
           {approval ? (
-            <div className="ml-[35px] flex flex-col gap-3 rounded-[24px] border border-accent/30 bg-accent-100 px-4 py-4">
+            <div className="flex flex-col gap-3 rounded-[20px] border border-accent/30 bg-accent-100 px-4 py-4">
               <div className="flex items-center gap-2.5">
                 <Lock className="h-4 w-4 flex-none text-accent-800" />
                 <div className="text-sm font-bold text-accent-900">Approval required</div>
@@ -470,7 +480,7 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
 
           {/* Error */}
           {error ? (
-            <div className="ml-[35px] flex items-center justify-between gap-3 rounded-[18px] border border-danger/30 bg-danger/10 px-4 py-2.5 text-[12.5px] text-danger">
+            <div className="flex items-center justify-between gap-3 rounded-[18px] border border-danger/30 bg-danger/10 px-4 py-2.5 text-[12.5px] text-danger">
               <span className="min-w-0 flex-1">{error}</span>
               {errorRetryable && lastUserText ? (
                 <Button
@@ -486,26 +496,16 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
             </div>
           ) : null}
 
-          {/* Live indicator */}
-          {running ? (
-            <div className="flex items-center gap-2.5">
-              <span className="text-[12.5px] text-muted">
-                {status === 'waiting_for_approval'
-                  ? 'Waiting for your decision — the run is paused, nothing else will be written.'
-                  : status === 'stopping'
-                    ? 'Stopping the run and its child processes…'
-                    : 'Working…'}
-              </span>
-              <span className="inline-flex gap-1">
-                {[0, 0.18, 0.36].map((delay) => (
-                  <span
-                    key={delay}
-                    className="h-[5px] w-[5px] rounded-full bg-accent"
-                    style={{ animation: `pi-blink 1.1s ${delay}s infinite` }}
-                  />
-                ))}
-              </span>
+          {showThinking ? <ThinkingRow /> : null}
+
+          {status === 'waiting_for_approval' && !approval ? (
+            <div className="text-[12.5px] text-muted">
+              Waiting for your decision — the run is paused.
             </div>
+          ) : null}
+
+          {status === 'stopping' ? (
+            <div className="text-[12.5px] text-muted">Stopping the run…</div>
           ) : null}
         </div>
       </div>
@@ -546,17 +546,6 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
           </div>
         ) : null}
         <div className="density-composer mx-auto max-w-[700px] overflow-hidden rounded-[26px] border border-border bg-surface shadow-[var(--shadow-sm)]">
-          <div className="flex items-center gap-1.5 border-b border-border px-3.5 pt-2.5 pb-2">
-            <ContextPill icon={<Folder className="h-3 w-3" />}>
-              {project?.name ?? 'no project'}
-            </ContextPill>
-            {branch.data?.branch ? (
-              <ContextPill icon={<GitBranch className="h-3 w-3" />}>
-                {branch.data.branch}
-              </ContextPill>
-            ) : null}
-          </div>
-
           <textarea
             ref={composerRef}
             className="max-h-44 min-h-[52px] w-full resize-none bg-transparent px-4 py-3 text-[13.5px] leading-normal outline-none placeholder:text-muted"
@@ -594,6 +583,11 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
               mode={approvalMode.data?.mode ?? 'auto-reads'}
               onChange={(mode) => setApprovalMode.mutate(mode)}
             />
+            {branch.data?.branch ? (
+              <ContextPill icon={<GitBranch className="h-3 w-3" />}>
+                {branch.data.branch}
+              </ContextPill>
+            ) : null}
             <span className="min-w-0 flex-1" />
             {/* Model choice belongs with the send button: it is a property of the
                 message you are about to send, not of the window. */}
@@ -618,6 +612,44 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
   );
 }
 
+function AssistantMessage({ content, streaming }: { content: string; streaming: boolean }) {
+  // Re-parsing Markdown on every token delta is what made streaming feel broken:
+  // half-built fences flicker, code blocks jump, and the thread stutters. Plain
+  // text while tokens arrive; render Markdown once the message is complete.
+  if (streaming) {
+    return (
+      <div className="min-w-0 flex-1 text-[13.5px] leading-[1.62] whitespace-pre-wrap">
+        {content}
+        <span className="ml-0.5 inline-block" style={{ animation: 'pi-blink 1.1s infinite' }}>
+          ▍
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="min-w-0 flex-1">
+      <Markdown>{content}</Markdown>
+    </div>
+  );
+}
+
+function ThinkingRow() {
+  return (
+    <div className="flex items-center gap-2 text-[12.5px] text-muted">
+      <span>Thinking</span>
+      <span className="inline-flex gap-1">
+        {[0, 0.18, 0.36].map((delay) => (
+          <span
+            key={delay}
+            className="size-[5px] rounded-full bg-accent"
+            style={{ animation: `pi-blink 1.1s ${delay}s infinite` }}
+          />
+        ))}
+      </span>
+    </div>
+  );
+}
+
 function ToolCard({
   tool,
   expanded,
@@ -629,21 +661,24 @@ function ToolCard({
 }) {
   const ok = tool.status === 'completed';
   const failed = tool.status === 'failed';
+  const runningNow = tool.status === 'running';
   const icon = toolIcons[tool.toolName.toLowerCase()] ?? <Wrench className="h-3 w-3" />;
   const hasOutput = Boolean(tool.outputSummary);
+  const summary = tool.inputSummary.replace(new RegExp(`^${tool.toolName}:\\s*`, 'i'), '');
 
   return (
-    <div className="ml-[35px] overflow-hidden rounded-[20px] border border-border bg-neutral-100/70">
+    <div className="flex max-w-full flex-col gap-1.5">
       <button
         type="button"
         onClick={hasOutput ? onToggle : undefined}
         className={cn(
-          'flex w-full items-center gap-2.5 border-0 bg-transparent px-3.5 py-2.5 text-left transition-colors',
-          hasOutput ? 'cursor-pointer hover:bg-foreground/[0.05]' : 'cursor-default',
+          'flex w-fit max-w-full items-center gap-2 rounded-full border border-border bg-foreground/[0.04] px-3 py-1.5 text-left transition-colors',
+          hasOutput ? 'cursor-pointer hover:bg-foreground/[0.07]' : 'cursor-default',
+          runningNow && 'border-accent/25 bg-accent-100/40',
         )}
       >
         <span
-          className="grid h-5 w-5 flex-none place-items-center rounded-[7px]"
+          className="grid size-5 flex-none place-items-center rounded-full"
           style={
             failed
               ? { background: 'var(--color-accent-200)', color: 'var(--color-accent-800)' }
@@ -654,20 +689,23 @@ function ToolCard({
         >
           {icon}
         </span>
-        <span className="flex-none text-[12.5px] font-bold">{tool.toolName}</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-xs opacity-70">
-          {tool.inputSummary}
-        </span>
-        <span className="font-mono text-[11px] text-muted">{tool.status}</span>
+        <span className="flex-none text-[12px] font-semibold">{tool.toolName}</span>
+        <span className="min-w-0 truncate font-mono text-[11px] text-muted">{summary}</span>
+        {runningNow ? (
+          <span
+            className="size-1.5 flex-none rounded-full bg-accent-2"
+            style={{ animation: 'pi-pulse 1.2s ease-in-out infinite' }}
+          />
+        ) : null}
         {hasOutput ? (
           <ChevronDown
-            className="h-3.5 w-3.5 flex-none opacity-45 transition-transform"
+            className="size-3.5 flex-none opacity-45 transition-transform"
             style={expanded ? { transform: 'rotate(180deg)' } : undefined}
           />
         ) : null}
       </button>
       {expanded && tool.outputSummary ? (
-        <pre className="output-pre px-4 py-3.5">{tool.outputSummary}</pre>
+        <pre className="output-pre max-w-full rounded-[14px] px-3.5 py-2.5">{tool.outputSummary}</pre>
       ) : null}
     </div>
   );

@@ -268,7 +268,8 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
           activeProjectId: event.projectId,
           activeSessionId: event.sessionId,
           status: 'running',
-          tools: [],
+          // Keep prior tool cards in the thread — clearing them made follow-up
+          // runs look like the agent never used any tools.
           usage: null,
           model: event.model ?? null,
           startedAt: event.timestamp,

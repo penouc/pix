@@ -226,4 +226,22 @@ CREATE TABLE IF NOT EXISTS index_state (
 );
 `,
   },
+  {
+    version: 11,
+    name: 'session_messages',
+    sql: `
+CREATE TABLE IF NOT EXISTS session_messages (
+  id TEXT PRIMARY KEY NOT NULL,
+  session_id TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+  text TEXT NOT NULL,
+  sequence INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_messages_session_sequence
+  ON session_messages (session_id, sequence);
+`,
+  },
 ];

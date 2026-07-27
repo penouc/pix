@@ -1,3 +1,5 @@
+export type { SessionMessageRepository } from './session-message-repository.js';
+export { SqliteSessionMessageRepository } from './sqlite-session-message-repository.js';
 export type { SessionRepository } from './session-repository.js';
 export type { ProjectRepository } from './project-repository.js';
 export type {

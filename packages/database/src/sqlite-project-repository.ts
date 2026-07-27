@@ -56,7 +56,7 @@ export class SqliteProjectRepository implements ProjectRepository {
       .prepare(
         `SELECT id, path, name, trusted, is_git, last_opened_at
          FROM projects
-         ORDER BY last_opened_at DESC
+         ORDER BY name COLLATE NOCASE ASC
          LIMIT ?`,
       )
       .all(limit) as unknown as ProjectRow[];
@@ -110,7 +110,8 @@ export class SqliteProjectRepository implements ProjectRepository {
       name: path.basename(resolved) || resolved,
       trusted,
       isGit,
-      lastOpenedAt: Date.now(),
+      // Keep the first-open timestamp so the sidebar list order stays fixed.
+      lastOpenedAt: existing?.lastOpenedAt ?? Date.now(),
     };
     return this.put(summary);
   }

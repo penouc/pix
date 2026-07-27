@@ -26,7 +26,7 @@ export type SidebarDestination = 'terminal' | 'automations' | 'skills';
 interface ProjectSidebarProps {
   onOpenSettings: () => void;
   onNewTask: () => void;
-  onSelectSession: () => void;
+  onSelectSession: (session: SessionSummary) => void;
   onOpenSearch: () => void;
   /** Open the OS folder picker directly — no intermediate dialog. */
   onBrowseForProject: () => void;
@@ -63,8 +63,6 @@ export function ProjectSidebar({
   const setScope = useAgentStreamStore((s) => s.setScope);
 
   const { createTask, busy: creating, error: createError } = useCreateTask();
-  /** Last soft-deleted task, offered back as an Undo rather than a modal. */
-  const [undoable, setUndoable] = useState<SessionSummary | null>(null);
   /** Which projects show their tasks. The open one starts expanded. */
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [opening, setOpening] = useState(false);
@@ -157,14 +155,13 @@ export function ProjectSidebar({
     if (created) onNewTask();
   }
 
-  async function setSessionDeleted(item: SessionSummary, deleted: boolean) {
+  async function deleteSession(item: SessionSummary) {
     try {
       await invoke<SessionSummary>({
         method: 'session.delete',
-        params: { sessionId: item.id, deleted },
+        params: { sessionId: item.id, deleted: true },
       });
-      setUndoable(deleted ? item : null);
-      if (deleted && session?.id === item.id) {
+      if (session?.id === item.id) {
         setSession(null);
         resetSessionView();
         if (project) setScope(project.id, null);
@@ -176,10 +173,7 @@ export function ProjectSidebar({
   }
 
   function selectSession(item: SessionSummary) {
-    setSession(item);
-    resetSessionView();
-    setScope(item.projectId, item.id);
-    onSelectSession();
+    onSelectSession(item);
   }
 
   return (
@@ -256,7 +250,7 @@ export function ProjectSidebar({
                 onToggle={() => toggleExpanded(item.id)}
                 onOpenProject={() => void openProjectPath(item.path)}
                 onSelectSession={selectSession}
-                onDeleteSession={(item) => void setSessionDeleted(item, true)}
+                onDeleteSession={(item) => void deleteSession(item)}
                 onNewTask={() => void handleNewTask(item)}
               />
             ))
@@ -264,19 +258,6 @@ export function ProjectSidebar({
             <EmptyHint>No projects yet</EmptyHint>
           )}
         </div>
-
-        {undoable ? (
-          <div className="mt-1.5 flex items-center gap-2 rounded-xl bg-foreground/[0.06] px-2.5 py-1.5 text-[11px]">
-            <span className="min-w-0 flex-1 truncate text-muted">Deleted “{undoable.title}”</span>
-            <button
-              type="button"
-              className="flex-none cursor-pointer font-semibold text-accent-700 hover:underline"
-              onClick={() => void setSessionDeleted(undoable, false)}
-            >
-              Undo
-            </button>
-          </div>
-        ) : null}
       </div>
 
       {/* Footer */}
@@ -418,12 +399,7 @@ function ProjectBranch({
 
   return (
     <div>
-      <div
-        className={cn(
-          'density-row group flex items-center gap-0.5 rounded-xl pr-1 transition-colors',
-          isActive ? 'bg-accent-soft' : 'hover:bg-foreground/[0.07]',
-        )}
-      >
+      <div className="density-row group flex items-center gap-0.5 rounded-xl pr-1 transition-colors hover:bg-foreground/[0.07]">
         <button
           type="button"
           title={expanded ? 'Hide tasks' : 'Show tasks'}
@@ -445,10 +421,7 @@ function ProjectBranch({
             if (!isActive) onOpenProject();
             if (!expanded) onToggle();
           }}
-          className={cn(
-            'min-w-0 flex-1 cursor-pointer truncate rounded-xl py-1.5 pr-1 text-left text-[12.5px] transition-colors',
-            isActive ? 'text-accent-800' : 'text-foreground/60 group-hover:text-foreground',
-          )}
+          className="min-w-0 flex-1 cursor-pointer truncate rounded-xl py-1.5 pr-1 text-left text-[12.5px] text-foreground/60 transition-colors group-hover:text-foreground"
         >
           {project.name}
         </button>

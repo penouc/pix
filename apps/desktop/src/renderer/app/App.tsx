@@ -113,7 +113,7 @@ export function App() {
           // Ignore a late reply for a task the user has already navigated away
           // from, or it would drop someone else's transcript into this thread.
           if (useWorkspaceStore.getState().session?.id !== session.id) return;
-          if (history.length) loadHistory(history);
+          loadHistory(history);
         })
         .catch((error) => console.error('[app] loading the transcript failed', error));
     },
@@ -344,10 +344,7 @@ export function App() {
             setBlankRun(true);
             setView('run');
           }}
-          onSelectSession={() => {
-            setBlankRun(false);
-            setView('run');
-          }}
+          onSelectSession={selectSession}
           onOpenSearch={() => setSearchOpen(true)}
           onBrowseForProject={() => void browseForProject()}
           externalError={projectError}

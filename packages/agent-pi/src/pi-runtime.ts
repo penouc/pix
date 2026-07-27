@@ -118,6 +118,12 @@ export class PiAgentRuntime implements AgentRuntime {
 
   async createSession(options: CreateSessionOptions): Promise<AgentSession> {
     this.assertAlive();
+    if (options.id) {
+      const existing = this.sessions.get(options.id);
+      if (existing) {
+        return { ...existing.desktop };
+      }
+    }
     await this.ensureRuntime(options.projectPath);
 
     const now = Date.now();
@@ -267,6 +273,9 @@ export class PiAgentRuntime implements AgentRuntime {
       // A session that cannot be persisted is still worth having; losing history
       // beats refusing to open the task at all.
       console.warn('[PiAgentRuntime] session persistence unavailable', error);
+      console.warn(
+        '[PiAgentRuntime] falling back to in-memory transcript — conversations will not survive app restart',
+      );
       return SessionManager.inMemory(projectPath, { id: desktopId });
     }
   }

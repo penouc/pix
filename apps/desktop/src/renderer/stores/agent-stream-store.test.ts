@@ -58,4 +58,30 @@ describe('agent stream scoping', () => {
     } as DesktopAgentEvent);
     expect(useAgentStreamStore.getState().tools).toHaveLength(0);
   });
+
+  it('keeps prior tool cards when a new run starts', () => {
+    useAgentStreamStore.getState().applyEvent({
+      type: 'tool.requested',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      runId: 'agent-run-1',
+      sequence: 2,
+      timestamp: Date.now(),
+      toolCallId: 't1',
+      toolName: 'read',
+      inputSummary: 'README.md',
+    } as DesktopAgentEvent);
+
+    useAgentStreamStore.getState().applyEvent({
+      type: 'run.started',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      runId: 'agent-run-2',
+      sequence: 1,
+      timestamp: Date.now(),
+    } as DesktopAgentEvent);
+
+    expect(useAgentStreamStore.getState().tools).toHaveLength(1);
+    expect(useAgentStreamStore.getState().tools[0]?.toolName).toBe('read');
+  });
 });

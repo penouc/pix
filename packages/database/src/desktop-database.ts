@@ -2,12 +2,14 @@ import path from 'node:path';
 
 import type { ProjectRepository } from './project-repository.js';
 import type { SessionRepository } from './session-repository.js';
+import type { SessionMessageRepository } from './session-message-repository.js';
 import type { CheckpointRepository } from './checkpoint-repository.js';
 import { openDatabase, type SqliteDatabase } from './sqlite-connection.js';
 import { SqliteCheckpointRepository } from './sqlite-checkpoint-repository.js';
 import { SqliteIndexRepository } from './sqlite-index-repository.js';
 import { SqliteProjectRepository } from './sqlite-project-repository.js';
 import { SqliteRunMetricsRepository } from './sqlite-run-metrics-repository.js';
+import { SqliteSessionMessageRepository } from './sqlite-session-message-repository.js';
 import { SqliteSessionRepository } from './sqlite-session-repository.js';
 
 /**
@@ -17,6 +19,7 @@ import { SqliteSessionRepository } from './sqlite-session-repository.js';
 export class DesktopDatabase {
   readonly db: SqliteDatabase;
   readonly sessions: SqliteSessionRepository;
+  readonly sessionMessages: SqliteSessionMessageRepository;
   readonly projects: SqliteProjectRepository;
   readonly checkpoints: SqliteCheckpointRepository;
   readonly runMetrics: SqliteRunMetricsRepository;
@@ -27,6 +30,7 @@ export class DesktopDatabase {
     this.dbPath = dbPath;
     this.db = db;
     this.sessions = new SqliteSessionRepository(db);
+    this.sessionMessages = new SqliteSessionMessageRepository(db);
     this.projects = new SqliteProjectRepository(db);
     this.checkpoints = new SqliteCheckpointRepository(db);
     this.runMetrics = new SqliteRunMetricsRepository(db);

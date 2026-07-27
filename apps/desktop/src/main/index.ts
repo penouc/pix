@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electron';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import fsp from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -310,6 +311,26 @@ export function isExternallyOpenable(url: string): boolean {
   }
 }
 
+function persistSessionMessage(
+  sessionId: string,
+  role: 'user' | 'assistant' | 'system',
+  text: string,
+  messageId?: string,
+): void {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  void getDb()
+    .then((db) =>
+      db.sessionMessages.append({
+        id: messageId ?? randomUUID(),
+        sessionId,
+        role,
+        text: trimmed,
+      }),
+    )
+    .catch((error) => console.error('[main] persisting session message failed', error));
+}
+
 function broadcastEvent(event: unknown): void {
   const parsed = parseDesktopAgentEvent(event);
   if (!parsed.success) {
@@ -341,6 +362,12 @@ function broadcastEvent(event: unknown): void {
   // Non-delta event: flush pending deltas first to preserve ordering.
   if (deltaBuffer.length > 0) {
     flushDeltaBuffer();
+  }
+
+  if (data.type === 'message.completed' && data.role !== 'system') {
+    // Desktop-owned transcript: Pi's jsonl writer only flushes once an assistant
+    // turn completes, so failed or partial runs left nothing on disk.
+    persistSessionMessage(data.sessionId, data.role, data.content, data.messageId);
   }
 
   // An approval raised by an automation-started run is answered by the
@@ -780,13 +807,19 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       case 'session.messages': {
         const session = sessions.get(cmd.params.sessionId);
         if (!session) return errResult('SESSION_NOT_FOUND', 'Session not found');
+        const stored = db.sessionMessages.list(session.id);
+        if (stored.length > 0) {
+          return okResult(stored);
+        }
         const project = projects.get(session.projectId);
         if (!project) return errResult('PROJECT_NOT_FOUND', 'Project not found');
         if (!agent.listMessages) return okResult([]);
-        // The SDK session may not exist yet after a restart; building it is what
-        // reopens the transcript file.
         await ensurePersistedRuntimeSession(agent, session, project.path);
-        return okResult(await agent.listMessages(session.id));
+        const fromPi = await agent.listMessages(session.id);
+        if (fromPi.length > 0) {
+          await db.sessionMessages.backfill(session.id, fromPi);
+        }
+        return okResult(fromPi);
       }
       case 'session.rename': {
         const summary = await sessions.rename(cmd.params.sessionId, cmd.params.title);
@@ -840,6 +873,7 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
           await db.checkpoints.discard(checkpoint.id);
           throw error;
         }
+        persistSessionMessage(cmd.params.sessionId, 'user', cmd.params.text);
         // Queue an auto-name if this task is still called "New task".
         if (DEFAULT_SESSION_TITLES.has(meta.title)) {
           const derived = deriveSessionTitle(cmd.params.text);
@@ -876,6 +910,7 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
           text: cmd.params.text,
           model: cmd.params.model,
         });
+        persistSessionMessage(cmd.params.sessionId, 'user', cmd.params.text);
         await sessions.touch(cmd.params.sessionId);
         return okResult({ ok: true });
       }

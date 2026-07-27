@@ -54,6 +54,28 @@ export function statusTone(status: RunStatus): Tone {
   }
 }
 
+/** Short label for the run header — never show raw enum strings to the user. */
+export function statusLabel(status: RunStatus): string {
+  switch (status) {
+    case 'starting':
+      return 'Starting';
+    case 'running':
+      return 'Working';
+    case 'waiting_for_approval':
+      return 'Needs approval';
+    case 'stopping':
+      return 'Stopping';
+    case 'completed':
+      return 'Done';
+    case 'failed':
+      return 'Failed';
+    case 'cancelled':
+      return 'Stopped';
+    default:
+      return '';
+  }
+}
+
 export function dotStyle(tone: Tone, size = 7): CSSProperties {
   return {
     width: `${size}px`,
