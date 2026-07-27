@@ -59,10 +59,11 @@ export class RunMetricsStore {
       case 'usage.updated': {
         const m = this.active.get(event.runId);
         if (m) {
-          // Providers report cumulative totals per run, so last write wins.
-          if (event.inputTokens != null) m.inputTokens = event.inputTokens;
-          if (event.outputTokens != null) m.outputTokens = event.outputTokens;
-          if (event.costUsd != null) m.costUsd = event.costUsd;
+          // Pi reports per assistant turn; sum across tool loops in one run.
+          if (event.inputTokens != null) m.inputTokens = (m.inputTokens ?? 0) + event.inputTokens;
+          if (event.outputTokens != null)
+            m.outputTokens = (m.outputTokens ?? 0) + event.outputTokens;
+          if (event.costUsd != null) m.costUsd = (m.costUsd ?? 0) + event.costUsd;
         }
         break;
       }

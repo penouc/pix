@@ -9,6 +9,8 @@ interface WorkspaceState {
   /** Reasoning depth for the next message when no session exists yet. */
   selectedThinkingLevel: ThinkingLevel;
   setProject: (project: ProjectSummary | null) => void;
+  /** Switch project context without clearing the selected task. */
+  setActiveProject: (project: ProjectSummary) => void;
   setSession: (session: SessionSummary | null) => void;
   setSelectedModel: (model: string) => void;
   setSelectedThinkingLevel: (level: ThinkingLevel) => void;
@@ -20,6 +22,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   selectedModel: '',
   selectedThinkingLevel: 'medium',
   setProject: (project) => set({ project, session: null }),
+  /** Switch project context without clearing the selected task. */
+  setActiveProject: (project) => set({ project }),
   setSession: (session) => set({ session }),
   setSelectedModel: (selectedModel) => set({ selectedModel }),
   setSelectedThinkingLevel: (selectedThinkingLevel) => set({ selectedThinkingLevel }),

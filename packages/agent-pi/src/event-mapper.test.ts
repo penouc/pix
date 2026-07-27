@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { extractTextContent, mapPiSessionEvent, type MapContext } from './event-mapper.js';
+import { extractTextContent, extractUsage, mapPiSessionEvent, type MapContext } from './event-mapper.js';
 
 function makeCtx(): MapContext & { seq: number; messageId: string | null } {
   const state = { seq: 0, messageId: null as string | null };
@@ -99,6 +99,35 @@ describe('mapPiSessionEvent', () => {
     });
   });
 
+  it('maps message_end usage to usage.updated', () => {
+    const ctx = makeCtx();
+    const events = mapPiSessionEvent(
+      {
+        type: 'message_end',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'ok' }],
+          usage: {
+            input: 120,
+            output: 45,
+            totalTokens: 165,
+            cost: { total: 0.0024 },
+          },
+        },
+      },
+      ctx,
+    );
+    expect(events).toHaveLength(2);
+    expect(events[0]?.type).toBe('message.completed');
+    expect(events[1]).toMatchObject({
+      type: 'usage.updated',
+      inputTokens: 120,
+      outputTokens: 45,
+      totalTokens: 165,
+      costUsd: 0.0024,
+    });
+  });
+
   it('maps agent_end to run.completed', () => {
     const ctx = makeCtx();
     const events = mapPiSessionEvent({ type: 'agent_end', messages: [] }, ctx);
@@ -108,6 +137,24 @@ describe('mapPiSessionEvent', () => {
   it('ignores unknown events', () => {
     const ctx = makeCtx();
     expect(mapPiSessionEvent({ type: 'queue_update' }, ctx)).toEqual([]);
+  });
+});
+
+describe('extractUsage', () => {
+  it('reads Pi assistant usage envelope', () => {
+    expect(
+      extractUsage({
+        input: 10,
+        output: 20,
+        totalTokens: 30,
+        cost: { total: 0.01 },
+      }),
+    ).toEqual({
+      inputTokens: 10,
+      outputTokens: 20,
+      totalTokens: 30,
+      costUsd: 0.01,
+    });
   });
 });
 

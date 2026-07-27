@@ -96,33 +96,69 @@ export function App() {
     }
   }, [createTask]);
 
+  const setActiveProject = useWorkspaceStore((s) => s.setActiveProject);
+
+  async function ensureProjectForSession(
+    projectId: string,
+    hint?: ProjectSummary,
+  ): Promise<ProjectSummary | null> {
+    const current = useWorkspaceStore.getState().project;
+    if (current?.id === projectId) return current;
+
+    let target = hint?.id === projectId ? hint : undefined;
+    if (!target) {
+      const cached = queryClient.getQueryData<ProjectSummary[]>(['project.listRecent']);
+      target = cached?.find((item) => item.id === projectId);
+    }
+    if (!target) {
+      const recent = await invoke<ProjectSummary[]>({ method: 'project.listRecent' });
+      target = recent.find((item) => item.id === projectId);
+    }
+    if (!target) return null;
+
+    const opened = await invoke<ProjectSummary>({
+      method: 'project.open',
+      params: { path: target.path },
+    });
+    setActiveProject(opened);
+    return opened;
+  }
+
   const selectSession = useCallback(
-    (session: SessionSummary) => {
+    (session: SessionSummary, projectHint?: ProjectSummary) => {
       setPriorSession(null);
-      setSession(session);
-      resetSessionView();
-      setScope(session.projectId, session.id);
-      // Picking an existing task shows its run, not the unstarted state.
-      setBlankRun(false);
-      setView('run');
-      /*
-       * Reopening a task shows what was said in it. Before this the thread was
-       * empty every time, so past work was invisible even though the agent still
-       * had it in context — the single most disorienting thing about the app.
-       */
-      void invoke<StoredMessage[]>({
-        method: 'session.messages',
-        params: { sessionId: session.id },
-      })
-        .then((history) => {
-          // Ignore a late reply for a task the user has already navigated away
-          // from, or it would drop someone else's transcript into this thread.
+      void (async () => {
+        const project = await ensureProjectForSession(session.projectId, projectHint);
+        if (!project) {
+          console.error('[app] could not resolve project for session', session.id);
+          return;
+        }
+
+        setSession(session);
+        resetSessionView();
+        setScope(session.projectId, session.id);
+        setBlankRun(false);
+        setView('run');
+        try {
+          const history = await invoke<StoredMessage[]>({
+            method: 'session.messages',
+            params: { sessionId: session.id },
+          });
           if (useWorkspaceStore.getState().session?.id !== session.id) return;
           loadHistory(history);
-        })
-        .catch((error) => console.error('[app] loading the transcript failed', error));
+        } catch (error) {
+          console.error('[app] loading the transcript failed', error);
+        }
+      })();
     },
-    [setSession, resetSessionView, setScope, loadHistory],
+    [
+      queryClient,
+      setActiveProject,
+      setSession,
+      resetSessionView,
+      setScope,
+      loadHistory,
+    ],
   );
 
   const goBackFromRun = useCallback(() => {

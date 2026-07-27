@@ -495,14 +495,31 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
         });
         break;
       case 'usage.updated':
-        set({
-          lastSequenceByRun,
-          usage: {
-            inputTokens: event.inputTokens,
-            outputTokens: event.outputTokens,
-            totalTokens: event.totalTokens,
-            costUsd: event.costUsd,
-          },
+        set((state) => {
+          const prev = state.usage;
+          const inputTokens =
+            event.inputTokens != null
+              ? (prev?.inputTokens ?? 0) + event.inputTokens
+              : prev?.inputTokens;
+          const outputTokens =
+            event.outputTokens != null
+              ? (prev?.outputTokens ?? 0) + event.outputTokens
+              : prev?.outputTokens;
+          const costUsd =
+            event.costUsd != null ? (prev?.costUsd ?? 0) + event.costUsd : prev?.costUsd;
+          const totalTokens =
+            inputTokens != null && outputTokens != null
+              ? inputTokens + outputTokens
+              : event.totalTokens ?? prev?.totalTokens;
+          return {
+            lastSequenceByRun,
+            usage: {
+              inputTokens,
+              outputTokens,
+              totalTokens,
+              costUsd,
+            },
+          };
         });
         break;
       case 'files.changed':

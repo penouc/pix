@@ -26,7 +26,7 @@ export type SidebarDestination = 'terminal' | 'automations' | 'skills';
 interface ProjectSidebarProps {
   onOpenSettings: () => void;
   onNewTask: (previousSession: SessionSummary | null) => void;
-  onSelectSession: (session: SessionSummary) => void;
+  onSelectSession: (session: SessionSummary, project?: ProjectSummary) => void;
   onOpenSearch: () => void;
   /** Open the OS folder picker directly — no intermediate dialog. */
   onBrowseForProject: () => void;
@@ -173,8 +173,8 @@ export function ProjectSidebar({
     }
   }
 
-  function selectSession(item: SessionSummary) {
-    onSelectSession(item);
+  function selectSession(item: SessionSummary, fromProject?: ProjectSummary) {
+    onSelectSession(item, fromProject);
   }
 
   return (
@@ -386,7 +386,7 @@ function ProjectBranch({
   selectedSessionId: string | null;
   onToggle: () => void;
   onOpenProject: () => void;
-  onSelectSession: (session: SessionSummary) => void;
+  onSelectSession: (session: SessionSummary, project?: ProjectSummary) => void;
   onDeleteSession: (session: SessionSummary) => void;
   onNewTask: () => void;
 }) {
@@ -457,7 +457,7 @@ function ProjectBranch({
                 >
                   <button
                     type="button"
-                    onClick={() => onSelectSession(item)}
+                    onClick={() => onSelectSession(item, project)}
                     className={cn(
                       'flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-[12.5px]',
                       isSelected

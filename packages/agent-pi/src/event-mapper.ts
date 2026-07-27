@@ -84,7 +84,7 @@ export function mapPiSessionEvent(
 
     case 'message_end': {
       const message = event['message'] as
-        | { role?: string; content?: unknown; id?: string }
+        | { role?: string; content?: unknown; id?: string; usage?: unknown }
         | undefined;
       if (!message || message.role !== 'assistant') {
         return [];
@@ -92,7 +92,7 @@ export function mapPiSessionEvent(
       const content = extractTextContent(message.content);
       const messageId = ctx.ensureMessageId();
       ctx.clearMessageId();
-      return [
+      const events: DesktopAgentEvent[] = [
         {
           type: 'message.completed',
           ...base(),
@@ -101,6 +101,15 @@ export function mapPiSessionEvent(
           content,
         },
       ];
+      const usage = extractUsage(message.usage);
+      if (usage) {
+        events.push({
+          type: 'usage.updated',
+          ...base(),
+          ...usage,
+        });
+      }
+      return events;
     }
 
     case 'tool_execution_start': {
@@ -168,6 +177,55 @@ export function mapPiSessionEvent(
     default:
       return [];
   }
+}
+
+function pickNumber(record: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+  }
+  return undefined;
+}
+
+/** Pi assistant messages carry per-turn usage; map into desktop usage.updated fields. */
+export function extractUsage(usage: unknown): {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  costUsd?: number;
+} | null {
+  if (!usage || typeof usage !== 'object') return null;
+  const record = usage as Record<string, unknown>;
+
+  const inputTokens = pickNumber(record, ['input', 'inputTokens', 'input_tokens']);
+  const outputTokens = pickNumber(record, ['output', 'outputTokens', 'output_tokens']);
+  const totalTokens = pickNumber(record, ['totalTokens', 'total_tokens', 'total']);
+
+  let costUsd: number | undefined;
+  const cost = record['cost'];
+  if (typeof cost === 'number' && Number.isFinite(cost)) {
+    costUsd = cost;
+  } else if (cost && typeof cost === 'object') {
+    costUsd = pickNumber(cost as Record<string, unknown>, ['total', 'totalUsd', 'usd']);
+  }
+
+  if (
+    inputTokens == null &&
+    outputTokens == null &&
+    totalTokens == null &&
+    costUsd == null
+  ) {
+    return null;
+  }
+
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens:
+      totalTokens ??
+      (inputTokens != null && outputTokens != null ? inputTokens + outputTokens : undefined),
+    costUsd,
+  };
 }
 
 export function extractTextContent(content: unknown): string {

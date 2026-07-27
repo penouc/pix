@@ -1,12 +1,18 @@
 import { FileCode2, FolderTree, Globe, SquareTerminal } from 'lucide-react';
-import { useCallback, useEffect, useRef, type ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 
+import { PanelResizer } from '@/components/layout/PanelResizer';
 import { BrowserPanel } from '@/features/browser/BrowserPanel';
 import { ReviewPanel } from '@/features/chat/ReviewPanel';
 import { FileTree } from '@/features/files/FileTree';
 import { TerminalView } from '@/features/terminal/TerminalView';
 import { cn } from '@/lib/utils';
-import { useUiPrefsStore, DOCK_MIN_WIDTH, DOCK_MAX_WIDTH, type DockTab } from '@/stores/ui-prefs-store';
+import {
+  useUiPrefsStore,
+  DOCK_MIN_WIDTH,
+  DOCK_MAX_WIDTH,
+  type DockTab,
+} from '@/stores/ui-prefs-store';
 
 const TABS: Array<{ id: DockTab; label: string; icon: ReactNode }> = [
   { id: 'files', label: 'Files', icon: <FolderTree className="h-3.5 w-3.5" /> },
@@ -43,7 +49,13 @@ export function RightDock({
 
   return (
     <>
-      <DockResizer width={width} onWidth={(value) => setPref('dockWidth', value)} />
+      <PanelResizer
+        side="right"
+        value={width}
+        min={DOCK_MIN_WIDTH}
+        max={DOCK_MAX_WIDTH}
+        onChange={(next) => setPref('dockWidth', next)}
+      />
       <aside
         className="flex min-h-0 flex-none flex-col border-l border-border bg-surface"
         style={{ width }}
@@ -87,67 +99,5 @@ export function RightDock({
         </div>
       </aside>
     </>
-  );
-}
-
-/**
- * Drag handle on the dock's inner edge. Width is committed to the store on every
- * move so the layout follows the pointer, and the store only writes to storage,
- * which is cheap.
- */
-function DockResizer({ width, onWidth }: { width: number; onWidth: (value: number) => void }) {
-  const dragging = useRef(false);
-
-  const onMove = useCallback(
-    (event: PointerEvent) => {
-      if (!dragging.current) return;
-      // The dock is anchored right, so width grows as the pointer moves left.
-      const next = window.innerWidth - event.clientX;
-      onWidth(Math.round(Math.min(DOCK_MAX_WIDTH, Math.max(DOCK_MIN_WIDTH, next))));
-    },
-    [onWidth],
-  );
-
-  useEffect(() => {
-    function stop() {
-      if (!dragging.current) return;
-      dragging.current = false;
-      document.body.style.cursor = '';
-      // Re-enable text selection, disabled for the duration of the drag.
-      document.body.style.userSelect = '';
-    }
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', stop);
-    window.addEventListener('pointercancel', stop);
-    return () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', stop);
-      window.removeEventListener('pointercancel', stop);
-      stop();
-    };
-  }, [onMove]);
-
-  return (
-    <div
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize panel"
-      tabIndex={0}
-      title="Drag to resize"
-      className="w-1 flex-none cursor-col-resize bg-transparent hover:bg-accent/40 focus-visible:bg-accent/40"
-      onPointerDown={(event) => {
-        event.preventDefault();
-        dragging.current = true;
-        document.body.style.cursor = 'col-resize';
-        document.body.style.userSelect = 'none';
-      }}
-      // Keyboard resizing, so the panel is not mouse-only.
-      onKeyDown={(event) => {
-        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-        event.preventDefault();
-        const delta = event.key === 'ArrowLeft' ? 24 : -24;
-        onWidth(Math.min(DOCK_MAX_WIDTH, Math.max(DOCK_MIN_WIDTH, width + delta)));
-      }}
-    />
   );
 }

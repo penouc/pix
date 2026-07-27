@@ -9,6 +9,8 @@ export type DockTab = 'files' | 'changes' | 'terminal' | 'browser';
 /** Narrower than this and the terminal wraps every line; wider crowds the thread. */
 export const DOCK_MIN_WIDTH = 300;
 export const DOCK_MAX_WIDTH = 900;
+export const SIDEBAR_MIN_WIDTH = 176;
+export const SIDEBAR_MAX_WIDTH = 360;
 
 interface UiPrefs {
   theme: ThemePreference;
@@ -18,6 +20,7 @@ interface UiPrefs {
   collapseContext: boolean;
   dockTab: DockTab;
   dockWidth: number;
+  sidebarWidth: number;
 }
 
 interface UiPrefsState extends UiPrefs {
@@ -36,6 +39,7 @@ const DEFAULTS: UiPrefs = {
   dockTab: 'changes',
   // Wide enough for a terminal line and a diff hunk without horizontal scroll.
   dockWidth: 440,
+  sidebarWidth: 210,
 };
 
 /**
@@ -58,10 +62,16 @@ function load(): UiPrefs {
       // Clamp on read: a stored width from a wider display would otherwise
       // squeeze the thread to nothing on this one.
       dockWidth: clampDockWidth(parsed.dockWidth ?? DEFAULTS.dockWidth),
+      sidebarWidth: clampSidebarWidth(parsed.sidebarWidth ?? DEFAULTS.sidebarWidth),
     };
   } catch {
     return DEFAULTS;
   }
+}
+
+function clampSidebarWidth(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULTS.sidebarWidth;
+  return Math.round(Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, value)));
 }
 
 function clampDockWidth(value: number): number {
@@ -94,7 +104,13 @@ export const useUiPrefsStore = create<UiPrefsState>((set, get) => ({
   ...initial,
   resolvedTheme: initialResolved,
   set: (key, value) => {
-    set({ [key]: value } as Partial<UiPrefsState>);
+    if (key === 'dockWidth') {
+      set({ dockWidth: clampDockWidth(value as number) });
+    } else if (key === 'sidebarWidth') {
+      set({ sidebarWidth: clampSidebarWidth(value as number) });
+    } else {
+      set({ [key]: value } as Partial<UiPrefsState>);
+    }
     const next = get();
     const prefs: UiPrefs = {
       theme: next.theme,
@@ -104,6 +120,7 @@ export const useUiPrefsStore = create<UiPrefsState>((set, get) => ({
       collapseContext: next.collapseContext,
       dockTab: next.dockTab,
       dockWidth: next.dockWidth,
+      sidebarWidth: next.sidebarWidth,
     };
     const resolved = resolve(prefs.theme);
     set({ resolvedTheme: resolved });
