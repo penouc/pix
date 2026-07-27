@@ -23,7 +23,7 @@ import type {
   ProviderLoginQuestion,
 } from '@pi-desktop/agent-domain';
 import { DomainError, agentError } from '@pi-desktop/agent-domain';
-import type { ApprovalDecision, DesktopAgentEvent, ModelRef, RunRef, ThinkingLevel, ThinkingLevelState } from '@pi-desktop/protocol';
+import type { ApprovalDecision, DesktopAgentEvent, ModelRef, RunRef, StoredMessage, ThinkingLevel, ThinkingLevelState } from '@pi-desktop/protocol';
 import { PermissionPipeline, type ApprovalMode, type RememberedRule } from '@pi-desktop/security';
 
 import {
@@ -284,27 +284,15 @@ export class PiAgentRuntime implements AgentRuntime {
    * The stored transcript for a session, oldest first.
    *
    * Read from Pi's own message list so it reflects exactly what the model sees,
-   * including messages restored from disk. Tool calls are summarised rather than
-   * dumped: the renderer shows tool activity as cards and the raw arguments can be
-   * enormous.
+   * including messages restored from disk. Thinking blocks and tool calls are
+   * emitted as structured timeline entries so the renderer can rebuild cards.
    */
-  async listMessages(sessionId: string): Promise<
-    Array<{ role: 'user' | 'assistant' | 'system'; text: string }>
-  > {
+  async listMessages(sessionId: string): Promise<StoredMessage[]> {
     this.assertAlive();
     const record = this.requireSession(sessionId);
-    const out: Array<{ role: 'user' | 'assistant' | 'system'; text: string }> = [];
-
-    for (const message of record.pi.messages as Array<{ role?: string; content?: unknown }>) {
-      const role =
-        message.role === 'user' ? 'user' : message.role === 'assistant' ? 'assistant' : 'system';
-      // Only user and assistant prose belongs in a transcript; system prompts and
-      // tool plumbing are not part of the conversation the user had.
-      if (role === 'system') continue;
-      const text = flattenMessageText(message.content);
-      if (text) out.push({ role, text });
-    }
-    return out;
+    return expandPiMessagesToTranscript(
+      record.pi.messages as Array<{ role?: string; content?: unknown; toolCallId?: string; toolName?: string }>,
+    );
   }
 
   async resumeSession(sessionId: string): Promise<AgentSession> {
@@ -894,4 +882,121 @@ function flattenMessageText(content: unknown): string {
     })
     .join('')
     .trim();
+}
+
+const MAX_HISTORY_ARG_SUMMARY = 200;
+const MAX_HISTORY_TOOL_OUTPUT = 500;
+
+function summarizeToolArgs(toolName: string, args: unknown): string {
+  if (args == null) return toolName;
+  if (typeof args === 'string') return `${toolName}: ${args.slice(0, MAX_HISTORY_ARG_SUMMARY)}`;
+  if (typeof args === 'object') {
+    const rec = args as Record<string, unknown>;
+    const pathLike = rec['path'] ?? rec['file_path'] ?? rec['filePath'] ?? rec['command'];
+    if (typeof pathLike === 'string') return `${toolName}: ${pathLike}`;
+  }
+  try {
+    return `${toolName}: ${JSON.stringify(args).slice(0, MAX_HISTORY_ARG_SUMMARY)}`;
+  } catch {
+    return toolName;
+  }
+}
+
+/**
+ * Expand Pi's message list into the desktop transcript timeline: user/assistant
+ * prose, thinking cards, and tool cards (with results when present).
+ */
+export function expandPiMessagesToTranscript(
+  messages: Array<{
+    role?: string;
+    content?: unknown;
+    toolCallId?: string;
+    toolName?: string;
+    isError?: boolean;
+  }>,
+): StoredMessage[] {
+  const out: StoredMessage[] = [];
+  const toolIndexById = new Map<string, number>();
+
+  for (const message of messages) {
+    if (message.role === 'system') continue;
+
+    if (message.role === 'user') {
+      const text = flattenMessageText(message.content);
+      if (text) out.push({ kind: 'message', role: 'user', text });
+      continue;
+    }
+
+    if (message.role === 'toolResult') {
+      const toolCallId = String(message.toolCallId ?? '');
+      const idx = toolIndexById.get(toolCallId);
+      if (idx == null) continue;
+      const existing = out[idx];
+      if (!existing || existing.kind !== 'tool') continue;
+      const output = flattenMessageText(message.content).slice(0, MAX_HISTORY_TOOL_OUTPUT);
+      out[idx] = {
+        ...existing,
+        status: message.isError ? 'failed' : 'completed',
+        ok: !message.isError,
+        outputSummary: output || existing.outputSummary,
+      };
+      continue;
+    }
+
+    if (message.role !== 'assistant') continue;
+
+    const parts = Array.isArray(message.content)
+      ? message.content
+      : typeof message.content === 'string'
+        ? [{ type: 'text', text: message.content }]
+        : [];
+
+    let textParts: string[] = [];
+    const flushText = () => {
+      const text = textParts.join('').trim();
+      textParts = [];
+      if (text) out.push({ kind: 'message', role: 'assistant', text });
+    };
+
+    for (const part of parts) {
+      if (!part || typeof part !== 'object') continue;
+      const rec = part as Record<string, unknown>;
+      const type = rec['type'];
+
+      if (type === 'thinking' && typeof rec['thinking'] === 'string') {
+        flushText();
+        const content = rec['thinking'].trim();
+        if (content) {
+          out.push({
+            kind: 'thinking',
+            id: `pi-think-${out.length}`,
+            content,
+          });
+        }
+        continue;
+      }
+
+      if (type === 'toolCall') {
+        flushText();
+        const id = String(rec['id'] ?? `pi-tool-${out.length}`);
+        const toolName = String(rec['name'] ?? 'tool');
+        toolIndexById.set(id, out.length);
+        out.push({
+          kind: 'tool',
+          id,
+          toolName,
+          inputSummary: summarizeToolArgs(toolName, rec['arguments']),
+          status: 'completed',
+        });
+        continue;
+      }
+
+      if (type === 'text' && typeof rec['text'] === 'string') {
+        textParts.push(rec['text']);
+      }
+    }
+    flushText();
+  }
+
+  return out;
 }

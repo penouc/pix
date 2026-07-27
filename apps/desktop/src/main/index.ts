@@ -25,6 +25,7 @@ import {
   type ProviderSetting,
   type ProjectSummary,
   type SessionSummary,
+  type StoredMessage,
 } from '@pi-desktop/protocol';
 
 import { describeProtectedPaths } from '@pi-desktop/security';
@@ -355,6 +356,25 @@ export function isExternallyOpenable(url: string): boolean {
   }
 }
 
+function persistTranscriptEntry(
+  sessionId: string,
+  entry: StoredMessage,
+  id?: string,
+): void {
+  const entryId =
+    id ??
+    (entry.kind === 'thinking' || entry.kind === 'tool' ? entry.id : randomUUID());
+  void getDb()
+    .then((db) =>
+      db.sessionMessages.append({
+        id: entryId,
+        sessionId,
+        entry,
+      }),
+    )
+    .catch((error) => console.error('[main] persisting session transcript failed', error));
+}
+
 function persistSessionMessage(
   sessionId: string,
   role: 'user' | 'assistant' | 'system',
@@ -363,16 +383,11 @@ function persistSessionMessage(
 ): void {
   const trimmed = text.trim();
   if (!trimmed) return;
-  void getDb()
-    .then((db) =>
-      db.sessionMessages.append({
-        id: messageId ?? randomUUID(),
-        sessionId,
-        role,
-        text: trimmed,
-      }),
-    )
-    .catch((error) => console.error('[main] persisting session message failed', error));
+  persistTranscriptEntry(
+    sessionId,
+    { kind: 'message', role, text: trimmed },
+    messageId,
+  );
 }
 
 function broadcastEvent(event: unknown): void {
@@ -412,6 +427,47 @@ function broadcastEvent(event: unknown): void {
     // Desktop-owned transcript: Pi's jsonl writer only flushes once an assistant
     // turn completes, so failed or partial runs left nothing on disk.
     persistSessionMessage(data.sessionId, data.role, data.content, data.messageId);
+  }
+
+  if (data.type === 'thinking.completed' && data.content.trim()) {
+    // Thinking shares the assistant messageId in the live stream; prefix so it
+    // does not collide with the persisted message row.
+    persistTranscriptEntry(
+      data.sessionId,
+      { kind: 'thinking', id: data.messageId, content: data.content.trim() },
+      `think-${data.messageId}`,
+    );
+  }
+
+  if (data.type === 'tool.requested') {
+    persistTranscriptEntry(
+      data.sessionId,
+      {
+        kind: 'tool',
+        id: data.toolCallId,
+        toolName: data.toolName,
+        inputSummary: data.inputSummary,
+        status: 'running',
+      },
+      data.toolCallId,
+    );
+  }
+
+  if (data.type === 'tool.completed') {
+    persistTranscriptEntry(
+      data.sessionId,
+      {
+        kind: 'tool',
+        id: data.toolCallId,
+        toolName: data.toolName,
+        // Repository merges with the tool.requested row so inputSummary is kept.
+        inputSummary: '',
+        outputSummary: data.outputSummary,
+        ok: data.ok,
+        status: data.ok ? 'completed' : 'failed',
+      },
+      data.toolCallId,
+    );
   }
 
   // An approval raised by an automation-started run is answered by the

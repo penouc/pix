@@ -89,9 +89,9 @@ describe('session transcript persistence', () => {
       });
 
       expect(await agent.listMessages('task-42')).toEqual([
-        { role: 'user', text: 'add a dark mode toggle' },
+        { kind: 'message', role: 'user', text: 'add a dark mode toggle' },
         // Content arrives as an array of parts here, not a string.
-        { role: 'assistant', text: 'Done — it is in Settings.' },
+        { kind: 'message', role: 'assistant', text: 'Done — it is in Settings.' },
       ]);
     } finally {
       await agent.dispose();

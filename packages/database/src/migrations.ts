@@ -256,4 +256,30 @@ CREATE TABLE IF NOT EXISTS session_log_sync (
 );
 `,
   },
+  {
+    version: 13,
+    name: 'session_messages_timeline_kinds',
+    sql: `
+CREATE TABLE session_messages_v13 (
+  id TEXT PRIMARY KEY NOT NULL,
+  session_id TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'message' CHECK (kind IN ('message', 'thinking', 'tool')),
+  role TEXT NOT NULL,
+  text TEXT NOT NULL,
+  sequence INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
+
+INSERT INTO session_messages_v13 (id, session_id, kind, role, text, sequence, created_at)
+SELECT id, session_id, 'message', role, text, sequence, created_at
+FROM session_messages;
+
+DROP TABLE session_messages;
+ALTER TABLE session_messages_v13 RENAME TO session_messages;
+
+CREATE INDEX IF NOT EXISTS idx_session_messages_session_sequence
+  ON session_messages (session_id, sequence);
+`,
+  },
 ];

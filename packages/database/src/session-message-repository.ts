@@ -1,18 +1,18 @@
 import type { StoredMessage } from '@pi-desktop/protocol';
 
-export interface SessionMessageRecord extends StoredMessage {
+export interface SessionMessageRecord {
   id: string;
   sessionId: string;
   sequence: number;
   createdAt: number;
+  entry: StoredMessage;
 }
 
 export interface SessionMessageRepository {
   append(input: {
     id: string;
     sessionId: string;
-    role: StoredMessage['role'];
-    text: string;
+    entry: StoredMessage;
     createdAt?: number;
   }): Promise<void>;
   list(sessionId: string): StoredMessage[];

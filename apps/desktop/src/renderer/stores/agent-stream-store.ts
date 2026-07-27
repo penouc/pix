@@ -1,4 +1,4 @@
-import type { DesktopAgentEvent, RiskLevel } from '@pi-desktop/protocol';
+import type { DesktopAgentEvent, RiskLevel, StoredMessage } from '@pi-desktop/protocol';
 import { create } from 'zustand';
 
 export interface ChatMessage {
@@ -73,7 +73,7 @@ interface AgentStreamState {
   appendUserMessage: (text: string) => void;
   resetSessionView: () => void;
   /** Replace the thread with a stored transcript (oldest first). */
-  loadHistory: (messages: Array<{ role: 'user' | 'assistant' | 'system'; text: string }>) => void;
+  loadHistory: (messages: StoredMessage[]) => void;
   setScope: (projectId: string | null, sessionId: string | null) => void;
   applyEvent: (event: DesktopAgentEvent) => void;
   setStopping: (runId: string) => void;
@@ -248,10 +248,38 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
 
     for (let index = 0; index < history.length; index++) {
       const entry = history[index]!;
-      if (entry.role === 'assistant') {
-        let text = entry.text;
 
-        // Extract <think>...</think> or <thinking>...</thinking>
+      if (entry.kind === 'thinking') {
+        const content = entry.content.trim();
+        if (!content) continue;
+        thinkings.push({
+          id: entry.id || `history-think-${index}`,
+          content,
+          streaming: false,
+          order: orderSeq++,
+        });
+        continue;
+      }
+
+      if (entry.kind === 'tool') {
+        tools.push({
+          id: entry.id || `history-tool-${index}`,
+          toolName: entry.toolName,
+          inputSummary: entry.inputSummary,
+          outputSummary: entry.outputSummary,
+          ok: entry.ok,
+          status: entry.status === 'running' ? 'completed' : entry.status,
+          order: orderSeq++,
+        });
+        continue;
+      }
+
+      // kind === 'message' (and legacy { role, text } without kind via normalize)
+      const role = entry.role;
+      let text = entry.text;
+
+      if (role === 'assistant') {
+        // Legacy transcripts sometimes embedded tags in assistant prose.
         const thinkRegex = /<(?:think|thinking)>([\s\S]*?)(?:<\/(?:think|thinking)>|$)/gi;
         let match: RegExpExecArray | null;
         let lastIndex = 0;
@@ -275,7 +303,6 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
           });
         }
 
-        // Extract <tool_call>...</tool_call> or <tool>...</tool>
         const toolRegex = /<(?:tool_call|tool)[\s\S]*?>([\s\S]*?)(?:<\/(?:tool_call|tool)>|$)/gi;
         let toolMatch: RegExpExecArray | null;
         let toolLastIndex = 0;
@@ -311,7 +338,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
 
         messages.push({
           id: `history-${index}`,
-          role: entry.role,
+          role,
           content: textAfterTools.trim() || text.trim() || entry.text,
           streaming: false,
           order: orderSeq++,
@@ -319,7 +346,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       } else {
         messages.push({
           id: `history-${index}`,
-          role: entry.role,
+          role,
           content: entry.text,
           streaming: false,
           order: orderSeq++,

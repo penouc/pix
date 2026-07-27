@@ -1,4 +1,4 @@
-import type { DesktopAgentEvent } from '@pi-desktop/protocol';
+import type { DesktopAgentEvent, StoredMessage } from '@pi-desktop/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { useAgentStreamStore } from './agent-stream-store';
@@ -83,5 +83,49 @@ describe('agent stream scoping', () => {
 
     expect(useAgentStreamStore.getState().tools).toHaveLength(1);
     expect(useAgentStreamStore.getState().tools[0]?.toolName).toBe('read');
+  });
+});
+
+describe('loadHistory timeline restore', () => {
+  beforeEach(() => {
+    useAgentStreamStore.getState().resetSessionView();
+  });
+
+  it('restores thinking and tool cards from structured transcript entries', () => {
+    const history: StoredMessage[] = [
+      { kind: 'message', role: 'user', text: 'fix the bug' },
+      { kind: 'thinking', id: 'th1', content: 'Need to inspect App.tsx' },
+      {
+        kind: 'tool',
+        id: 'tool1',
+        toolName: 'read',
+        inputSummary: 'read: App.tsx',
+        outputSummary: 'export function App()',
+        ok: true,
+        status: 'completed',
+      },
+      { kind: 'message', role: 'assistant', text: 'Fixed.' },
+    ];
+
+    useAgentStreamStore.getState().loadHistory(history);
+    const state = useAgentStreamStore.getState();
+
+    expect(state.messages.map((m) => m.content)).toEqual(['fix the bug', 'Fixed.']);
+    expect(state.thinkings).toEqual([
+      expect.objectContaining({ id: 'th1', content: 'Need to inspect App.tsx', streaming: false }),
+    ]);
+    expect(state.tools).toEqual([
+      expect.objectContaining({
+        id: 'tool1',
+        toolName: 'read',
+        inputSummary: 'read: App.tsx',
+        outputSummary: 'export function App()',
+        status: 'completed',
+        ok: true,
+      }),
+    ]);
+    // Arrival order is preserved across kinds.
+    expect(state.thinkings[0]!.order).toBeLessThan(state.tools[0]!.order);
+    expect(state.tools[0]!.order).toBeLessThan(state.messages[1]!.order);
   });
 });

@@ -3,6 +3,7 @@ import type {
   DesktopAgentEvent,
   ModelRef,
   RunRef,
+  StoredMessage,
   ThinkingLevel,
   ThinkingLevelState,
 } from '@pi-desktop/protocol';
@@ -183,9 +184,7 @@ export interface AgentRuntime {
    * started empty every time, which made past work invisible even though the
    * agent still had it in context.
    */
-  listMessages?(
-    sessionId: string,
-  ): Promise<Array<{ role: 'user' | 'assistant' | 'system'; text: string }>>;
+  listMessages?(sessionId: string): Promise<StoredMessage[]>;
   /** Optional: which providers currently have usable credentials (no secrets). */
   getAuthStatus?(): Promise<Array<{ providerId: string; hasAuth: boolean; source: string }>>;
   /** Optional: choose a default model when the session has none. */

@@ -101,11 +101,28 @@ export const SessionSummarySchema = z.object({
 });
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;
 
-/** One stored turn, for replaying a task's transcript. */
-export const StoredMessageSchema = z.object({
-  role: z.enum(['user', 'assistant', 'system']),
-  text: z.string(),
-});
+/** One stored timeline entry for replaying a task's transcript. */
+export const StoredMessageSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('message'),
+    role: z.enum(['user', 'assistant', 'system']),
+    text: z.string(),
+  }),
+  z.object({
+    kind: z.literal('thinking'),
+    id: z.string().min(1),
+    content: z.string(),
+  }),
+  z.object({
+    kind: z.literal('tool'),
+    id: z.string().min(1),
+    toolName: z.string().min(1),
+    inputSummary: z.string(),
+    outputSummary: z.string().optional(),
+    ok: z.boolean().optional(),
+    status: z.enum(['running', 'completed', 'failed']),
+  }),
+]);
 export type StoredMessage = z.infer<typeof StoredMessageSchema>;
 
 export const RunRefSchema = z.object({
