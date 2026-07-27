@@ -243,23 +243,28 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
     clearDeltaBatch();
     const messages: ChatMessage[] = [];
     const thinkings: ThinkingCard[] = [];
+    const tools: ToolCallCard[] = [];
     let orderSeq = 0;
 
     for (let index = 0; index < history.length; index++) {
       const entry = history[index]!;
       if (entry.role === 'assistant') {
+        let text = entry.text;
+
+        // Extract <think>...</think> or <thinking>...</thinking>
         const thinkRegex = /<(?:think|thinking)>([\s\S]*?)(?:<\/(?:think|thinking)>|$)/gi;
         let match: RegExpExecArray | null;
         let lastIndex = 0;
         let cleanContent = '';
         let extractedThinking = '';
 
-        while ((match = thinkRegex.exec(entry.text)) !== null) {
-          cleanContent += entry.text.slice(lastIndex, match.index);
+        while ((match = thinkRegex.exec(text)) !== null) {
+          cleanContent += text.slice(lastIndex, match.index);
           extractedThinking += (extractedThinking ? '\n\n' : '') + match[1]!.trim();
           lastIndex = thinkRegex.lastIndex;
         }
-        cleanContent += entry.text.slice(lastIndex);
+        cleanContent += text.slice(lastIndex);
+        text = cleanContent;
 
         if (extractedThinking.trim()) {
           thinkings.push({
@@ -270,10 +275,44 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
           });
         }
 
+        // Extract <tool_call>...</tool_call> or <tool>...</tool>
+        const toolRegex = /<(?:tool_call|tool)[\s\S]*?>([\s\S]*?)(?:<\/(?:tool_call|tool)>|$)/gi;
+        let toolMatch: RegExpExecArray | null;
+        let toolLastIndex = 0;
+        let textAfterTools = '';
+
+        while ((toolMatch = toolRegex.exec(text)) !== null) {
+          textAfterTools += text.slice(toolLastIndex, toolMatch.index);
+          const toolRaw = toolMatch[1]!.trim();
+          try {
+            const parsed = JSON.parse(toolRaw);
+            tools.push({
+              id: `history-tool-${index}-${orderSeq}`,
+              toolName: parsed.name || parsed.tool || 'tool',
+              inputSummary:
+                typeof parsed.arguments === 'object'
+                  ? JSON.stringify(parsed.arguments, null, 2)
+                  : String(parsed.arguments || toolRaw),
+              status: 'completed',
+              order: orderSeq++,
+            });
+          } catch {
+            tools.push({
+              id: `history-tool-${index}-${orderSeq}`,
+              toolName: 'tool',
+              inputSummary: toolRaw,
+              status: 'completed',
+              order: orderSeq++,
+            });
+          }
+          toolLastIndex = toolRegex.lastIndex;
+        }
+        textAfterTools += text.slice(toolLastIndex);
+
         messages.push({
           id: `history-${index}`,
           role: entry.role,
-          content: cleanContent.trim() || entry.text,
+          content: textAfterTools.trim() || text.trim() || entry.text,
           streaming: false,
           order: orderSeq++,
         });
@@ -291,7 +330,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
     timelineSeq = orderSeq;
     set({
       messages,
-      tools: [],
+      tools,
       thinkings,
       status: 'idle',
       activeRunId: null,
