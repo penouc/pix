@@ -96,7 +96,7 @@ export function ProjectSidebar({
   });
 
   async function openProjectPath(path: string) {
-    if (!path.trim()) return;
+    if (!path.trim() || opening) return;
     setOpening(true);
     setOpenError(null);
     try {
@@ -396,10 +396,7 @@ function ProjectBranch({
     queryFn: () =>
       invoke<SessionSummary[]>({ method: 'session.list', params: { projectId: project.id } }),
   });
-  const isProjectRunning =
-    isActive &&
-    Boolean(activeSessionId) &&
-    ['starting', 'running', 'waiting_for_approval', 'stopping'].includes(runStatus);
+  const tasks = sessions.data ?? [];
 
   return (
     <div>
@@ -418,17 +415,15 @@ function ProjectBranch({
         <button
           type="button"
           title={project.path}
-          disabled={busy}
           // Clicking the name opens the project and reveals its tasks: wanting one
           // without the other is not a thing anybody wants here.
           onClick={() => {
             if (!isActive) onOpenProject();
             if (!expanded) onToggle();
           }}
-          className="min-w-0 flex-1 cursor-pointer rounded-xl py-1.5 pr-1 text-left text-[12.5px] text-foreground/60 transition-colors group-hover:text-foreground flex items-center gap-2"
+          className="min-w-0 flex-1 cursor-pointer truncate rounded-xl py-1.5 pr-1 text-left text-[12.5px] text-foreground/60 transition-colors group-hover:text-foreground"
         >
-          <span style={dotStyle(isProjectRunning ? statusTone(runStatus) : 'done')} />
-          <span className="min-w-0 flex-1 truncate">{project.name}</span>
+          {project.name}
         </button>
         <button
           type="button"
