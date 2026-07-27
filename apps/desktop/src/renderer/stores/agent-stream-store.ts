@@ -241,19 +241,58 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
 
   loadHistory: (history) => {
     clearDeltaBatch();
-    // Restored turns take the first slots in the shared ordering, so anything
-    // that streams afterwards lands below them rather than above.
-    timelineSeq = history.length;
+    const messages: ChatMessage[] = [];
+    const thinkings: ThinkingCard[] = [];
+    let orderSeq = 0;
+
+    for (let index = 0; index < history.length; index++) {
+      const entry = history[index]!;
+      if (entry.role === 'assistant') {
+        const thinkRegex = /<(?:think|thinking)>([\s\S]*?)(?:<\/(?:think|thinking)>|$)/gi;
+        let match: RegExpExecArray | null;
+        let lastIndex = 0;
+        let cleanContent = '';
+        let extractedThinking = '';
+
+        while ((match = thinkRegex.exec(entry.text)) !== null) {
+          cleanContent += entry.text.slice(lastIndex, match.index);
+          extractedThinking += (extractedThinking ? '\n\n' : '') + match[1]!.trim();
+          lastIndex = thinkRegex.lastIndex;
+        }
+        cleanContent += entry.text.slice(lastIndex);
+
+        if (extractedThinking.trim()) {
+          thinkings.push({
+            id: `history-think-${index}`,
+            content: extractedThinking.trim(),
+            streaming: false,
+            order: orderSeq++,
+          });
+        }
+
+        messages.push({
+          id: `history-${index}`,
+          role: entry.role,
+          content: cleanContent.trim() || entry.text,
+          streaming: false,
+          order: orderSeq++,
+        });
+      } else {
+        messages.push({
+          id: `history-${index}`,
+          role: entry.role,
+          content: entry.text,
+          streaming: false,
+          order: orderSeq++,
+        });
+      }
+    }
+
+    timelineSeq = orderSeq;
     set({
-      messages: history.map((entry, index) => ({
-        id: `history-${index}`,
-        role: entry.role,
-        content: entry.text,
-        streaming: false,
-        order: index,
-      })),
+      messages,
       tools: [],
-      thinkings: [],
+      thinkings,
       status: 'idle',
       activeRunId: null,
       error: null,

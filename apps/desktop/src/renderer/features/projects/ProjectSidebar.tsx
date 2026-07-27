@@ -396,7 +396,10 @@ function ProjectBranch({
     queryFn: () =>
       invoke<SessionSummary[]>({ method: 'session.list', params: { projectId: project.id } }),
   });
-  const tasks = sessions.data ?? [];
+  const isProjectRunning =
+    isActive &&
+    Boolean(activeSessionId) &&
+    ['starting', 'running', 'waiting_for_approval', 'stopping'].includes(runStatus);
 
   return (
     <div>
@@ -422,9 +425,10 @@ function ProjectBranch({
             if (!isActive) onOpenProject();
             if (!expanded) onToggle();
           }}
-          className="min-w-0 flex-1 cursor-pointer truncate rounded-xl py-1.5 pr-1 text-left text-[12.5px] text-foreground/60 transition-colors group-hover:text-foreground"
+          className="min-w-0 flex-1 cursor-pointer rounded-xl py-1.5 pr-1 text-left text-[12.5px] text-foreground/60 transition-colors group-hover:text-foreground flex items-center gap-2"
         >
-          {project.name}
+          <span style={dotStyle(isProjectRunning ? statusTone(runStatus) : 'done')} />
+          <span className="min-w-0 flex-1 truncate">{project.name}</span>
         </button>
         <button
           type="button"

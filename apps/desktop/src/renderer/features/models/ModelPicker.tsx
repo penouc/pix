@@ -141,17 +141,20 @@ export function ModelPicker() {
             <div
               ref={menuRef}
               style={anchor}
-              className="z-50 flex w-[320px] flex-col overflow-hidden rounded-[16px] border border-border bg-background shadow-[var(--shadow-lg)]"
+              className="z-50 flex w-[320px] max-h-[380px] flex-col overflow-hidden rounded-[16px] border border-border bg-background shadow-[var(--shadow-lg)]"
             >
               <div className="flex flex-none items-center gap-2 border-b border-border px-3 py-2">
-                {provider && !needle ? (
+                {provider ? (
                   <button
                     type="button"
-                    onClick={() => setProvider(null)}
+                    onClick={() => {
+                      setProvider(null);
+                      setQuery('');
+                    }}
                     title="All providers"
-                    className="flex cursor-pointer items-center gap-0.5 border-0 bg-transparent p-0 text-[11px] text-muted hover:text-foreground"
+                    className="flex h-6 w-6 flex-none cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted hover:bg-foreground/[0.08] hover:text-foreground"
                   >
-                    <ChevronLeft className="h-3.5 w-3.5" />
+                    <ChevronLeft className="h-4 w-4" />
                   </button>
                 ) : (
                   <Search className="h-3.5 w-3.5 flex-none opacity-45" />
@@ -162,6 +165,11 @@ export function ModelPicker() {
                   placeholder={provider && !needle ? `Search ${provider}…` : 'Search all models…'}
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Backspace' && !query && provider) {
+                      setProvider(null);
+                    }
+                  }}
                 />
               </div>
 
