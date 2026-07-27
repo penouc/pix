@@ -95,8 +95,11 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const composerDockRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const nearBottomRef = useRef(true);
+  /** Room reserved under the floating composer so the last message stays visible. */
+  const [composerPad, setComposerPad] = useState(140);
   /** IME composition (中文等) — Enter confirms candidates, it must not send. */
   const composingRef = useRef(false);
   const prevStatusRef = useRef(status);
@@ -216,11 +219,26 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
     return () => el.removeEventListener('scroll', onScroll);
   }, []);
 
+  // One scrollbar for the whole chat surface; the composer floats over it.
+  // Track dock height (card + fade pad) so the last bubble stays clear.
+  useEffect(() => {
+    const el = composerDockRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const update = () => {
+      const next = el.offsetHeight;
+      setComposerPad((prev) => (prev === next ? prev : next));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el || !nearBottomRef.current) return;
     el.scrollTop = el.scrollHeight;
-  }, [messages, tools, status, approval, thinkings]);
+  }, [messages, tools, status, approval, thinkings, composerPad]);
 
   const running =
     status === 'running' ||
@@ -389,287 +407,311 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
         </Button>
       </div>
 
-      {/* Thread */}
-      <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto px-5 pt-5 pb-1.5">
-        <div className="mx-auto flex max-w-[700px] flex-col gap-3">
-          {!timeline.length && !approval ? (
-            <div className="flex flex-col items-center gap-2 px-5 py-20 text-center">
-              <div className="text-sm font-bold">
-                {session ? 'Describe what it should do' : 'Open a project to start'}
-              </div>
-              <p className="max-w-[320px] text-[12.5px] leading-relaxed text-muted">
-                {session
-                  ? "Type below — @ for a file, $ for a skill, ⌘K for commands. It'll read the project, plan, then ask before running anything risky."
-                  : 'Use Open project in the sidebar, then start a task.'}
-              </p>
-            </div>
-          ) : null}
-
-          {timeline.map((entry) =>
-            entry.kind === 'message' ? (
-              entry.message.role === 'user' ? (
-                <div
-                  key={entry.message.id}
-                  className="max-w-[78%] self-end rounded-[22px_22px_6px_22px] bg-surface px-4 py-2.5 text-[13.5px] leading-relaxed shadow-[var(--shadow-sm)] whitespace-pre-wrap"
-                >
-                  {entry.message.content}
+      {/* Full-height scroller with a floating composer on top — Cursor/Codex
+          style. One scrollbar owns the surface, so the input column never has
+          to fake a gutter to stay aligned with the transcript. */}
+      <div className="relative min-h-0 flex-1">
+        <div ref={scrollerRef} className="absolute inset-0 overflow-y-auto">
+          <div
+            className="mx-auto flex w-full max-w-[760px] flex-col gap-3 px-5 pt-5"
+            style={{ paddingBottom: composerPad + 84 }}
+          >
+              {!timeline.length && !approval ? (
+                <div className="flex flex-col items-center gap-2 px-5 py-20 text-center">
+                  <div className="text-sm font-bold">
+                    {session ? 'Describe what it should do' : 'Open a project to start'}
+                  </div>
+                  <p className="max-w-[320px] text-[12.5px] leading-relaxed text-muted">
+                    {session
+                      ? "Type below — @ for a file, $ for a skill, ⌘K for commands. It'll read the project, plan, then ask before running anything risky."
+                      : 'Use Open project in the sidebar, then start a task.'}
+                  </p>
                 </div>
-              ) : (
-                <AssistantMessage
-                  key={entry.message.id}
-                  content={entry.message.content}
-                  streaming={entry.message.streaming}
+              ) : null}
+
+            {timeline.map((entry) =>
+              entry.kind === 'message' ? (
+                entry.message.role === 'user' ? (
+                  <div
+                    key={entry.message.id}
+                    className="max-w-[78%] self-end rounded-[22px_22px_6px_22px] bg-surface px-4 py-2.5 text-[13.5px] leading-relaxed shadow-[var(--shadow-sm)] whitespace-pre-wrap"
+                  >
+                    {entry.message.content}
+                  </div>
+                ) : (
+                  <AssistantMessage
+                    key={entry.message.id}
+                    content={entry.message.content}
+                    streaming={entry.message.streaming}
+                  />
+                )
+              ) : entry.kind === 'thinking' ? (
+                <ThinkingStreamRow
+                  key={entry.thinking.id}
+                  content={entry.thinking.content}
+                  streaming={entry.thinking.streaming}
+                  expanded={Boolean(expanded[entry.thinking.id])}
+                  onToggle={() =>
+                    setExpanded((state) => ({
+                      ...state,
+                      [entry.thinking.id]: !state[entry.thinking.id],
+                    }))
+                  }
                 />
-              )
-            ) : entry.kind === 'thinking' ? (
-              <ThinkingStreamRow
-                key={entry.thinking.id}
-                content={entry.thinking.content}
-                streaming={entry.thinking.streaming}
-                expanded={Boolean(expanded[entry.thinking.id])}
-                onToggle={() =>
-                  setExpanded((state) => ({
-                    ...state,
-                    [entry.thinking.id]: !state[entry.thinking.id],
-                  }))
-                }
-              />
-            ) : (
-              <ToolCard
-                key={entry.tool.id}
-                tool={entry.tool}
-                expanded={Boolean(expanded[entry.tool.id])}
-                onToggle={() =>
-                  setExpanded((state) => ({ ...state, [entry.tool.id]: !state[entry.tool.id] }))
-                }
-              />
-            ),
-          )}
-
-          {/* Approval */}
-          {approval ? (
-            <div className="flex flex-col gap-3 rounded-[20px] border border-accent/30 bg-accent-100 px-4 py-4">
-              <div className="flex items-center gap-2.5">
-                <Lock className="h-4 w-4 flex-none text-accent-800" />
-                <div className="text-sm font-bold text-accent-900">Approval required</div>
-                <Badge tone="outline" className="text-[10.5px]">
-                  risk: {approval.riskLevel}
-                </Badge>
-              </div>
-              <div className="pl-[26px] text-[13px] leading-normal text-accent-900">
-                {approval.summary}
-              </div>
-              {approval.command ? (
-                <pre className="output-pre ml-[26px] rounded-[14px] px-3.5 py-2.5">
-                  {approval.command}
-                </pre>
-              ) : null}
-              {approval.reasons.length ? (
-                <div className="flex flex-col gap-1.5 pl-[26px]">
-                  {approval.reasons.map((reason) => (
-                    <div key={reason} className="flex items-start gap-2.5 text-[12.5px]">
-                      <span className="mt-[7px] h-1.5 w-1.5 flex-none rounded-full bg-accent-2" />
-                      <span className="leading-normal text-accent-900">{reason}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-              {approval.affectedPaths.length ? (
-                <div className="pl-[26px] font-mono text-[11px] text-accent-800/80">
-                  {approval.affectedPaths.slice(0, 4).join('  ')}
-                  {approval.affectedPaths.length > 4
-                    ? `  +${approval.affectedPaths.length - 4} more`
-                    : ''}
-                </div>
-              ) : null}
-              <div className="flex flex-wrap items-center gap-2 pl-[26px]">
-                <Button size="sm" onClick={() => void resolveApproval('allow-once')}>
-                  Allow once
-                </Button>
-                {approval.rememberable ? (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="border-accent/35"
-                      onClick={() => void resolveApproval('allow-session')}
-                    >
-                      Allow session
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="border-accent/35"
-                      onClick={() => void resolveApproval('allow-project')}
-                    >
-                      Allow project
-                    </Button>
-                  </>
-                ) : null}
-                <span className="flex-1" />
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-accent-800"
-                  onClick={() => void resolveApproval('deny')}
-                >
-                  Deny
-                </Button>
-              </div>
-            </div>
-          ) : null}
-
-          {/* Error */}
-          {error ? (
-            <div className="flex items-center justify-between gap-3 rounded-[18px] border border-danger/30 bg-danger/10 px-4 py-2.5 text-[12.5px] text-danger">
-              <span className="min-w-0 flex-1">{error}</span>
-              {errorRetryable && lastUserText ? (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={sending || running}
-                  onClick={() => void retry()}
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  Retry
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
-
-          {showThinking ? <ThinkingPlaceholderRow /> : null}
-
-          {status === 'waiting_for_approval' && !approval ? (
-            <div className="text-[12.5px] text-muted">
-              Waiting for your decision — the run is paused.
-            </div>
-          ) : null}
-
-          {status === 'stopping' ? (
-            <div className="text-[12.5px] text-muted">Stopping the run…</div>
-          ) : null}
-        </div>
-      </div>
-
-      {/* Composer */}
-      <div className="flex-none px-5 pt-2.5 pb-4">
-        {fileMenuOpen ? (
-          <div className="mx-auto mb-1.5 max-w-[700px] overflow-hidden rounded-[18px] border border-border bg-background shadow-[var(--shadow-md)]">
-            {fileHits.isLoading ? (
-              <p className="px-3.5 py-2 text-[12px] text-muted">Searching files…</p>
-            ) : fileMatches.length ? (
-              fileMatches.map((hit) => (
-                <button
-                  key={hit.path}
-                  type="button"
-                  onClick={() => applyFile(hit.path)}
-                  className="flex w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-3.5 py-2 text-left hover:bg-foreground/[0.06]"
-                >
-                  <FileText className="h-3.5 w-3.5 flex-none text-muted" />
-                  <span className="min-w-0 flex-1 truncate font-mono text-[12px]">{hit.path}</span>
-                </button>
-              ))
-            ) : (
-              <p className="px-3.5 py-2 text-[12px] text-muted">
-                {project?.trusted
-                  ? 'No files indexed yet — open Files and tap Refresh, or keep typing to filter.'
-                  : 'Trust this project to search and reference files.'}
-              </p>
+              ) : (
+                <ToolCard
+                  key={entry.tool.id}
+                  tool={entry.tool}
+                  expanded={Boolean(expanded[entry.tool.id])}
+                  onToggle={() =>
+                    setExpanded((state) => ({ ...state, [entry.tool.id]: !state[entry.tool.id] }))
+                  }
+                />
+              ),
             )}
-          </div>
-        ) : null}
-        {skillMenuOpen ? (
-          <div className="mx-auto mb-1.5 max-w-[700px] overflow-hidden rounded-[18px] border border-border bg-background shadow-[var(--shadow-md)]">
-            {skillMatches.slice(0, 6).map((skill) => (
-              <button
-                key={skill.id}
-                type="button"
-                onClick={() => applySkill(skill)}
-                className="flex w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-3.5 py-2 text-left hover:bg-foreground/[0.06]"
-              >
-                <span className="rounded-full bg-accent-100 px-2 py-0.5 font-mono text-[11.5px] text-accent-800">
-                  {skill.command}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-[12.5px]">{skill.name}</span>
-                <span className="text-[10.5px] text-muted">{skill.scope}</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-        <div className="density-composer mx-auto max-w-[700px] overflow-hidden rounded-[26px] border border-border bg-surface shadow-[var(--shadow-sm)]">
-          <textarea
-            ref={composerRef}
-            className="max-h-44 min-h-[52px] w-full resize-none bg-transparent px-4 py-3 text-[13.5px] leading-normal outline-none placeholder:text-muted"
-            placeholder={
-              project
-                ? 'Describe the change you want — @ for a file, $ for a skill'
-                : 'Open a project to begin…'
-            }
-            disabled={!project || sending}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onCompositionStart={() => {
-              composingRef.current = true;
-            }}
-            onCompositionEnd={() => {
-              composingRef.current = false;
-            }}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter') return;
-              // While the IME is open (拼音选字等), Enter confirms the candidate —
-              // not sends. Without this, Chinese input accidentally submits mid-word.
-              if (event.nativeEvent.isComposing || composingRef.current || event.keyCode === 229) {
-                return;
-              }
-              // Shift+Enter is the newline. Enter sends, which is what a chat
-              // composer is expected to do; ⌘/Ctrl+Enter keeps working for the
-              // muscle memory it was built with.
-              if (event.shiftKey) return;
-              event.preventDefault();
-              // With a suggestion list open, Enter takes the first suggestion
-              // rather than sending a half-typed `$re` or `@src/`.
-              if (fileMenuOpen) {
-                if (fileMatches.length) {
-                  applyFile(fileMatches[0]!.path);
-                }
-                return;
-              }
-              if (skillMenuOpen && skillMatches.length) {
-                applySkill(skillMatches[0]!);
-                return;
-              }
-              void send();
-            }}
-          />
 
-          <div className="flex items-center gap-2 px-3 pb-2.5">
-            <ApprovalModePicker
-              mode={approvalMode.data?.mode ?? 'auto-reads'}
-              onChange={(mode) => setApprovalMode.mutate(mode)}
-            />
-            <ThinkingLevelPicker disabled={!project || sending} />
-            {branch.data?.branch ? (
-              <ContextPill icon={<GitBranch className="h-3 w-3" />}>
-                {branch.data.branch}
-              </ContextPill>
+            {/* Approval */}
+            {approval ? (
+              <div className="flex flex-col gap-3 rounded-[20px] border border-accent/30 bg-accent-100 px-4 py-4">
+                <div className="flex items-center gap-2.5">
+                  <Lock className="h-4 w-4 flex-none text-accent-800" />
+                  <div className="text-sm font-bold text-accent-900">Approval required</div>
+                  <Badge tone="outline" className="text-[10.5px]">
+                    risk: {approval.riskLevel}
+                  </Badge>
+                </div>
+                <div className="pl-[26px] text-[13px] leading-normal text-accent-900">
+                  {approval.summary}
+                </div>
+                {approval.command ? (
+                  <pre className="output-pre ml-[26px] rounded-[14px] px-3.5 py-2.5">
+                    {approval.command}
+                  </pre>
+                ) : null}
+                {approval.reasons.length ? (
+                  <div className="flex flex-col gap-1.5 pl-[26px]">
+                    {approval.reasons.map((reason) => (
+                      <div key={reason} className="flex items-start gap-2.5 text-[12.5px]">
+                        <span className="mt-[7px] h-1.5 w-1.5 flex-none rounded-full bg-accent-2" />
+                        <span className="leading-normal text-accent-900">{reason}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {approval.affectedPaths.length ? (
+                  <div className="pl-[26px] font-mono text-[11px] text-accent-800/80">
+                    {approval.affectedPaths.slice(0, 4).join('  ')}
+                    {approval.affectedPaths.length > 4
+                      ? `  +${approval.affectedPaths.length - 4} more`
+                      : ''}
+                  </div>
+                ) : null}
+                <div className="flex flex-wrap items-center gap-2 pl-[26px]">
+                  <Button size="sm" onClick={() => void resolveApproval('allow-once')}>
+                    Allow once
+                  </Button>
+                  {approval.rememberable ? (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="border-accent/35"
+                        onClick={() => void resolveApproval('allow-session')}
+                      >
+                        Allow session
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="border-accent/35"
+                        onClick={() => void resolveApproval('allow-project')}
+                      >
+                        Allow project
+                      </Button>
+                    </>
+                  ) : null}
+                  <span className="flex-1" />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-accent-800"
+                    onClick={() => void resolveApproval('deny')}
+                  >
+                    Deny
+                  </Button>
+                </div>
+              </div>
             ) : null}
-            <span className="min-w-0 flex-1" />
-            {/* Model choice belongs with the send button: it is a property of the
-                message you are about to send, not of the window. */}
-            <ModelPicker />
-            <span className="flex-none font-mono text-[11px] text-muted">↵</span>
-            <Button
-              size="icon"
-              className="h-[30px] w-[30px] flex-none"
-              // Not `!session`: the unstarted-task screen has no session yet and
-              // sending is what creates one, so gating on it left a dead button
-              // next to a working ⌘↵.
-              disabled={!project || !draft.trim() || sending}
-              onClick={() => void send()}
-              title="Send (⏎ — use ⇧⏎ for a new line)"
-            >
-              <ArrowUp className="h-3.5 w-3.5" />
-            </Button>
+
+            {/* Error */}
+            {error ? (
+              <div className="flex items-center justify-between gap-3 rounded-[18px] border border-danger/30 bg-danger/10 px-4 py-2.5 text-[12.5px] text-danger">
+                <span className="min-w-0 flex-1">{error}</span>
+                {errorRetryable && lastUserText ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={sending || running}
+                    onClick={() => void retry()}
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    Retry
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+
+            {showThinking ? <ThinkingPlaceholderRow /> : null}
+
+            {status === 'waiting_for_approval' && !approval ? (
+              <div className="text-[12.5px] text-muted">
+                Waiting for your decision — the run is paused.
+              </div>
+            ) : null}
+
+            {status === 'stopping' ? (
+              <div className="text-[12.5px] text-muted">Stopping the run…</div>
+            ) : null}
+
+            {/* Bottom spacer guarantees last message scrolls cleanly above floating composer */}
+            <div
+              style={{ height: Math.max(composerPad + 60, 180) }}
+              className="flex-none pointer-events-none"
+              aria-hidden
+            />
+          </div>
+        </div>
+
+        {/* Floating composer dock. Only the card captures pointer events so
+            scroll still works through the fade and empty side gutters. */}
+        <div
+          ref={composerDockRef}
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-background from-[52%] via-background/90 to-transparent pt-10 px-5 pb-4"
+        >
+          <div className="pointer-events-auto mx-auto w-full max-w-[760px]">
+            {fileMenuOpen ? (
+              <div className="mb-1.5 overflow-hidden rounded-[18px] border border-border bg-background shadow-[var(--shadow-md)]">
+                {fileHits.isLoading ? (
+                  <p className="px-3.5 py-2 text-[12px] text-muted">Searching files…</p>
+                ) : fileMatches.length ? (
+                  fileMatches.map((hit) => (
+                    <button
+                      key={hit.path}
+                      type="button"
+                      onClick={() => applyFile(hit.path)}
+                      className="flex w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-3.5 py-2 text-left hover:bg-foreground/[0.06]"
+                    >
+                      <FileText className="h-3.5 w-3.5 flex-none text-muted" />
+                      <span className="min-w-0 flex-1 truncate font-mono text-[12px]">{hit.path}</span>
+                    </button>
+                  ))
+                ) : (
+                  <p className="px-3.5 py-2 text-[12px] text-muted">
+                    {project?.trusted
+                      ? 'No files indexed yet — open Files and tap Refresh, or keep typing to filter.'
+                      : 'Trust this project to search and reference files.'}
+                  </p>
+                )}
+              </div>
+            ) : null}
+            {skillMenuOpen ? (
+              <div className="mb-1.5 overflow-hidden rounded-[18px] border border-border bg-background shadow-[var(--shadow-md)]">
+                {skillMatches.slice(0, 6).map((skill) => (
+                  <button
+                    key={skill.id}
+                    type="button"
+                    onClick={() => applySkill(skill)}
+                    className="flex w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-3.5 py-2 text-left hover:bg-foreground/[0.06]"
+                  >
+                    <span className="rounded-full bg-accent-100 px-2 py-0.5 font-mono text-[11.5px] text-accent-800">
+                      {skill.command}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[12.5px]">{skill.name}</span>
+                    <span className="text-[10.5px] text-muted">{skill.scope}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <div className="density-composer overflow-hidden rounded-[26px] border border-border bg-surface shadow-[var(--shadow-sm)]">
+              <textarea
+                ref={composerRef}
+                className="max-h-44 min-h-[52px] w-full resize-none bg-transparent px-4 py-3 text-[13.5px] leading-normal outline-none placeholder:text-muted"
+                placeholder={
+                  project
+                    ? 'Describe the change you want — @ for a file, $ for a skill'
+                    : 'Open a project to begin…'
+                }
+                disabled={!project || sending}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onCompositionStart={() => {
+                  composingRef.current = true;
+                }}
+                onCompositionEnd={() => {
+                  composingRef.current = false;
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter') return;
+                  // While the IME is open (拼音选字等), Enter confirms the candidate —
+                  // not sends. Without this, Chinese input accidentally submits mid-word.
+                  if (
+                    event.nativeEvent.isComposing ||
+                    composingRef.current ||
+                    event.keyCode === 229
+                  ) {
+                    return;
+                  }
+                  // Shift+Enter is the newline. Enter sends, which is what a chat
+                  // composer is expected to do; ⌘/Ctrl+Enter keeps working for the
+                  // muscle memory it was built with.
+                  if (event.shiftKey) return;
+                  event.preventDefault();
+                  // With a suggestion list open, Enter takes the first suggestion
+                  // rather than sending a half-typed `$re` or `@src/`.
+                  if (fileMenuOpen) {
+                    if (fileMatches.length) {
+                      applyFile(fileMatches[0]!.path);
+                    }
+                    return;
+                  }
+                  if (skillMenuOpen && skillMatches.length) {
+                    applySkill(skillMatches[0]!);
+                    return;
+                  }
+                  void send();
+                }}
+              />
+
+              <div className="flex items-center gap-2 px-3 pb-2.5">
+                <ApprovalModePicker
+                  mode={approvalMode.data?.mode ?? 'auto-reads'}
+                  onChange={(mode) => setApprovalMode.mutate(mode)}
+                />
+                <ThinkingLevelPicker disabled={!project || sending} />
+                {branch.data?.branch ? (
+                  <ContextPill icon={<GitBranch className="h-3 w-3" />}>
+                    {branch.data.branch}
+                  </ContextPill>
+                ) : null}
+                <span className="min-w-0 flex-1" />
+                {/* Model choice belongs with the send button: it is a property of the
+                    message you are about to send, not of the window. */}
+                <ModelPicker />
+                <span className="flex-none font-mono text-[11px] text-muted">↵</span>
+                <Button
+                  size="icon"
+                  className="h-[30px] w-[30px] flex-none"
+                  // Not `!session`: the unstarted-task screen has no session yet and
+                  // sending is what creates one, so gating on it left a dead button
+                  // next to a working ⌘↵.
+                  disabled={!project || !draft.trim() || sending}
+                  onClick={() => void send()}
+                  title="Send (⏎ — use ⇧⏎ for a new line)"
+                >
+                  <ArrowUp className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
