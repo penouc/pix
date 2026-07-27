@@ -1,5 +1,9 @@
 @import 'tailwindcss';
 
+/* Class-based dark variant — Streamdown/Shiki use `dark:` for token colors.
+   Our theme store toggles `.dark` on <html> alongside data-theme. */
+@custom-variant dark (&:is(.dark *));
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Organic — tokens transcribed from the Claude Design project
    "Loam 桌面应用设计" (`Loam Desktop.dc.html` + _ds/organic-…/styles.css).
@@ -484,12 +488,24 @@
     overflow-x: auto;
   }
 
-  /* Keep assistant markdown inside the shared chat column. */
+  /* Keep assistant markdown inside the shared chat column.
+     Typography mirrors Codex stream prose:
+     --codex-chat-font-size defaults to 13px;
+     line-height is calc(font-size + 8px) → 21px. */
   .pi-md {
+    --chat-font-size: 13px;
+    --chat-line-height: calc(var(--chat-font-size) + 8px);
     max-width: 100%;
     min-width: 0;
     overflow-wrap: break-word;
     word-break: break-word;
+    font-size: var(--chat-font-size);
+    line-height: var(--chat-line-height);
+  }
+
+  .pi-md :where(p, li, td, th, blockquote) {
+    font-size: inherit;
+    line-height: inherit;
   }
 
   .pi-md pre,
@@ -498,6 +514,22 @@
     max-width: 100%;
     box-sizing: border-box;
     overflow-x: auto;
+  }
+
+  /*
+   * Streamdown paints inline code with `bg-muted`. In this design system
+   * `--color-muted` is a *text* token, so the chip background becomes the same
+   * mid-tone as muted copy — and in dark mode the glyphs vanish against it.
+   */
+  .pi-md [data-streamdown='inline-code'],
+  .pi-md :not(pre) > code {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    padding: 0.12em 0.4em;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--color-foreground) 8%, transparent) !important;
+    color: var(--color-accent-700) !important;
+    border: 1px solid color-mix(in srgb, var(--color-foreground) 12%, transparent);
   }
 
   .pi-md table {

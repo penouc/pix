@@ -93,6 +93,10 @@ function applyToDocument(prefs: UiPrefs, resolved: ResolvedTheme) {
   const root = document.documentElement;
   root.dataset.theme = resolved;
   root.dataset.density = prefs.density;
+  // Streamdown / Shiki (and other libs) key off Tailwind's `dark:` variant,
+  // which matches `.dark` by default — data-theme alone leaves code tokens
+  // stuck on the light palette (dark text on a dark page = invisible).
+  root.classList.toggle('dark', resolved === 'dark');
   if (prefs.reduceMotion) root.dataset.motion = 'reduced';
   else delete root.dataset.motion;
 }
@@ -142,6 +146,18 @@ export function initUiPrefs() {
     if (state.theme !== 'system') return;
     const resolved = resolve('system');
     useUiPrefsStore.setState({ resolvedTheme: resolved });
-    document.documentElement.dataset.theme = resolved;
+    applyToDocument(
+      {
+        theme: state.theme,
+        density: state.density,
+        reduceMotion: state.reduceMotion,
+        diffStyle: state.diffStyle,
+        collapseContext: state.collapseContext,
+        dockTab: state.dockTab,
+        dockWidth: state.dockWidth,
+        sidebarWidth: state.sidebarWidth,
+      },
+      resolved,
+    );
   });
 }
