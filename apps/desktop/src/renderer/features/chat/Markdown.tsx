@@ -20,7 +20,12 @@ export const Markdown = memo(function Markdown({
   className?: string;
 }) {
   return (
-    <div className={cn('pi-md min-w-0 text-[13.5px] leading-[1.62]', className)}>
+    <div
+      className={cn(
+        'pi-md w-full max-w-full min-w-0 overflow-x-hidden break-words text-[13.5px] leading-[1.62]',
+        className,
+      )}
+    >
       <Streamdown
         mode="streaming"
         isAnimating={streaming}

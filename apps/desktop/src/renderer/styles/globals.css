@@ -472,12 +472,37 @@
   /* Terminal / tool-output surface — always light-on-dark. */
   .output-pre {
     margin: 0;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
     background: var(--color-output);
     color: var(--color-output-foreground);
     font-family: var(--font-mono);
     font-size: 11.5px;
     line-height: 1.65;
     white-space: pre-wrap;
+    overflow-x: auto;
+  }
+
+  /* Keep assistant markdown inside the shared chat column. */
+  .pi-md {
+    max-width: 100%;
+    min-width: 0;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+
+  .pi-md pre,
+  .pi-md [data-streamdown='code-block'],
+  .pi-md [data-streamdown='code-block-body'] {
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-x: auto;
+  }
+
+  .pi-md table {
+    display: block;
+    max-width: 100%;
     overflow-x: auto;
   }
 }

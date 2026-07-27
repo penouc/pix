@@ -408,14 +408,15 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
       </div>
 
       {/* Full-height scroller with a floating composer on top — Cursor/Codex
-          style. One scrollbar owns the surface, so the input column never has
-          to fake a gutter to stay aligned with the transcript. */}
+          style. Padding sits outside max-w so transcript (bash / markdown)
+          matches the composer width; scrollbar is hidden so it can't skew that. */}
       <div className="relative min-h-0 flex-1">
-        <div ref={scrollerRef} className="absolute inset-0 overflow-y-auto">
-          <div
-            className="mx-auto flex w-full max-w-[760px] flex-col gap-3 px-5 pt-5"
-            style={{ paddingBottom: composerPad + 84 }}
-          >
+        <div
+          ref={scrollerRef}
+          className="absolute inset-0 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        >
+          <div className="px-5 pt-5" style={{ paddingBottom: composerPad + 84 }}>
+            <div className="mx-auto flex w-full min-w-0 max-w-[760px] flex-col gap-3">
               {!timeline.length && !approval ? (
                 <div className="flex flex-col items-center gap-2 px-5 py-20 text-center">
                   <div className="text-sm font-bold">
@@ -579,6 +580,7 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
               className="flex-none pointer-events-none"
               aria-hidden
             />
+            </div>
           </div>
         </div>
 
@@ -588,7 +590,7 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
           ref={composerDockRef}
           className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-background from-[52%] via-background/90 to-transparent pt-10 px-5 pb-4"
         >
-          <div className="pointer-events-auto mx-auto w-full max-w-[760px]">
+          <div className="pointer-events-auto mx-auto w-full min-w-0 max-w-[760px]">
             {fileMenuOpen ? (
               <div className="mb-1.5 overflow-hidden rounded-[18px] border border-border bg-background shadow-[var(--shadow-md)]">
                 {fileHits.isLoading ? (
@@ -721,7 +723,7 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
 
 function AssistantMessage({ content, streaming }: { content: string; streaming: boolean }) {
   return (
-    <div className="min-w-0 flex-1">
+    <div className="w-full min-w-0 max-w-full overflow-x-hidden">
       <Markdown streaming={streaming}>{content}</Markdown>
     </div>
   );
@@ -744,7 +746,7 @@ function ToolCard({
   const summary = tool.inputSummary.replace(new RegExp(`^${tool.toolName}:\\s*`, 'i'), '');
 
   return (
-    <div className="flex max-w-full flex-col gap-1.5">
+    <div className="flex w-full min-w-0 max-w-full flex-col gap-1.5">
       <button
         type="button"
         onClick={canExpand ? onToggle : undefined}
@@ -782,17 +784,21 @@ function ToolCard({
         ) : null}
       </button>
       {expanded ? (
-        <div className="flex max-w-full flex-col gap-2 rounded-[14px] border border-border/60 bg-foreground/[0.02] px-3.5 py-2.5 font-mono text-[11.5px] leading-relaxed">
+        <div className="flex w-full min-w-0 max-w-full flex-col gap-2 rounded-[14px] border border-border/60 bg-foreground/[0.02] px-3.5 py-2.5 font-mono text-[11.5px] leading-relaxed">
           {tool.inputSummary ? (
-            <div>
-              <div className="text-[10px] font-bold tracking-wider text-muted uppercase mb-1">Input</div>
-              <pre className="output-pre whitespace-pre-wrap font-mono text-[11.5px]">{tool.inputSummary}</pre>
+            <div className="min-w-0 max-w-full">
+              <div className="mb-1 text-[10px] font-bold tracking-wider text-muted uppercase">Input</div>
+              <pre className="output-pre w-full max-w-full whitespace-pre-wrap font-mono text-[11.5px]">
+                {tool.inputSummary}
+              </pre>
             </div>
           ) : null}
           {tool.outputSummary ? (
-            <div>
-              <div className="text-[10px] font-bold tracking-wider text-muted uppercase mb-1">Output</div>
-              <pre className="output-pre whitespace-pre-wrap font-mono text-[11.5px]">{tool.outputSummary}</pre>
+            <div className="min-w-0 max-w-full">
+              <div className="mb-1 text-[10px] font-bold tracking-wider text-muted uppercase">Output</div>
+              <pre className="output-pre w-full max-w-full whitespace-pre-wrap font-mono text-[11.5px]">
+                {tool.outputSummary}
+              </pre>
             </div>
           ) : null}
         </div>
