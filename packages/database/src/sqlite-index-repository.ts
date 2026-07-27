@@ -106,9 +106,20 @@ export class SqliteIndexRepository implements IndexRepository {
 
   searchPaths(input: { query: string; projectIds?: string[]; limit?: number }): IndexPathHit[] {
     const needle = input.query.trim().toLowerCase();
-    if (!needle) return [];
     const limit = input.limit ?? 20;
     const scope = scopeClause(input.projectIds);
+
+    if (!needle) {
+      const rows = this.db
+        .prepare(
+          `SELECT project_id, path FROM index_files
+            WHERE 1 = 1 ${scope.sql}
+            ORDER BY mtime_ms DESC
+            LIMIT ?`,
+        )
+        .all(...scope.args, limit) as unknown as Array<{ project_id: string; path: string }>;
+      return rows.map((row) => ({ projectId: row.project_id, path: row.path }));
+    }
 
     const rows = this.db
       .prepare(

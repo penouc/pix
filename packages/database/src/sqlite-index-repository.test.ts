@@ -32,12 +32,12 @@ describe.each(MODES)('SqliteIndexRepository (%s)', (mode) => {
     db.close();
   });
 
-  function put(projectId: string, filePath: string, body?: string) {
+  function put(projectId: string, filePath: string, body?: string, mtimeMs = 1) {
     repo.upsertFile({
       projectId,
       path: filePath,
       size: body?.length ?? 0,
-      mtimeMs: 1,
+      mtimeMs,
       ...(body == null ? {} : { body }),
     });
   }
@@ -57,6 +57,15 @@ describe.each(MODES)('SqliteIndexRepository (%s)', (mode) => {
     expect(repo.searchPaths({ query: 'widget' })).toHaveLength(2);
     expect(repo.searchPaths({ query: 'widget', projectIds: ['p2'] })).toEqual([
       { projectId: 'p2', path: 'b/widget.ts' },
+    ]);
+  });
+
+  it('lists recent files when the query is empty (@ with no filter)', () => {
+    put('p1', 'old.ts', undefined, 1);
+    put('p1', 'new.ts', undefined, 2);
+
+    expect(repo.searchPaths({ query: '', projectIds: ['p1'], limit: 1 })).toEqual([
+      { projectId: 'p1', path: 'new.ts' },
     ]);
   });
 

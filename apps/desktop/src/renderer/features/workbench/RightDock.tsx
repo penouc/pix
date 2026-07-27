@@ -36,7 +36,7 @@ export function RightDock({
   onContinue,
   onInsertPath,
 }: {
-  onOpenFullDiff: () => void;
+  onOpenFullDiff: (path?: string) => void;
   onContinue: () => void;
   onInsertPath: (path: string) => void;
 }) {

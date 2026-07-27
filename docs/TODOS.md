@@ -1,577 +1,577 @@
-# Pi Agent Desktop — 执行 Todos 与进度台账
+# PiX — Execution Todos and Progress Ledger
 
-> **权威产品/工程总纲：** [`../Pi_Agent_Desktop_开发总计划.md`](../Pi_Agent_Desktop_开发总计划.md)（v1.0 · 2026-07-24）  
-> **本文件职责：** 把总纲拆成可执行 todos、记录当前状态、防止跳过验收门槛。  
-> **推进原则（总纲 §0）：** 每个阶段只有在对应验收标准通过后才进入下一阶段；任何不影响第一条完整用户路径的功能，都不能阻塞 MVP。  
-> **最后更新：** 2026-07-24（Pi SDK 0.82.0 接入会话）
+> **Authoritative product/engineering master plan:** [`./product-and-engineering-plan.md`](./product-and-engineering-plan.md) (v1.0 · 2026-07-24)  
+> **This file's job:** break the master plan into executable todos, track current status, and prevent skipping acceptance gates.  
+> **Progression principle (master plan §0):** each phase only proceeds to the next after its corresponding acceptance criteria pass; nothing that doesn't affect the first complete user journey may block the MVP.  
+> **Last updated:** 2026-07-24 (Pi SDK 0.82.0 session integration)
 
 ---
 
-## 0. 如何使用本文件
+## 0. How to Use This File
 
-| 层级 | 内容 | 更新时机 |
+| Layer | Content | Update cadence |
 |------|------|----------|
-| 总纲 | 产品范围、架构契约、里程碑门槛、验收剧本 | 重大决策时 |
-| **本文件** | 可勾选 todos、当前状态、下一步、偏差说明 | 每次开发会话结束 |
-| 代码/PR | 具体实现 | 日常开发 |
+| Master plan | Product scope, architectural contracts, milestone gates, acceptance script | On major decisions |
+| **This file** | Checkable todos, current status, next step, deviation notes | At the end of every dev session |
+| Code/PR | Concrete implementation | Day-to-day development |
 
-**状态图例**
+**Status legend**
 
-| 标记 | 含义 |
+| Marker | Meaning |
 |------|------|
-| `[ ]` | 未开始 |
-| `[~]` | 进行中 / 部分完成（不得视为阶段通过） |
-| `[x]` | 已完成且满足对应验收含义 |
-| `[!]` | 曾误标完成，已纠正为未完成 |
+| `[ ]` | Not started |
+| `[~]` | In progress / partially complete (must not be treated as the phase passing) |
+| `[x]` | Complete and satisfies the corresponding acceptance meaning |
+| `[!]` | Previously mismarked as complete, corrected to incomplete |
 
-**阶段门禁：** M*n* 的「完成门槛」未满足前，不得把 M*n* 整阶段标为 done，也不得依赖其产出宣称后续阶段已具备前提。
-
----
-
-## 1. 产品北极星（总纲 §1–3，只读摘要）
-
-### 1.1 核心目标
-
-以 **Pi Agent SDK** 为 Agent Runtime，构建本地桌面应用，完成：
-
-> 理解任务 → 修改代码 → 执行验证 → 审查 Diff → 接受或撤销变更
-
-### 1.2 第一版成功标准（§1.2）
-
-- [ ] 打开本地 Git 项目并建立可信 Workspace  
-- [ ] 选择已配置的 Provider 和 Model  
-- [ ] Agent 可读/搜/改代码并运行验证命令  
-- [ ] 实时理解运行状态与工具调用  
-- [ ] 危险操作拦截并要求授权  
-- [ ] 多文件 Diff；继续修改或保留结果  
-- [ ] 撤销本轮 Agent 修改，不损坏任务前已有修改  
-- [ ] 关闭后可恢复项目、会话和运行记录  
-
-### 1.3 MVP 主路径（§2）— 验收必须覆盖
-
-1. 启动 → 选择/恢复本地 Git 项目  
-2. Workspace Trust → 创建 Session  
-3. 选择 Provider / Model / Thinking Level  
-4. 输入真实编码任务（可引用文件）  
-5. 流式展示消息、工具调用、运行状态  
-6. Workspace 内读写按策略；敏感操作审批  
-7. 改代码并跑 lint/test/build  
-8. 多文件 Diff + 测试结果 + 任务摘要  
-9. 继续修改 / 保留 / 撤销本轮修改  
-10. 持久化 Session、Run、Approval、FileChange、Checkpoint  
-
-**MVP 冻结（不得阻塞主路径）：** Plan Mode、Session Fork、多 Agent、远程 Workspace、本地 4090、MCP、自动更新、多窗口。
-
-### 1.4 最终验收剧本（§19）
-
-- [ ] 在「已有未提交修改」的 React Git 项目上跑通剧本 1–11  
-- [ ] 愿意在真实日常项目中连续使用（产品成立判断）  
+**Phase gating:** until M*n*'s "completion gate" is satisfied, the entire M*n* phase must not be marked done, and its output must not be relied on to claim that later phases' prerequisites are met.
 
 ---
 
-## 2. 架构与工程契约（总纲 §4–11）— 实现约束清单
+## 1. Product North Star (master plan §1–3, read-only summary)
 
-> 这些不是“以后再想”的愿望列表，而是实现时必须遵守的契约。相关代码/文档未对齐时，在对应里程碑中消化。
+### 1.1 Core Goal
 
-### 2.1 架构原则（§4.1）
+Using the **Pi Agent SDK** as the Agent Runtime, build a local desktop application that accomplishes:
 
-| ID | 约束 | 当前状态 |
+> Understand the task → modify code → run verification → review the diff → accept or revert the changes
+
+### 1.2 First-Version Success Criteria (§1.2)
+
+- [ ] Open a local Git project and establish a trusted Workspace  
+- [ ] Select a configured Provider and Model  
+- [ ] The Agent can read/search/modify code and run verification commands  
+- [ ] Understand run state and tool calls in real time  
+- [ ] Dangerous operations are intercepted and require authorization  
+- [ ] Multi-file Diff; continue editing or keep the result  
+- [ ] Revert this round's Agent changes without damaging existing prior work  
+- [ ] After closing, the project, session, and run history can be restored  
+
+### 1.3 MVP Primary Journey (§2) — acceptance must cover this
+
+1. Launch → select/restore a local Git project  
+2. Workspace Trust → create a Session  
+3. Select Provider / Model / Thinking Level  
+4. Enter a real coding task (can reference files)  
+5. Streaming display of messages, tool calls, run state  
+6. Reads/writes within the Workspace proceed per policy; sensitive operations require approval  
+7. Change code and run lint/test/build  
+8. Multi-file Diff + test results + task summary  
+9. Continue editing / keep / revert this round's changes  
+10. Persist Session, Run, Approval, FileChange, Checkpoint  
+
+**MVP freeze (must not block the primary journey):** Plan Mode, Session Fork, multi-Agent, remote Workspace, local 4090, MCP, auto-update, multi-window.
+
+### 1.4 Final Acceptance Script (§19)
+
+- [ ] Run through script steps 1–11 on a React Git project  
+- [ ] Willing to use it continuously on a real day-to-day project (the judgment of whether the product stands)  
+
+---
+
+## 2. Architecture and Engineering Contracts (master plan §4–11) — Implementation Constraint Checklist
+
+> These are not a "think about it later" wishlist — they are contracts that must be honored during implementation. When code/docs are out of alignment, resolve it within the corresponding milestone.
+
+### 2.1 Architectural Principles (§4.1)
+
+| ID | Constraint | Current status |
 |----|------|----------|
-| A1 | Renderer 无 Node Integration；不直接访问 FS / Shell / 密钥 / DB | [x] 已设 `contextIsolation` + 关 `nodeIntegration` |
-| A2 | 跨进程输入/输出/事件全部 Zod runtime validation | [~] 有协议包；Main 边界有解析；未覆盖全部持久化边界 |
-| A3 | Pi SDK 只出现在 `agent-pi`；业务与 UI 不导入 Pi 类型 | [x] Pi 仅 `agent-pi` + Main 依赖；UI 不导入 |
-| A4 | 每个 Agent Event 带 `projectId/sessionId/runId/sequence/timestamp` | [x] schema + Fake 事件具备 |
-| A5 | 权限判定在 Main；Renderer 只展示审批并回传决策 | [ ] 审批管线未实现 |
-| A6 | Git Diff 仅展示；Checkpoint 快照才是可靠恢复来源 | [ ] 未实现 |
-| A7 | Provider/Model 交给 Pi；Desktop 负责登录 UX、密钥、状态展示 | [~] Settings API Key + 默认模型；OAuth 登录未实现 |
+| A1 | Renderer has no Node Integration; no direct access to FS / Shell / secrets / DB | [x] `contextIsolation` set + `nodeIntegration` off |
+| A2 | All cross-process input/output/events go through Zod runtime validation | [~] Protocol package exists; Main-side boundaries parse it; not yet covering every persistence boundary |
+| A3 | The Pi SDK only appears in `agent-pi`; business logic and UI never import Pi types | [x] Pi is confined to `agent-pi` + the Main dependency; the UI doesn't import it |
+| A4 | Every Agent Event carries `projectId/sessionId/runId/sequence/timestamp` | [x] Schema + Fake events have this |
+| A5 | Permission decisions happen in Main; the Renderer only presents approvals and relays the decision | [ ] Approval pipeline not implemented |
+| A6 | Git Diff is display-only; the Checkpoint snapshot is the reliable recovery source | [ ] Not implemented |
+| A7 | Provider/Model are handed to Pi; Desktop owns login UX, secrets, and status display | [~] Settings has API Key + default model; OAuth login not implemented |
 
-### 2.2 版本策略（§5）
+### 2.2 Version Policy (§5)
 
-| 依赖 | 要求 | 当前状态 |
+| Dependency | Requirement | Current status |
 |------|------|----------|
-| Electron | 锁定具体版本 | [~] `36.4.0`（package 中已钉版本，需确认 lock 一致） |
-| Pi SDK | 锁定具体版本 + 升级回归步骤 | [x] `@earendil-works/*@0.82.0` + ADR-0002 |
-| @pierre/diffs | 锁定具体版本 | [x] `@pierre/diffs@1.2.12` |
-| SQLite 驱动 | 锁定具体版本；packaged ARM64 验证 | [ ] 未安装 |
-| 其它依赖 | MVP 避免“自动跟随最新”的松散范围 | [~] 仍有大量 `^` |
+| Electron | Pin a specific version | [~] `36.4.0` (pinned in package.json, needs lockfile consistency check) |
+| Pi SDK | Pin a specific version + upgrade regression steps | [x] `@earendil-works/*@0.82.0` + ADR-0002 |
+| @pierre/diffs | Pin a specific version | [x] `@pierre/diffs@1.2.12` |
+| SQLite driver | Pin a specific version; ARM64 packaged validation | [ ] Not installed |
+| Other dependencies | MVP avoids loose "auto-follow-latest" ranges | [~] Still many `^` ranges |
 
-### 2.3 目标仓库结构（§6）对照
+### 2.3 Target Repository Structure (§6) Comparison
 
 ```text
-期望（总纲）                          当前
+Expected (master plan)                Current
 ─────────────────────────────────────────────────────────
 apps/desktop/src/main/
-  agent/ approvals/ providers/      [ ] 仅 index.ts + project-store.ts
+  agent/ approvals/ providers/      [ ] Only index.ts + project-store.ts
   workspace/ git/ checkpoints/
   sessions/ storage/ ipc/
   observability/
-apps/desktop/src/preload/           [x] 最小白名单 bridge
+apps/desktop/src/preload/           [x] Minimal whitelisted bridge
 apps/desktop/src/renderer/
-  app/ components/ stores/          [~] 有基础结构
+  app/ components/ stores/          [~] Basic structure exists
   features/ agent chat approvals    [~] projects + chat + status
              diff projects sessions
              models settings
 packages/
   agent-domain agent-pi protocol    [x]
   database git security ui          [ ]
-fixtures/test-repositories/         [~] 仅 react-button-label 占位
+fixtures/test-repositories/         [~] Only a react-button-label placeholder
 tests/integration/ tests/e2e/       [ ]
-docs/（见 §6.1）                     [~] 见下表
+docs/ (see §6.1)                    [~] see table below
 ```
 
-### 2.4 文档集（§6.1）
+### 2.4 Documentation Set (§6.1)
 
-| 文件 | 状态 |
+| File | Status |
 |------|------|
-| product-scope.md | [x] 摘要版 |
-| architecture.md | [x] 摘要版 |
-| agent-runtime-contract.md | [x] 摘要版 |
-| ipc-protocol.md | [x] 摘要版 |
+| product-scope.md | [x] Summary version |
+| architecture.md | [x] Summary version |
+| agent-runtime-contract.md | [x] Summary version |
+| ipc-protocol.md | [x] Summary version |
 | security-model.md | [ ] |
-| data-model.md | [x] SQLite sessions 表 + migrations |
+| data-model.md | [x] SQLite sessions table + migrations |
 | checkpoint-semantics.md | [ ] |
-| acceptance-tests.md | [x] fixture + packaged 路径 |
-| decisions/（Electron、Pi、Pierre…） | [~] 仅 ADR-0001 |
-| **TODOS.md（本文件）** | [x] 2026-07-24 创建 |
+| acceptance-tests.md | [x] fixtures + packaged path |
+| decisions/ (Electron, Pi, Pierre...) | [~] Only ADR-0001 |
+| **TODOS.md (this file)** | [x] Created 2026-07-24 |
 
-### 2.5 AgentRuntime 契约（§7）
+### 2.5 The AgentRuntime Contract (§7)
 
-- [x] `AgentRuntime` 接口形状（domain 包）  
-- [x] `FakeAgentRuntime`（离线 UI/E2E）  
-- [~] `PiAgentRuntime`（createSession / prompt / abort / listModels；usage 映射与审批钩子未完）  
-- [~] 事件映射：message / tool / run lifecycle → `DesktopAgentEvent`（usage 未映射）  
-- [~] Abort / Provider 错误归一化（有基础）；超时未完  
-- [~] Session 存储路径可控（agentDir）；跨重启恢复未做  
+- [x] `AgentRuntime` interface shape (domain package)  
+- [x] `FakeAgentRuntime` (offline UI/E2E)  
+- [~] `PiAgentRuntime` (createSession / prompt / abort / listModels; usage mapping and approval hooks incomplete)  
+- [~] Event mapping: message / tool / run lifecycle → `DesktopAgentEvent` (usage not mapped)  
+- [~] Abort / Provider error normalization (basic version exists); timeout not done  
+- [~] Session storage path controllable (agentDir); cross-restart recovery not done  
 
-**§7.2 Pi 技术验证清单（M1 核心证据）**
+**§7.2 Pi Technical Validation Checklist (core M1 evidence)**
 
-- [~] Pi SDK 在 Electron Main **dev** 可加载运行（单元 smoke 创建 Session 通过；GUI 真 prompt 待鉴权）  
-- [ ] Pi SDK 在 **packaged** Electron 可加载运行  
-- [~] ESM/CJS、动态依赖、资源发现无打包冲突（main externalize `@earendil-works/*`）  
-- [x] Session 存储路径可控（`userData/pi-agent`），恢复稳定（持久 session 文件尚未）  
-- [~] Tool Event 含权限判断所需输入（name + inputSummary + riskLevel 启发式）  
-- [ ] Abort 终止 Bash **及其子进程树**（已调用 abort/abortBash；树验证未做）  
-- [~] 关闭应用无残留 Agent/Shell 进程（dispose on before-quit）  
-- [ ] 至少一个 Provider 登录 + 模型列表 + 真实调用闭环（listModels 离线 catalog 可；真调用需 auth）  
-- [x] Pi SDK 版本锁定 + 升级回归步骤成文（ADR-0002 + tech-validation-m1）  
+- [~] Pi SDK loadable/runnable in Electron Main **dev** (unit smoke test creating a Session passes; a real GUI prompt still needs auth)  
+- [ ] Pi SDK loadable/runnable in **packaged** Electron  
+- [~] No packaging conflicts from ESM/CJS, dynamic dependencies, resource discovery (Main externalizes `@earendil-works/*`)  
+- [x] Session storage path controllable (`userData/pi-agent`), resume is stable (persistent session file not yet done)  
+- [~] Tool Events carry the input needed for permission decisions (name + inputSummary + heuristic riskLevel)  
+- [ ] Abort terminates Bash **and its child-process tree** (abort/abortBash already called; tree verification not done)  
+- [~] No leftover Agent/Shell processes on app close (dispose on before-quit)  
+- [ ] At least one Provider login + model list + real call round-trip (listModels offline catalog works; a real call needs auth)  
+- [x] Pi SDK version pinned + upgrade regression steps documented (ADR-0002 + tech-validation-m1)  
 
-### 2.6 事件与状态机（§8）
+### 2.6 Events and State Machine (§8)
 
-- [x] `AgentRunState` 联合类型 + 基础转移  
-- [x] 事件族 schema（lifecycle / message / tool / approval / files / usage）  
-- [x] Renderer 乱序防护：sequence 递增  
-- [x] Renderer 乱序防护：当前 projectId/sessionId/runId  
-- [ ] Token delta 批处理 / 有界事件队列（与 §14.1 对齐）  
+- [x] `AgentRunState` union type + basic transitions  
+- [x] Event-family schema (lifecycle / message / tool / approval / files / usage)  
+- [x] Renderer out-of-order protection: increasing sequence  
+- [x] Renderer out-of-order protection: current projectId/sessionId/runId  
+- [ ] Token delta batching / bounded event queue (aligning with §14.1)  
 
-### 2.7 权限与安全（§9）
+### 2.7 Permissions and Security (§9)
 
-| 项 | 状态 |
+| Item | Status |
 |----|------|
-| 风险等级模型（safe → external-side-effect） | [~] schema 有 RiskLevel；无 Policy Engine |
-| ApprovalDecision 四态 | [~] schema 有；无 UI/管线 |
+| Risk-level model (safe → external-side-effect) | [~] Schema has RiskLevel; no Policy Engine |
+| ApprovalDecision four states | [~] Schema exists; no UI/pipeline |
 | Tool Normalizer / Risk Classifier / Policy Engine | [ ] |
-| protected paths + path canonicalize | [ ] |
+| Protected paths + path canonicalize | [ ] |
 | Audit Log | [ ] |
-| 安全攻击测试仓库 | [x] |
-| contextIsolation + 关 nodeIntegration | [x] |
-| Preload 白名单、无通用 invoke | [x] |
-| IPC Zod 校验 | [~] |
-| 日志脱敏（Key/Authorization/Cookie…） | [ ] |
+| Security attack test repository | [x] |
+| contextIsolation + nodeIntegration off | [x] |
+| Preload whitelist, no generic invoke | [x] |
+| IPC Zod validation | [~] |
+| Log redaction (Key/Authorization/Cookie...) | [ ] |
 
-### 2.8 数据所有权与 SQLite（§10）
+### 2.8 Data Ownership and SQLite (§10)
 
-- [ ] Project / Session Metadata / AgentRun / Approval / FileChange / Checkpoint 持久化  
-- [ ] SQLite 仅 Main；Repository 隔离驱动  
-- [ ] 版本化 migration + 备份策略  
-- [ ] packaged ARM64 原生驱动验证  
-- [ ] Run 开始写 running；崩溃恢复 → interrupted  
-- [ ] 删除级联语义明确  
+- [ ] Persist Project / Session Metadata / AgentRun / Approval / FileChange / Checkpoint  
+- [ ] SQLite is Main-only; a Repository isolates the driver  
+- [ ] Versioned migrations + backup strategy  
+- [ ] Packaged ARM64 native-driver validation  
+- [ ] Run starts write `running`; crash recovery → `interrupted`  
+- [ ] Clear cascade-delete semantics  
 
-### 2.9 Diff / Checkpoint 语义（§11）
+### 2.9 Diff / Checkpoint Semantics (§11)
 
-- [ ] Run 前 Git 状态 + 文件 hash 基线  
-- [ ] 首次写入前快照；新增记“不存在”  
+- [ ] Pre-run Git status + file-hash baseline  
+- [ ] Snapshot before first write; new files recorded as "does not exist"  
 - [ ] Keep / Continue / Revert file / Revert all / Review later  
-- [ ] 用户并发修改冲突检测  
-- [ ] **绝不**因 Revert 破坏任务前未提交修改  
+- [ ] User concurrent-modification conflict detection  
+- [ ] Revert must **never** destroy uncommitted work that existed before the task  
 
 ---
 
-## 3. 里程碑 Todos（总纲 §12）
+## 3. Milestone Todos (master plan §12)
 
-### M0 — 范围冻结与项目基线
+### M0 — Scope Freeze and Project Baseline
 
-**完成门槛：** 明确范围、可运行空壳、可重复验收输入。
+**Completion gate:** Clear scope, a runnable empty shell, repeatable acceptance inputs.
 
-| ID | Todo | 状态 | 备注 |
+| ID | Todo | Status | Notes |
 |----|------|------|------|
-| M0-1 | 确认 macOS 优先、单 Agent、Git 项目优先 | [x] | 总纲已冻结 |
-| M0-2 | 冻结 MVP 主路径与非目标 | [x] | §2 / §1.3 |
-| M0-3 | 仓库 + pnpm workspace + 规范 + CI | [x] | 2026-07-24 落地 |
-| M0-4 | docs/、ADR、fixtures 骨架 | [x] | 文档、ADR 与 fixture 说明齐备；`pnpm verify:fixtures` 验证目录、metadata 和基线 |
-| M0-5 | 固定真实任务评测集（§13.2 可执行仓库） | [x] | 6 个确定性本地任务仓库覆盖文案、TS、query 状态、表单、失败测试和跨文件重构；仅基线/完整性验证，尚未形成 M8 成功率 |
+| M0-1 | Confirm macOS-first, single-Agent, Git-project-first | [x] | Frozen in the master plan |
+| M0-2 | Freeze the MVP primary journey and non-goals | [x] | §2 / §1.3 |
+| M0-3 | Repo + pnpm workspace + standards + CI | [x] | Landed 2026-07-24 |
+| M0-4 | docs/, ADR, fixtures skeleton | [x] | Docs, ADRs, and fixture docs complete; `pnpm verify:fixtures` validates directory, metadata, and baselines |
+| M0-5 | Fixed real-task evaluation set (§13.2 runnable repos) | [x] | 6 deterministic local task repos covering copy, TS, query state, forms, failing tests, and cross-file refactors; only baseline/integrity validated so far, not yet an M8 success rate |
 
-**M0 阶段结论：** **通过**。范围、空壳和可重复的本地评测输入均已具备；M8 仍需在该固定集上记录 Agent 成功率与安全/性能证据。
+**M0 conclusion:** **Passed.** Scope, an empty shell, and repeatable local evaluation inputs are all in place; M8 still needs to record Agent success rate plus safety/performance evidence on this fixed set.
 
 ---
 
-### M1 — Pi SDK + Electron 技术验证  ← **当前应聚焦**
+### M1 — Pi SDK + Electron Technical Validation  ← **Current focus**
 
-**完成门槛：** 不打开 Pi TUI，也能从桌面窗口完成一次**真实**编码任务。
+**Completion gate:** Complete one **real** coding task from the desktop window, without ever opening the Pi TUI.
 
-| ID | Todo | 状态 | 备注 |
+| ID | Todo | Status | Notes |
 |----|------|------|------|
-| M1-1 | 初始化 Electron、React、TS、Vite | [x] | apps/desktop |
-| M1-2 | Main Process 创建 **真实 Pi Session** | [x] | 2026-07-25 Main IPC integration 以真实 PiAgentRuntime 离线创建、SQLite 持久化并列出 Session 通过 |
-| M1-3 | Renderer → Typed IPC → **Pi** → Event Stream | [~] | Typed Main IPC + Pi session 离线 integration 通过；真实 Provider 流仍需鉴权后的 GUI 手测 |
-| M1-4 | 发送消息、流式文本、Tool Event、Stop（真 Pi） | [~] | Pi 映射、真实 abort、follow-up IPC 已实现；真实模型流/工具事件需 Provider 登录 GUI 证据 |
-| M1-5 | dev 与 **packaged build** 验证（含 Pi） | [x] | 2026-07-25 `pnpm package:dir && pnpm smoke:packaged` 通过，确认 app bundle、asar、Main/preload、Pi SDK 依赖与 unpack 资源齐全 |
-| M1-6 | 测试仓库中真实改码 + 跑测试 | [x] | `pnpm eval:fixture` 已记录真实 OpenCode Go read/edit/bash 闭环，fixture 源码、单元与验收测试均通过 |
-| M1-7 | 记录技术验证结果：继续 SDK 或切 Pi RPC 备用路线 | [x] | `docs/tech-validation-m1.md` 已记录真实 eval 与 packaged 验证，结论为继续 in-process SDK |
+| M1-1 | Initialize Electron, React, TS, Vite | [x] | apps/desktop |
+| M1-2 | Create a **real Pi Session** in the Main Process | [x] | 2026-07-25: the Main IPC integration created and listed a Session offline via the real PiAgentRuntime, persisted to SQLite |
+| M1-3 | Renderer → Typed IPC → **Pi** → Event Stream | [~] | Typed Main IPC + offline Pi session integration passes; the real Provider stream still needs a manual GUI test after auth |
+| M1-4 | Send messages, streaming text, Tool Events, Stop (real Pi) | [~] | Pi mapping, real abort, and follow-up IPC are implemented; real model streaming/tool events still need Provider-login GUI evidence |
+| M1-5 | dev and **packaged build** validation (with Pi) | [x] | 2026-07-25 `pnpm package:dir && pnpm smoke:packaged` passed, confirming the app bundle, asar, Main/preload, Pi SDK dependencies, and unpacked resources are all intact |
+| M1-6 | Real code change + test run in a test repo | [x] | `pnpm eval:fixture` recorded a real OpenCode Go read/edit/bash round-trip; fixture source, unit, and acceptance tests all pass |
+| M1-7 | Record technical-validation results: continue on SDK, or fall back to the Pi RPC path | [x] | `docs/tech-validation-m1.md` records the real eval and packaged validation, concluding to continue on the in-process SDK |
 
-**M1 阶段结论：** **仍未通过门槛**（缺有鉴权的真实 Provider 桌面交互证据）；SDK 适配主路径、离线 Main IPC integration 与 packaged smoke 已通过。
+**M1 conclusion:** **Gate still not passed** (missing evidence of a real, authenticated Provider interaction in the desktop GUI); the SDK adapter's primary path, offline Main IPC integration, and packaged smoke test have all passed.
 
 ---
 
-### M2 — 领域契约与状态机
+### M2 — Domain Contracts and State Machine
 
-**完成门槛：** Renderer 不导入 Pi 类型；乱序/取消/失败可确定性复现。
+**Completion gate:** The Renderer never imports Pi types; out-of-order/cancel/failure are deterministically reproducible.
 
-| ID | Todo | 状态 |
-|----|------|------|
-| M2-1 | AgentRuntime + **PiAgentRuntime** + FakeAgentRuntime 齐备 | [x] Pi rehydration identity、offline session construction、Main typed IPC integration 均有自动化覆盖 |
+| ID | Todo | Status |
+|----|------|----|
+| M2-1 | AgentRuntime + **PiAgentRuntime** + FakeAgentRuntime complete | [x] Pi rehydration identity, offline session construction, and Main typed IPC integration all have automated coverage |
 | M2-2 | AgentRunState / DesktopAgentEvent / AgentError | [x] |
-| M2-3 | 事件作用域 + 顺序；重复/迟到丢弃（含 project/session/run 过滤） | [x] Renderer store 已过滤 |
-| M2-4 | Runtime / IPC / 状态机契约测试 | [x] event mapper、Pi session smoke/restart identity、Main typed IPC integration 覆盖；无 Provider 网络调用 |
+| M2-3 | Event scope + ordering; drop duplicate/late events (including project/session/run filtering) | [x] Renderer store filters these |
+| M2-4 | Runtime / IPC / state-machine contract tests | [x] Covered by the event mapper, Pi session smoke/restart identity, and Main typed IPC integration; no Provider network calls |
 
 ---
 
-### M3 — Project、Session 与 Provider
+### M3 — Project, Session, and Provider
 
-**完成门槛：** 重启后可恢复项目与 Session，并再次调用已配置模型。
+**Completion gate:** After restarting, the user can restore projects and Sessions and call a previously configured model again.
 
-| ID | Todo | 状态 |
-|----|------|------|
-| M3-1 | 选择项目、最近项目、Git 检测、项目信任 | [x] Browse + Trust UI + **SQLite projects** 表 |
-| M3-2 | Session 创建/恢复/重命名/归档 | [x] SQLite 元数据持久化；Main 在首次发送/Follow-up 时按原 session id 惰性重建 Pi 内存会话，自动化 restart identity 测试通过 |
-| M3-3 | Pi Provider/Model；至少一个真实登录闭环 | [x] Settings 支持全部既有 API Key Provider + 默认模型；OpenCode Go 已从本地 auth store 完成真实模型 read/edit/bash fixture eval |
-| M3-4 | 密钥不进 Renderer / DB 明文 / 日志 | [~] API Key 经 macOS Keychain 加密后写入 Main 私有配置，不进 SQLite / 日志；输入时仍短暂经过 Renderer IPC |
-
----
-
-### M4 — Agent Chat 工作台
-
-**完成门槛：** 长任务中用户能理解当前步骤、工具、输出、是否需介入。
-
-| ID | Todo | 状态 |
-|----|------|------|
-| M4-1 | Chat、Composer、流式消息、Tool Call 卡片 | [x] Chat/Composer、delta 流、Tool 卡片与 Approval UI 已接线 Pi 事件契约 |
-| M4-2 | Stop、Retry、Follow-up Queue、错误恢复 | [x] Pi `abort()` 经 Main IPC；运行中输入走 Pi follow-up queue；可重试失败保留 Retry |
-| M4-3 | TanStack Query + Zustand + **事件批处理** | [x] Q/Z + message.delta rAF 批处理，乱序/作用域过滤已有测试 |
-| M4-4 | 模型、上下文、Token、成本、运行状态展示 | [x] 展示活动模型、运行时长、工具数、报告的 token/context/cost；未知值明确标为未报告而不虚构 |
+| ID | Todo | Status |
+|----|------|----|
+| M3-1 | Select project, recent projects, Git detection, project trust | [x] Browse + Trust UI + **SQLite projects** table |
+| M3-2 | Session create/resume/rename/archive | [x] SQLite metadata persistence; Main lazily rebuilds the in-memory Pi session under the original session id on first send/Follow-up; the automated restart-identity test passes |
+| M3-3 | Pi Provider/Model; at least one real login round-trip | [x] Settings supports all existing API-Key Providers + a default model; OpenCode Go has completed a real model read/edit/bash fixture eval from the local auth store |
+| M3-4 | Secrets never enter the Renderer / DB plaintext / logs | [~] The API Key is encrypted via macOS Keychain and written to a Main-private config, never into SQLite/logs; input still briefly passes through the Renderer via IPC |
 
 ---
 
-### M5 — 权限与安全基线
+### M4 — Agent Chat Workbench
 
-**完成门槛：** 未授权无法碰敏感路径、push、高风险副作用。
+**Completion gate:** During a long task, the user can understand the current step, tool, output, and whether they need to intervene.
 
-| ID | Todo | 状态 |
-|----|------|------|
-| M5-1 | Tool Normalizer、Risk Classifier、Policy Engine | [x] |
-| M5-2 | 审批对话框 + allow-once/session/project/deny | [x] |
-| M5-3 | protected paths、canonicalize、审计日志 | [x] |
-| M5-4 | Shell / 网络 / 装依赖 / git push / 删除 / 外部副作用 | [x] |
-| M5-5 | 安全攻击测试仓库 | [x] |
+| ID | Todo | Status |
+|----|------|----|
+| M4-1 | Chat, Composer, streaming messages, Tool Call cards | [x] Chat/Composer, delta streaming, Tool cards, and the Approval UI are wired to the Pi event contract |
+| M4-2 | Stop, Retry, Follow-up Queue, error recovery | [x] Pi `abort()` via Main IPC; mid-run input goes through the Pi follow-up queue; a failed run can be retried |
+| M4-3 | TanStack Query + Zustand + **event batching** | [x] Q/Z + rAF batching of message.delta; out-of-order/scope filtering already has tests |
+| M4-4 | Display model, context, tokens, cost, run state | [x] Shows the active model, run duration, tool count, and reported tokens/context/cost; unknown values are explicitly marked as not reported rather than made up |
+
+---
+
+### M5 — Permission and Security Baseline
+
+**Completion gate:** Without authorization, the Agent cannot touch sensitive paths, push, or perform high-risk side effects.
+
+| ID | Todo | Status |
+|----|------|----|
+| M5-1 | Tool Normalizer, Risk Classifier, Policy Engine | [x] |
+| M5-2 | Approval dialog + allow-once/session/project/deny | [x] |
+| M5-3 | protected paths, canonicalize, audit log | [x] |
+| M5-4 | Shell / network / installing dependencies / git push / delete / external side effects | [x] |
+| M5-5 | Security attack test repository | [x] |
 
 ---
 
 ### M6 — Diff Review
 
-**完成门槛：** 大型多文件变更仍流畅打开、滚动、切换、定位。
+**Completion gate:** Large multi-file changes still open, scroll, switch, and navigate smoothly.
 
-| ID | Todo | 状态 |
-|----|------|------|
-| M6-1 | 接入 @pierre/diffs 稳定版 + CodeView | [x] |
-| M6-2 | 多文件、unified/split、折叠未改行、文件导航 | [x] |
-| M6-3 | 增/改/删/重命名/二进制提示 | [x] |
-| M6-4 | 大 Diff 性能基准 + 主题同步 | [x] |
+| ID | Todo | Status |
+|----|------|----|
+| M6-1 | Integrate a stable @pierre/diffs + CodeView | [x] |
+| M6-2 | Multi-file, unified/split, collapse unchanged lines, file navigation | [x] |
+| M6-3 | Added/modified/deleted/renamed/binary indicators | [x] |
+| M6-4 | Large-diff performance benchmark + theme sync | [x] |
 
 ---
 
-### M7 — Checkpoint 与精确恢复
+### M7 — Checkpoint and Precise Recovery
 
-**完成门槛：** 撤销 Agent 任务不破坏任务前未提交工作。
+**Completion gate:** Reverting an Agent task never destroys uncommitted work that existed before the task.
 
-| ID | Todo | 状态 |
-|----|------|------|
-| M7-1 | 任务前 Git 状态与文件基线 | [x] | SQLite Checkpoint/AgentRun/基线文件持久化；每次 Run 前捕获 Git 状态、OID、dirty 文件 SHA-256 |
-| M7-2 | 首次写入前快照 + hash | [x] | SQLite BLOB 精确快照；首次 write/edit 前由 Main 捕获，新增文件持久化不存在哨兵 |
+| ID | Todo | Status |
+|----|------|----|
+| M7-1 | Pre-task Git status and file baseline | [x] | SQLite Checkpoint/AgentRun/baseline-file persistence; captures Git status, OID, and dirty-file SHA-256 before every Run |
+| M7-2 | Snapshot + hash before first write | [x] | SQLite BLOB precise snapshot; captured by Main before the first write/edit, new files persist a "does not exist" sentinel |
 | M7-3 | Keep / Continue / Revert file / Revert all | [x] | Main-only snapshot recovery restores exact bytes or deletes only files absent before the run; typed review actions persist outcomes and Diff Review exposes Keep/Continue/per-file Revert/Revert all |
-| M7-4 | 用户并发修改与冲突 | [x] | 成功 write/edit 后持久化无内容的预期状态；恢复前校验 current hash/size/existence，冲突不会自动覆盖并在 Diff Review 中明确展示；批量恢复跳过冲突路径 |
-| M7-5 | 崩溃恢复与 Checkpoint 清理 | [x] | Main 启动发现未解决的 running Checkpoint 并通过 typed IPC/Recovery UI 提供安全审查；仅清理超过 30 天且已 resolved 的 Checkpoint，级联释放快照 BLOB，绝不删除未解决恢复数据 |
+| M7-4 | User concurrent modification and conflicts | [x] | After a successful write/edit, the content-free expected state is persisted; before recovery, the current hash/size/existence is checked, conflicts are never auto-overwritten and are clearly shown in Diff Review; batch recovery skips conflicting paths |
+| M7-5 | Crash recovery and Checkpoint cleanup | [x] | On startup, Main discovers unresolved `running` Checkpoints and offers a safe review via typed IPC / Recovery UI; only Checkpoints resolved and older than 30 days are cleaned up, cascading to release snapshot BLOBs, and unresolved recovery data is never deleted |
 
 ---
 
-### M8 — 稳定性、评测与可安装版本
+### M8 — Stability, Evaluation, and an Installable Version
 
-**完成门槛：** 可作个人日常工具连续运行，有明确故障诊断手段。
+**Completion gate:** Can run as a personal daily tool continuously, with clear failure-diagnosis capability.
 
-| ID | Todo | 状态 |
-|----|------|------|
-| M8-1 | 长输出截断、背压、超时、子进程树终止 | [x] Pi session-scoped `abort()` / `abortBash()` 终止其 Bash 进程树；`RUN_TIMEOUT_MS` 安全解析、默认 10 分钟；rAF 16ms delta 批处理；`MAX_TOOL_*` 截断常量 |
-| M8-2 | 结构化日志、脱敏、Run 指标、诊断导出 | [x] `DesktopLogger` NDJSON 轮转日志 + `redactSecrets` + console 替换；`RunMetricsStore` 跟踪 run 生命周期；`RunMetrics` schema 入 protocol；`diagnostics.export` IPC 命令 |
-| M8-3 | 固定 Agent 评测集 + Electron E2E | [x] 新增 5 个 fixture（含 clarification 保守修改与 precise-revert 后置验证）；`pnpm verify:fixtures` 覆盖全部 11 个 fixture；Playwright E2E `tests/e2e/happy-path.spec.ts`；`pnpm test:e2e` 脚本 |
-| M8-4 | macOS packaged build、安装、卸载验证 | [x] electron-builder.yml 新增 DMG target；`scripts/verify-packaged.mjs`（bundle、asar 内容、.node 可加载性、DMG）；`pnpm verify:packaged` 脚本；卸载路径注释 |
-
----
-
-### M9 — 后续能力路线（不阻塞 MVP）
-
-| ID | Todo | 状态 |
-|----|------|------|
-| M9-1 | Plan Mode、Todo、Session Fork | [ ] |
-| M9-2 | 本地 llama.cpp / OpenAI-compatible Provider | [ ] |
-| M9-3 | Mac Desktop + 4090 PC 推理节点 | [ ] |
-| M9-4 | 远程 Workspace、SSH、MCP、多 Agent | [ ] |
-| M9-5 | 签名、Notarization、自动更新、产品化分发 | [ ] |
-
-每项需独立 ADR + 评测 + 安全审查。
-
-> **2026-07-26：** 总纲 v1.1 已把 MVP 之后的规划拆为 **M8.5（第一版收口）+ M9–M13**，见总纲 §21–§28（收口清单、Pi SDK 能力盘点、方案设计、功能优先级、协议与数据模型演进、ADR 队列）。上表保留为历史锚点；**开新功能前先关闭总纲 §21.2 的十项收口缺口**，本文件届时按新阶段补 todo 行。
+| ID | Todo | Status |
+|----|------|----|
+| M8-1 | Long-output truncation, backpressure, timeouts, child-process-tree termination | [x] Pi session-scoped `abort()` / `abortBash()` terminates its Bash process tree; `RUN_TIMEOUT_MS` safely parsed, defaulting to 10 minutes; rAF 16ms delta batching; `MAX_TOOL_*` truncation constants |
+| M8-2 | Structured logging, redaction, Run metrics, diagnostic export | [x] `DesktopLogger` NDJSON rotating logs + `redactSecrets` + console replacement; `RunMetricsStore` tracks the run lifecycle; `RunMetrics` schema added to protocol; `diagnostics.export` IPC command |
+| M8-3 | Fixed Agent evaluation set + Electron E2E | [x] Added 5 fixtures (including conservative-change clarification and post-hoc precise-revert verification); `pnpm verify:fixtures` covers all 11 fixtures; Playwright E2E `tests/e2e/happy-path.spec.ts`; `pnpm test:e2e` script |
+| M8-4 | macOS packaged build, install, uninstall verification | [x] electron-builder.yml adds a DMG target; `scripts/verify-packaged.mjs` (bundle, asar contents, .node loadability, DMG); `pnpm verify:packaged` script; uninstall-path notes |
 
 ---
 
-## 4. 启动 Backlog 对照（总纲 §18）
+### M9 — Follow-On Capability Roadmap (does not block the MVP)
 
-> 目标：**尽快获得技术证据**，不是先完成完整视觉设计。
+| ID | Todo | Status |
+|----|------|----|
+| M9-1 | Plan Mode, Todo, Session Fork | [ ] |
+| M9-2 | Local llama.cpp / OpenAI-compatible Provider | [ ] |
+| M9-3 | Mac Desktop + 4090 PC inference node | [ ] |
+| M9-4 | Remote Workspace, SSH, MCP, multi-Agent | [ ] |
+| M9-5 | Signing, Notarization, auto-update, productized distribution | [ ] |
 
-### 4.1 第一批任务（严格顺序）
+Each item needs its own ADR + evaluation + security review.
 
-| # | Todo | 状态 | 诚实说明 |
+> **2026-07-26:** the master plan v1.1 split the post-MVP roadmap into **M8.5 (first-version close-out) + M9–M13**, see master-plan §21–§28 (close-out checklist, Pi SDK capability inventory, design, feature priority, protocol/data-model evolution, ADR queue). The table above is kept as a historical anchor; **new feature work is blocked until the master plan's §21.2 ten close-out gaps are closed**; this file will be updated with new todo rows once that phase begins.
+
+---
+
+## 4. Kickoff Backlog Comparison (master plan §18)
+
+> Goal: **get technical evidence as fast as possible**, not finish a complete visual design first.
+
+### 4.1 First Batch of Tasks (strict order)
+
+| # | Todo | Status | Honest notes |
 |---|------|------|----------|
-| 1 | 创建 pi-desktop 仓库和 pnpm workspace | [x] | |
-| 2 | TS、ESLint、Prettier、Vitest、基础 CI | [x] | |
-| 3 | Electron Main / Preload / React 最小工程 | [x] | |
-| 4 | shadcn 风格组件 + 主题 Token + 三栏骨架 | [~] | 非完整 shadcn CLI 体系；有基础 Button/Badge/主题 |
-| 5 | **锁定 Pi SDK 版本** 并创建 agent-pi package | [x] | `0.82.0` + ADR-0002 + PiAgentRuntime |
-| 6 | 定义 AgentRuntime、DesktopAgentEvent、AgentRunState、AgentError | [x] | |
-| 7 | protocol package，Typed IPC + Zod | [x] | |
-| 8 | Main 创建 **Pi Session** 并发送第一条消息 | [~] | Session create 通；首条真模型消息需鉴权 |
-| 9 | message delta 与 tool events 显示到 Renderer | [~] | 映射已接；真流依赖成功 prompt |
-| 10 | Stop，并验证 Bash 子进程树被终止 | [~] | process-tree 单测 + abort/abortBash；集成验证未完 |
-| 11 | 准备测试 React 项目；Agent 改组件并跑测试 | [~] | fixture baseline 可跑；Agent 实跑未做 |
-| 12 | packaged macOS build，验证 Pi 仍能跑 | [~] | `package:dir` 产出 app；GUI 手测待做 |
-| 13 | 记录技术验证结果；SDK vs Pi RPC | [~] | 倾向 SDK；最终结论待 GUI 手测 |
+| 1 | Create the pi-desktop repo and pnpm workspace | [x] | |
+| 2 | TS, ESLint, Prettier, Vitest, basic CI | [x] | |
+| 3 | Minimal Electron Main / Preload / React project | [x] | |
+| 4 | shadcn-style components + theme tokens + three-column skeleton | [~] | Not a full shadcn CLI system; has basic Button/Badge and theming |
+| 5 | **Pin the Pi SDK version** and create the agent-pi package | [x] | `0.82.0` + ADR-0002 + PiAgentRuntime |
+| 6 | Define AgentRuntime, DesktopAgentEvent, AgentRunState, AgentError | [x] | |
+| 7 | protocol package, Typed IPC + Zod | [x] | |
+| 8 | Main creates a **Pi Session** and sends the first message | [~] | Session creation works; the first real-model message still needs auth |
+| 9 | Show message deltas and tool events in the Renderer | [~] | Mapping is wired; a real stream depends on a successful prompt |
+| 10 | Stop, and verify the Bash child-process tree is terminated | [~] | process-tree unit test + abort/abortBash; integration verification not done |
+| 11 | Prepare a test React project; have the Agent modify a component and run tests | [~] | The fixture baseline runs; a real Agent run hasn't been done |
+| 12 | packaged macOS build, verify Pi still runs | [~] | `package:dir` produces the app; manual GUI test still pending |
+| 13 | Record technical-validation results; SDK vs. Pi RPC | [~] | Leaning toward SDK; final conclusion pending a manual GUI test |
 
-### 4.2 技术验证通过后（§18.1）
+### 4.2 After Technical Validation Passes (§18.1)
 
-- [x] Project、Workspace Trust、最近项目（SQLite `projects` + Trust UI）  
-- [x] Session Repository + SQLite migration（同库 `sessions`）  
-- [~] Provider/Model 选择（下拉 + env key）；安全凭据存储未做  
-- [~] Agent Chat、Tool Cards、Event Batching（delta 批处理已有）  
+- [x] Project, Workspace Trust, recent projects (SQLite `projects` + Trust UI)  
+- [x] Session Repository + SQLite migration (same DB, `sessions`)  
+- [~] Provider/Model selection (dropdown + env key); secure credential storage not done  
+- [~] Agent Chat, Tool Cards, Event Batching (delta batching already exists)  
 - [ ] Permission Pipeline + Approval Dialog  
-- [ ] @pierre/diffs 多文件 Review  
-- [ ] Checkpoint、Keep、Revert file/all  
-- [ ] 固定评测集、E2E、安全、性能  
+- [ ] @pierre/diffs multi-file review  
+- [ ] Checkpoint, Keep, Revert file/all  
+- [ ] Fixed evaluation set, E2E, security, performance  
 
 ---
 
-## 5. 测试 / 评测 / 可观测 / 发布（总纲 §13–15）
+## 5. Testing / Evaluation / Observability / Release (master plan §13–15)
 
-### 5.1 测试分层（§13.1）
+### 5.1 Test Layers (§13.1)
 
-| 层级 | 状态 |
+| Layer | Status |
 |------|------|
-| Unit（状态机、风险、路径、转换、Repository） | [~] 状态机/协议/Fake 少量 |
-| Contract（Runtime、IPC、Event、Pi Adapter） | [~] 无 Pi Adapter 契约 |
-| Integration（Pi、Git、Checkpoint、SQLite、Keychain） | [ ] |
-| E2E（打开项目 → Review/Keep/Revert） | [ ] |
+| Unit (state machine, risk, path, conversion, Repository) | [~] Some state-machine/protocol/Fake tests |
+| Contract (Runtime, IPC, Event, Pi Adapter) | [~] No Pi Adapter contract tests |
+| Integration (Pi, Git, Checkpoint, SQLite, Keychain) | [ ] |
+| E2E (open project → Review/Keep/Revert) | [ ] |
 | Security | [ ] |
 | Performance | [ ] |
 | Agent Evaluation | [ ] |
 
-### 5.2 固定评测任务（§13.2）— 需 fixture + 可跑
+### 5.2 Fixed Evaluation Tasks (§13.2) — need a fixture + runnable
 
-- [ ] 改按钮文案并更新测试  
-- [ ] 修 TypeScript 类型错误  
-- [ ] 添加 TanStack Query + loading/error  
-- [ ] 改表单校验并补测试  
-- [ ] 定位并修复失败测试  
-- [ ] 跨多文件小型重构  
-- [ ] 需求含糊时先提问、不擅自扩大范围  
-- [ ] Workspace 外读取 → 拒绝或审批  
-- [ ] 危险命令正确风险等级  
-- [ ] 取消长任务且子进程已终止  
-- [ ] 已有未提交修改时精确撤销 Agent 修改  
+- [ ] Change button copy and update tests  
+- [ ] Fix a TypeScript type error  
+- [ ] Add TanStack Query + loading/error  
+- [ ] Change form validation and add tests  
+- [ ] Locate and fix a failing test  
+- [ ] Cross-file small refactor  
+- [ ] Ask first when requirements are ambiguous; don't expand scope unilaterally  
+- [ ] Reading outside the Workspace → deny or approval  
+- [ ] Correct risk level for a dangerous command  
+- [ ] Cancel a long task and confirm child processes are terminated  
+- [ ] Precisely revert Agent changes when uncommitted changes already exist  
 
-### 5.3 可观测性与背压（§14）
+### 5.3 Observability and Backpressure (§14)
 
-- [ ] Run 级指标（Provider/Model/Thinking/起止/终态）  
-- [ ] 首 Token、Tool 数/耗时、审批等待  
-- [ ] Token / 上下文 / 成本  
-- [ ] 修改文件数、测试命令与结果  
-- [ ] 按 project/session/run 查询的本地日志  
-- [ ] 导出前脱敏；Shell 输出独立文件策略  
-- [ ] §14.1 各资源上限策略落地  
+- [ ] Run-level metrics (Provider/Model/Thinking/start-end/final state)  
+- [ ] First token, tool count/duration, approval wait time  
+- [ ] Tokens / context / cost  
+- [ ] Files changed count, test command and result  
+- [ ] Local logs queryable by project/session/run  
+- [ ] Redaction before export; separate-file strategy for Shell output  
+- [ ] §14.1's resource-limit policies implemented  
 
-### 5.4 发布门槛（§15）
+### 5.4 Release Gates (§15)
 
-- [ ] MVP 主路径 E2E 全过  
-- [ ] 评测集可接受成功率、无严重安全退化  
-- [ ] packaged 中 Pi / SQLite / Keychain / Pierre 正常  
-- [ ] 退出/Abort/崩溃无残留进程、不损坏 DB  
-- [ ] 越界/敏感路径/危险 Shell/外部副作用测试过  
-- [ ] Keep/Revert 不破坏任务前修改  
-- [ ] 日志无明文密钥  
-- [ ] 大会话与 Diff 性能可日常使用  
-- [ ] 数据位置/清理/导出/卸载说明  
+- [ ] All MVP primary-journey E2E tests pass  
+- [ ] Evaluation set reaches an acceptable success rate, no serious security regression  
+- [ ] Pi / SQLite / Keychain / Pierre all work in the packaged build  
+- [ ] Exit/Abort/crash leaves no orphan processes, doesn't corrupt the DB  
+- [ ] Escape/sensitive-path/dangerous-shell/external-side-effect tests pass  
+- [ ] Keep/Revert doesn't destroy pre-task changes  
+- [ ] Logs contain no plaintext secrets  
+- [ ] Large-session and diff performance is usable daily  
+- [ ] Data location/cleanup/export/uninstall documentation  
 
 ---
 
-## 6. 风险台账（总纲 §16）— 缓解动作 todos
+## 6. Risk Ledger (master plan §16) — Mitigation Action Todos
 
-| 风险 | 缓解动作 Todo | 状态 |
+| Risk | Mitigation action todo | Status |
 |------|----------------|------|
-| Pi SDK API 变化 | 版本锁 + Adapter + 契约测试 + 升级评测 | [ ] |
-| Electron 权限面 | Main 权限管线 + 最小 Preload | [~] 最小 Preload 有 |
-| Checkpoint 语义错误 | 写前快照/hash/冲突/恢复测试 | [ ] |
-| SQLite 原生打包 | 早期 packaged ARM64 验证 | [ ] |
-| 流式事件过密 | 批处理/虚拟化/有界队列/落盘 | [ ] |
-| 大 Diff 性能 | Pierre + 基准 + 降级 | [ ] |
-| Provider/OAuth 差异 | 先完整支持一个 Provider | [ ] |
-| 模型能力差异 | 固定评测集 + 能力标签 | [ ] |
-| 范围膨胀 | 守 MVP 冻结与完成门槛 | [~] 本文件用于约束 |
+| Pi SDK API changes | Version pin + adapter + contract tests + upgrade evaluation | [ ] |
+| Electron's permission surface | Main permission pipeline + minimal Preload | [~] Minimal Preload exists |
+| Incorrect Checkpoint semantics | Pre-write snapshot/hash/conflict/recovery tests | [ ] |
+| SQLite native packaging | Early packaged ARM64 validation | [ ] |
+| Streaming events too dense | Batching/virtualization/bounded queue/log to disk | [ ] |
+| Large-diff performance | Pierre + benchmark + degradation | [ ] |
+| Provider/OAuth differences | Fully support one Provider first | [ ] |
+| Model capability differences | Fixed evaluation set + capability tags | [ ] |
+| Scope creep | Hold the MVP freeze and completion gates | [~] This file is used to enforce that |
 
 ---
 
-## 7. 当前会话 Todos 归档（工具内 todo 列表）
+## 7. Archive of This Session's Todos (in-tool todo list)
 
-> 以下为 2026-07-24 首次落地会话中的 agent todo 记录。**事后审计：多项被过早标 completed，与总纲验收不符。**
+> Below is the agent's in-tool todo record from the first landing session on 2026-07-24. **Post-hoc audit: several items were marked completed prematurely, inconsistent with the master plan's acceptance criteria.**
 
-| 会话 Todo ID | 内容 | 会话结束时标记 | 审计后状态 |
+| Session todo ID | Content | Marked at session end | Post-audit status |
 |--------------|------|----------------|------------|
-| `m0-repo` | M0: 初始化 monorepo | completed | [x] 代码已落地 |
-| `m0-docs` | M0: docs/ADR/fixtures 占位 | completed | [x] 固定 fixture 目录、metadata 与基线验证已补齐 |
-| `m1-electron` | M1: Electron+React+TS+Vite | completed | [x] 壳已有 |
-| `m1-packages` | M1: protocol/domain/agent-pi 骨架 | completed | [~] 无真实 Pi SDK |
-| `m1-ui` | M1: shadcn + 三栏骨架 | completed | [~] 最小 UI，非完整工作台 |
-| `m1-ipc` | M1: Typed IPC + 流式打通 | completed | [!] **仅 Fake**；真 Pi 流未通 |
+| `m0-repo` | M0: initialize the monorepo | completed | [x] Code is in place |
+| `m0-docs` | M0: docs/ADR/fixtures placeholders | completed | [x] Fixed fixture directories, metadata, and baseline validation now complete |
+| `m1-electron` | M1: Electron+React+TS+Vite | completed | [x] Shell exists |
+| `m1-packages` | M1: protocol/domain/agent-pi skeleton | completed | [~] No real Pi SDK |
+| `m1-ui` | M1: shadcn + three-column skeleton | completed | [~] Minimal UI, not a full workbench |
+| `m1-ipc` | M1: Typed IPC + streaming wired up | completed | [!] **Fake only**; the real Pi stream was never actually working |
 
-**纠偏说明（2026-07-24）：**
+**Correction notes (2026-07-24):**
 
-1. 未通读总纲全文即开工，违反「技术证据优先」（§18）。  
-2. 将 FakeAgentRuntime 路径误标为 M1 的「→ Pi → Event Stream」完成。  
-3. 总纲勾选进度曾偏乐观；**以本文件状态为准**；总纲勾选需与本文件对齐后再改。  
-4. 下一步不得继续扩 UI 功能，应回到 §18 第 5/8 项：锁 Pi + 真 Session。
+1. Started work without reading the master plan in full, violating "technical evidence first" (§18).  
+2. Mismarked the FakeAgentRuntime path as completing M1's "→ Pi → Event Stream."  
+3. The master plan's checkbox progress had been overly optimistic; **this file's status is authoritative**; the master plan's checkboxes should only change after being aligned with this file.  
+4. The next step must not keep expanding UI features; it should return to §18 items 5/8: pin Pi + a real Session.  
 
 ---
 
-## 8. 代码与仓库现状快照（2026-07-24）
+## 8. Code and Repo Status Snapshot (2026-07-24)
 
-### 8.1 已有
+### 8.1 What Exists
 
-- monorepo：`apps/desktop`、`packages/{protocol,agent-domain,agent-pi}`  
-- 工具链：pnpm、TS、ESLint、Prettier、Vitest、GitHub Actions CI  
-- Electron 安全基线雏形：contextIsolation、sandbox、白名单 preload  
-- Zod IPC + event-mapper 测试 + **Pi session smoke（createSession）**  
-- **锁定** `@earendil-works/pi-coding-agent@0.82.0`（+ core/ai）  
-- **PiAgentRuntime**：createSession / sendMessage / abort / listModels / dispose  
-- FakeAgentRuntime 仍可通过 `PI_DESKTOP_FAKE_RUNTIME=1`  
-- Main 默认真 Pi；`agentDir = userData/pi-agent`  
-- Renderer scope 过滤（project/session/run + sequence）  
-- ADR-0002、tech-validation-m1、TODOS  
+- Monorepo: `apps/desktop`, `packages/{protocol,agent-domain,agent-pi}`  
+- Toolchain: pnpm, TS, ESLint, Prettier, Vitest, GitHub Actions CI  
+- Electron security-baseline scaffold: contextIsolation, sandbox, whitelisted preload  
+- Zod IPC + event-mapper tests + **Pi session smoke test (createSession)**  
+- **Pinned** `@earendil-works/pi-coding-agent@0.82.0` (+ core/ai)  
+- **PiAgentRuntime**: createSession / sendMessage / abort / listModels / dispose  
+- FakeAgentRuntime still available via `PI_DESKTOP_FAKE_RUNTIME=1`  
+- Main defaults to real Pi; `agentDir = userData/pi-agent`  
+- Renderer scope filtering (project/session/run + sequence)  
+- ADR-0002, tech-validation-m1, TODOS  
 
-### 8.2 明确没有 / 未完成
+### 8.2 Explicitly Missing / Incomplete
 
-- Provider 登录 UX 与「第一条真实模型回复」闭环证据  
-- packaged 安装包与 Pi-in-package 证据  
-- Bash 子进程树终止的自动化验证  
+- Provider login UX and evidence of a "first real model reply" round-trip  
+- Packaged installer and evidence of Pi working inside the package  
+- Automated verification of Bash child-process-tree termination  
 - SQLite / Keychain / Checkpoint / Pierre Diff  
 - `packages/{database,git,security,ui}`  
-- `tests/integration`、`tests/e2e`  
+- `tests/integration`, `tests/e2e`  
 - Permission Pipeline  
-- §13.2 可执行评测仓库矩阵  
+- The §13.2 runnable evaluation-repo matrix  
 
-### 8.3 推荐下一步队列（有序）
+### 8.3 Recommended Next-Step Queue (in order)
 
-> 严格服务 M1 完成门槛。
+> Strictly serves the M1 completion gate.
 
-1. [x] 对齐文档与 TODOS  
-2. [x] 锁定 Pi SDK 0.82.0 + ADR  
-3. [x] `PiAgentRuntime` + Main createSession 接线  
-4. [x] 第一条真实消息（`opencode-go/kimi-k2.7-code` 流式 + tool 闭环）  
-5. [~] Abort / 进程树：`killProcessTree` 单测通过；Pi abortBash 已调  
-6. [x] Fixture 真改码验收 **PASS**（见 `docs/eval-reports/react-button-label-latest.md`）  
-7. [~] packaged dir + asar smoke **通过**；GUI 手测仍建议  
-8. [~] tech-validation：继续 SDK；默认用 OpenCode Go 凭据（`~/.local/share/opencode/auth.json`）  
-9. [~] 已切入 §18.1 / M3 部分；M1 核心技术证据基本齐，packaged GUI 手测可选  
+1. [x] Align docs and TODOS  
+2. [x] Pin Pi SDK 0.82.0 + ADR  
+3. [x] Wire up `PiAgentRuntime` + Main createSession  
+4. [x] First real message (`opencode-go/kimi-k2.7-code` streaming + tool round-trip)  
+5. [~] Abort / process tree: `killProcessTree` unit test passes; Pi abortBash already called  
+6. [x] Fixture real-code-change acceptance **PASS** (see `docs/eval-reports/react-button-label-latest.md`)  
+7. [~] packaged dir + asar smoke **passes**; manual GUI test still recommended  
+8. [~] tech-validation: continue on SDK; default to OpenCode Go credentials (`~/.local/share/opencode/auth.json`)  
+9. [~] Already moved into §18.1 / M3 partially; the core M1 technical evidence is basically complete, a packaged GUI manual test is optional  
 
-**立即下一刀：** M7-5 崩溃恢复与 Checkpoint 清理。
+**Immediate next cut:** M7-5 crash recovery and Checkpoint cleanup.
 
 ---
 
-## 9. 决策与参考（总纲 §17 / §20）
+## 9. Decisions and References (master plan §17 / §20)
 
-### 9.1 已接受决策
+### 9.1 Accepted Decisions
 
-| 决策 | 选择 |
+| Decision | Choice |
 |------|------|
-| 桌面框架 | Electron |
-| Agent 内核 | Pi SDK + AgentRuntime 边界 |
-| 模型抽象 | 使用 Pi，不自建多 Provider 层 |
+| Desktop framework | Electron |
+| Agent core | Pi SDK + the AgentRuntime boundary |
+| Model abstraction | Use Pi, don't build a custom multi-Provider layer |
 | UI | shadcn/ui + Tailwind |
-| 异步状态 | TanStack Query + Zustand（流式不进 Query Cache） |
+| Async state | TanStack Query + Zustand (streaming never enters the Query Cache) |
 | Diff | @pierre/diffs |
-| 恢复 | 快照 + hash |
-| 首发 | macOS + Git 项目 |
+| Recovery | Snapshot + hash |
+| Launch | macOS + Git projects |
 
-### 9.2 外部参考
+### 9.2 External References
 
-- Pi SDK：https://pi.dev/docs/latest/sdk  
-- Pi Extensions：https://pi.dev/docs/latest/extensions  
-- Pi Coding Agent：https://github.com/earendil-works/pi  
-- Pierre Diffs：https://diffs.com/  
-- Pierre CodeView：https://pierre.computer/writing/on-rendering-diffs  
+- Pi SDK: https://pi.dev/docs/latest/sdk  
+- Pi Extensions: https://pi.dev/docs/latest/extensions  
+- Pi Coding Agent: https://github.com/earendil-works/pi  
+- Pierre Diffs: https://diffs.com/  
+- Pierre CodeView: https://pierre.computer/writing/on-rendering-diffs  
 
 ---
 
-## 10. 变更记录
+## 10. Changelog
 
-| 日期 | 变更 |
+| Date | Change |
 |------|------|
-| 2026-07-24 | 通读总纲全文后创建本文件；归档会话 todos；纠正 Fake≠Pi 的进度误标；定义 M1 有序队列 |
-| 2026-07-24 | 锁定 Pi `@earendil-works/*@0.82.0`；实现 PiAgentRuntime + 事件映射 + Main 默认真 Pi；smoke/tests 绿；更新 M1 进度为部分完成 |
-| 2026-07-24 | process-tree 单测；env 凭据水合 + Auth IPC；react-button-label fixture；electron-builder mac-arm64 dir 打包成功 |
-| 2026-07-24 | 自动选鉴权模型、Browse 选目录、最近项目持久化、模型下拉、packaged asar 冒烟脚本、acceptance docs |
-| 2026-07-24 | Workspace Trust、SessionStore JSON 持久化、delta rAF 批处理、smoke:runtime headless |
-| 2026-07-24 | OpenCode Go 鉴权（auth.json）；`pnpm eval:fixture` 真改码 PASS（kimi-k2.7-code） |
-| 2026-07-24 | `@pi-desktop/database` SQLite SessionRepository（node:sqlite + migrations + JSON 迁移） |
-| 2026-07-24 | SQLite `projects` 表 + DesktopDatabase 单连接；JSON recent-projects 迁移 |
-| 2026-07-24 | 接入 M5 Permission Pipeline：Pi `tool_call` 阻塞钩子、风险分级、审批对话框、权限记忆与脱敏审计日志；补齐安全策略与桥接测试 |
-| 2026-07-24 | 新增 `security-escape` 攻击 fixture，覆盖越界路径、敏感文件、危险 Shell、依赖安装和外部副作用；M5-5 自动化验证通过 |
-| 2026-07-24 | 锁定并接入 `@pierre/diffs@1.2.12`：Main 只读 Git diff IPC、CodeView Review 面板及 Git/协议测试 |
-| 2026-07-24 | 新增 Settings：全量 API Key Provider 配置、macOS Keychain 加密持久化及默认模型偏好 |
-| 2026-07-24 | Diff Review 增加文件导航、unified/split 视图切换和紧凑上下文折叠 |
-| 2026-07-24 | Diff Review 增加增改删重命名状态与二进制文件提示，Git 服务提供 NUL 分隔文件元数据 |
-| 2026-07-24 | Diff Review 同步 Pierre dark 主题，并增加 25 文件、10,000 行 patch 的解析性能基准 |
-| 2026-07-25 | M7-1：Run 前持久化 Git HEAD/index tree、精确 porcelain 状态及 dirty/untracked/deleted 文件 SHA-256 基线；Run 返回后原子关联 running 记录 |
-| 2026-07-25 | M7-2：新增 v4 SQLite 写前快照 BLOB/hash/size/不存在哨兵；Pi write/edit 阻塞钩子通过领域回调交给 Main 捕获，越界路径失败阻断 |
-| 2026-07-25 | M7-3：新增 v5 Checkpoint 审查结果；Main-only 精确快照恢复与路径/符号链接/非普通文件防护；Diff Review 支持 Keep、Continue、按文件和全部 Revert |
-| 2026-07-25 | M7-4：Pi `tool_result` 成功回调记录 agent 写后 hash/size/existence；恢复前比较当前状态，保留用户并发改动并持久化/展示“未自动覆盖”冲突，批量恢复继续处理安全路径 |
-| 2026-07-25 | M0-4/M0-5：补齐 6 个无依赖、可复制/重置的确定性真实任务 fixture；每个含 task metadata、通过的 baseline 与 post-task acceptance，`pnpm verify:fixtures` 只做本地完整性/基线验证，不代表 LLM 评测成功率 |
-| 2026-07-25 | M7-5：Main 启动枚举崩溃遗留的未解决 Checkpoint，Renderer 通过 typed IPC 进入独立安全恢复审查；30 天保留策略仅级联清理已解决的 Checkpoint 和快照 BLOB，未解决数据永久保留至用户决策 |
-| 2026-07-25 | M8-1：Pi session-scoped `abort` / `abortBash` 终止其 Bash 进程树，避免跨 Session 误杀；`RUN_TIMEOUT_MS` 安全解析（10 min 默认）超时自动 abort；Main `broadcastEvent` 16ms delta 批处理 + MAX_BUFFERED_DELTAS 背压；event-mapper 截断常量 |
-| 2026-07-25 | M8-2：`DesktopLogger`（5MB 轮转 NDJSON + redactSecrets + console 替换）；`RunMetricsStore` 观测 run 事件并记录生命周期；`RunMetrics` schema 入 protocol；`diagnostics.export` IPC 返回日志路径与近期指标 |
-| 2026-07-25 | M8-3：新增 5 个 fixture（needs-clarification、workspace-outside-read、dangerous-command-risk、cancel-long-task、precise-revert）；`verify:fixtures` 覆盖全部 11 个 fixture；clarification 保守变更与 precise-revert 后置验证已覆盖；Playwright E2E `app.getInfo`、项目、信任、Session、发送、取消均通过 |
-| 2026-07-25 | M8-4：electron-builder.yml 增加 DMG target（arm64）；`scripts/verify-packaged.mjs` 验证 bundle/asar/native 可加载性/DMG 产物；`pnpm verify:packaged` 脚本；卸载路径文档 |
+| 2026-07-24 | Created this file after reading the master plan in full; archived session todos; corrected the Fake≠Pi progress mismark; defined the ordered M1 queue |
+| 2026-07-24 | Pinned Pi `@earendil-works/*@0.82.0`; implemented PiAgentRuntime + event mapping + Main defaulting to real Pi; smoke/tests green; updated M1 progress to partial |
+| 2026-07-24 | process-tree unit test; env-credential hydration + Auth IPC; react-button-label fixture; electron-builder mac-arm64 dir packaging succeeded |
+| 2026-07-24 | Auto-select authenticated model, Browse directory picker, recent-projects persistence, model dropdown, packaged asar smoke script, acceptance docs |
+| 2026-07-24 | Workspace Trust, SessionStore JSON persistence, delta rAF batching, headless smoke:runtime |
+| 2026-07-24 | OpenCode Go auth (auth.json); `pnpm eval:fixture` real code change PASS (kimi-k2.7-code) |
+| 2026-07-24 | `@pi-desktop/database` SQLite SessionRepository (node:sqlite + migrations + JSON migration) |
+| 2026-07-24 | SQLite `projects` table + single DesktopDatabase connection; JSON recent-projects migration |
+| 2026-07-24 | Landed the M5 Permission Pipeline: Pi `tool_call` blocking hook, risk classification, approval dialog, permission memory, and redacted audit log; added security-policy and bridge tests |
+| 2026-07-24 | Added the `security-escape` attack fixture, covering path escapes, sensitive files, dangerous shell, dependency installs, and external side effects; M5-5 automated verification passes |
+| 2026-07-24 | Pinned and integrated `@pierre/diffs@1.2.12`: Main read-only Git diff IPC, the CodeView review panel, and Git/protocol tests |
+| 2026-07-24 | Added Settings: full API-Key Provider configuration, macOS Keychain-encrypted persistence, and default model preference |
+| 2026-07-24 | Diff Review gained file navigation, unified/split view switching, and compact context collapsing |
+| 2026-07-24 | Diff Review gained added/modified/deleted/renamed status and binary-file indicators; the Git service provides NUL-separated file metadata |
+| 2026-07-24 | Diff Review synced with Pierre's dark theme, plus a parsing-performance benchmark for a 25-file, 10,000-line patch |
+| 2026-07-25 | M7-1: persist the Git HEAD/index tree, exact porcelain status, and dirty/untracked/deleted file SHA-256 baselines before every Run; atomically associate the `running` record once the run returns |
+| 2026-07-25 | M7-2: added v4 SQLite pre-write snapshot BLOB/hash/size/does-not-exist sentinel; the Pi write/edit blocking hook hands off to Main via a domain callback for capture, blocking on out-of-bounds paths |
+| 2026-07-25 | M7-3: added v5 Checkpoint review outcomes; Main-only precise snapshot recovery with path/symlink/non-regular-file protection; Diff Review supports Keep, Continue, per-file and full Revert |
+| 2026-07-25 | M7-4: the Pi `tool_result` success callback records post-write agent hash/size/existence; compares current state before recovery, preserves concurrent user changes, persists/displays "not auto-overwritten" conflicts, and batch recovery continues processing safe paths |
+| 2026-07-25 | M0-4/M0-5: added 6 dependency-free, copyable/resettable deterministic real-task fixtures; each includes task metadata, a passing baseline, and post-task acceptance; `pnpm verify:fixtures` only does local integrity/baseline validation, not an LLM success rate |
+| 2026-07-25 | M7-5: on startup, Main enumerates crash-orphaned unresolved Checkpoints, and the Renderer enters a dedicated safe-recovery review via typed IPC; the 30-day retention policy only cascades cleanup of resolved Checkpoints and snapshot BLOBs, unresolved data is retained permanently until the user decides |
+| 2026-07-25 | M8-1: Pi session-scoped `abort` / `abortBash` terminates its Bash process tree, avoiding cross-session kills; `RUN_TIMEOUT_MS` safely parsed (10 min default) auto-aborts on timeout; Main `broadcastEvent` gets 16ms delta batching + `MAX_BUFFERED_DELTAS` backpressure; event-mapper truncation constants |
+| 2026-07-25 | M8-2: `DesktopLogger` (5MB rotating NDJSON + redactSecrets + console replacement); `RunMetricsStore` observes run events and records the lifecycle; `RunMetrics` schema added to protocol; `diagnostics.export` IPC returns the log path and recent metrics |
+| 2026-07-25 | M8-3: added 5 fixtures (needs-clarification, workspace-outside-read, dangerous-command-risk, cancel-long-task, precise-revert); `verify:fixtures` covers all 11 fixtures; clarification's conservative change and precise-revert's post-hoc verification are both covered; Playwright E2E covers `app.getInfo`, project, trust, session, send, and cancel |
+| 2026-07-25 | M8-4: electron-builder.yml adds a DMG target (arm64); `scripts/verify-packaged.mjs` validates the bundle/asar/native loadability/DMG artifact; `pnpm verify:packaged` script; uninstall-path documentation |
 
 ---
 
-## 11. 维护约定
+## 11. Maintenance Convention
 
-1. **开始开发前**读本文件 §8.3 队列与当前聚焦里程碑。  
-2. **结束开发后**更新对应 `[ ]/[~]/[x]`，必要时写一行备注。  
-3. 里程碑「完成门槛」满足前，不把整阶段标 `[x]`。  
-4. 与总纲冲突时：**总纲定范围与契约，本文件定执行状态**；契约变更先改总纲或 ADR。  
-5. 重大偏差（如改用 Pi RPC）必须新增 ADR + 更新本文件 §9 与 M1-7。  
+1. **Before starting development,** read §8.3's queue and the currently focused milestone.  
+2. **After finishing development,** update the corresponding `[ ]/[~]/[x]` and add a note line if needed.  
+3. Don't mark an entire milestone `[x]` until its "completion gate" is satisfied.  
+4. On conflict with the master plan: **the master plan defines scope and contracts, this file defines execution status**; change the contract in the master plan or an ADR first.  
+5. Major deviations (e.g., switching to Pi RPC) must add an ADR + update this file's §9 and M1-7.  

@@ -3,6 +3,7 @@ import { memo, type ComponentProps } from 'react';
 import { Streamdown } from 'streamdown';
 
 import { invoke } from '@/lib/ipc';
+import { cn } from '@/lib/utils';
 
 /**
  * Assistant prose via Streamdown — handles incomplete Markdown while tokens stream.
@@ -12,12 +13,14 @@ import { invoke } from '@/lib/ipc';
 export const Markdown = memo(function Markdown({
   children,
   streaming = false,
+  className,
 }: {
   children: string;
   streaming?: boolean;
+  className?: string;
 }) {
   return (
-    <div className="pi-md min-w-0 text-[13.5px] leading-[1.62]">
+    <div className={cn('pi-md min-w-0 text-[13.5px] leading-[1.62]', className)}>
       <Streamdown
         mode="streaming"
         isAnimating={streaming}

@@ -1,6 +1,6 @@
-# Product Scope (MVP freeze)
+# PiX Product Scope (MVP freeze)
 
-Source of truth: `Pi_Agent_Desktop_开发总计划.md` §1–3, §18.
+Source of truth: [`./product-and-engineering-plan.md`](./product-and-engineering-plan.md) §1–3, §18.
 
 ## In scope
 

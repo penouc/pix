@@ -1,5 +1,6 @@
 import { Brain, ChevronDown } from 'lucide-react';
 
+import { Markdown } from '@/features/chat/Markdown';
 import { cn } from '@/lib/utils';
 
 /** Collapse reasoning to one line and keep the tail visible as tokens stream in. */
@@ -51,13 +52,17 @@ export function ThinkingStreamRow({
 
         <span className="min-w-0 flex-1 overflow-hidden">
           <span className="flex min-w-0 items-center gap-2">
-            <span
-              className={cn(
-                'flex-none text-[12px] font-semibold tracking-[0.01em]',
-                streaming ? 'think-label-shimmer' : 'text-muted',
-              )}
-            >
-              {streaming ? 'Thinking' : 'Thought'}
+            <span className="inline-flex flex-none items-baseline text-[12px] font-semibold tracking-[0.01em]">
+              <span className={streaming ? 'think-label-shimmer' : 'text-muted'}>
+                {streaming ? 'Thinking' : 'Thought'}
+              </span>
+              {streaming ? (
+                <span className="think-ellipsis text-muted" aria-hidden>
+                  <span>.</span>
+                  <span>.</span>
+                  <span>.</span>
+                </span>
+              ) : null}
             </span>
             {preview ? (
               <span
@@ -67,12 +72,6 @@ export function ThinkingStreamRow({
                 )}
               >
                 {preview}
-              </span>
-            ) : streaming ? (
-              <span className="think-dots flex-none text-[11px] text-muted" aria-hidden>
-                <span />
-                <span />
-                <span />
               </span>
             ) : null}
           </span>
@@ -89,10 +88,10 @@ export function ThinkingStreamRow({
       </button>
 
       {expanded && hasBody ? (
-        <div
-          className="max-h-40 overflow-y-auto rounded-[14px] border border-border/60 bg-foreground/[0.02] px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-muted whitespace-pre-wrap"
-        >
-          {content.trim()}
+        <div className="max-h-56 overflow-y-auto rounded-[14px] border border-border/60 bg-foreground/[0.02] px-3 py-2.5">
+          <Markdown streaming={streaming} className="pi-md-think">
+            {content.trim()}
+          </Markdown>
         </div>
       ) : null}
     </div>

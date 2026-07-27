@@ -2,8 +2,8 @@
   "name": "@pi-desktop/desktop",
   "version": "0.1.0",
   "private": true,
-  "author": "Pi Desktop",
-  "description": "Pi Agent Desktop — Electron shell",
+  "author": "PiX",
+  "description": "PiX — local desktop coding agent",
   "main": "dist-electron/main/index.js",
   "type": "module",
   "scripts": {

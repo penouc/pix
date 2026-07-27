@@ -3,7 +3,7 @@ import { ChevronLeft } from 'lucide-react';
 import { parsePatchFiles } from '@pierre/diffs';
 import { CodeView, type CodeViewDiffItem, type CodeViewHandle } from '@pierre/diffs/react';
 import { useQuery } from '@tanstack/react-query';
-import { type ReactNode, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { WorkingTreeDiff } from '@pi-desktop/protocol';
 
@@ -35,11 +35,14 @@ export function DiffPanel({
   recoveryRunId,
   onRecoveryResolved,
   onBack,
+  focusPath,
 }: {
   onContinue: () => void;
   recoveryRunId?: string;
   onRecoveryResolved: () => void;
   onBack?: () => void;
+  /** When opening from the Changes rail, scroll this file into view. */
+  focusPath?: string;
 }) {
   const project = useWorkspaceStore((s) => s.project);
   const activeRunId = useAgentStreamStore((s) => s.activeRunId);
@@ -132,6 +135,14 @@ export function DiffPanel({
     });
   }
 
+  useEffect(() => {
+    if (!focusPath || items.length === 0) return;
+    const frame = requestAnimationFrame(() => scrollToFile(focusPath));
+    return () => cancelAnimationFrame(frame);
+    // scrollToFile closes over items; re-run when the target or parse result changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusPath, items]);
+
   if (recoveryRunId) {
     return (
       <RecoveryPanel
@@ -172,7 +183,7 @@ export function DiffPanel({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
       <header className="flex items-center justify-between gap-4 border-b border-border px-5 py-3">
         <div className="flex items-center gap-3">
           {onBack ? (
@@ -292,26 +303,32 @@ export function DiffPanel({
             })}
           </div>
         </aside>
-        <div className="min-h-0 min-w-0 flex-1 overflow-auto">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {changedFiles
             .filter((file) => file.binary)
             .map((file) => (
               <div
                 key={`${file.previousPath ?? ''}:${file.path}`}
-                className="m-4 rounded-lg border border-border bg-surface p-3 text-sm text-muted"
+                className="m-4 flex-none rounded-lg border border-border bg-surface p-3 text-sm text-muted"
               >
                 Binary file changed: <code className="text-foreground">{file.path}</code>. Contents
                 cannot be displayed.
               </div>
             ))}
+          {/*
+            Pierre CodeView virtualizes off scroll events on its own root.
+            The wrapper must be height-bounded with overflow hidden; the CodeView
+            itself is the scroll container (overflow-auto + h-full).
+          */}
           <CodeView
             ref={codeViewRef}
             items={items}
-            className="min-h-full bg-background text-sm"
+            className="min-h-0 w-full flex-1 overflow-y-auto bg-background text-sm"
             options={{
               theme: { light: 'github-light', dark: 'pierre-dark' },
               themeType: resolvedTheme,
               diffStyle,
+              overflow: 'scroll',
               collapsedContextThreshold: compactContext ? 3 : 100,
             }}
           />
@@ -345,7 +362,7 @@ function RecoveryPanel({
     );
   }
   return (
-    <div className="mx-auto flex h-full w-full max-w-2xl flex-col gap-4 overflow-auto p-6">
+    <div className="mx-auto flex h-full min-h-0 min-w-0 w-full max-w-2xl flex-1 flex-col gap-4 overflow-auto p-6">
       <div>
         <h2 className="text-lg font-semibold">Recover interrupted agent changes</h2>
         <p className="mt-1 text-sm text-muted">
@@ -404,7 +421,7 @@ function statusLabel(status: WorkingTreeDiff['files'][number]['status']): string
 
 function DiffEmptyState({ title, action }: { title: string; action?: ReactNode }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
       <p className="max-w-md text-sm text-muted">{title}</p>
       {action}
     </div>

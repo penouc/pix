@@ -1,70 +1,90 @@
-# Pi Agent Desktop
+# PiX
 
-本地桌面 Coding Agent：以 Pi Agent SDK 为 Runtime，在本地 Git 项目中完成「理解任务 → 改代码 → 验证 → Diff 审查 → 接受/撤销」。
+A local desktop coding agent powered by the [Pi Agent SDK](https://github.com/earendil-works/pi). Open a Git project on your machine and complete the loop: understand the task → edit code → verify → review the diff → keep or revert.
 
-> 产品与工程总纲见 [`Pi_Agent_Desktop_开发总计划.md`](./Pi_Agent_Desktop_开发总计划.md)。  
-> **执行 todos 与进度台账（以验收门槛为准）：** [`docs/TODOS.md`](./docs/TODOS.md)
+> Product & engineering plan: [`docs/product-and-engineering-plan.md`](./docs/product-and-engineering-plan.md)  
+> Execution todos & progress: [`docs/TODOS.md`](./docs/TODOS.md)
 
-## 当前进度
+## Status
 
-以 [`docs/TODOS.md`](./docs/TODOS.md) 为准。摘要：
+See [`docs/TODOS.md`](./docs/TODOS.md) for the authoritative checklist. Summary:
 
-- **M0**：未完全关闭（缺完整评测集与文档集）
-- **M1（当前焦点）**：Electron 壳 + Zod IPC + Fake 演示已有；**真实 Pi SDK / packaged 验证未做**，阶段未通过
+- **M0**: Not fully closed (eval suite and documentation set still incomplete)
+- **M1+**: Electron shell, Zod IPC, and real Pi SDK runtime are in place; keep validating packaged builds and the full acceptance path
 
-## 仓库结构
+## Repository layout
 
 ```text
 apps/desktop/          Electron Main / Preload / React Renderer
 packages/protocol/     Typed IPC + Zod schemas + DesktopAgentEvent
-packages/agent-domain/ AgentRuntime 边界、状态机、领域错误
-packages/agent-pi/     Pi 适配层（当前为 FakeAgentRuntime）
-docs/                  架构与契约文档
-fixtures/              固定评测用测试仓库
+packages/agent-domain/ AgentRuntime boundary, state machine, domain errors
+packages/agent-pi/     Pi adapter (PiAgentRuntime + FakeAgentRuntime)
+docs/                  Architecture, contracts, and product docs
+fixtures/              Fixed eval / test repositories
 ```
 
-## 开发
+## Development
 
 ```bash
 pnpm install
 pnpm --filter @pi-desktop/protocol build
 pnpm --filter @pi-desktop/agent-domain build
 pnpm --filter @pi-desktop/agent-pi build
+pnpm --filter @pi-desktop/database build
+pnpm --filter @pi-desktop/security build
 pnpm dev
 ```
 
-应用启动后：
+After the app launches:
 
-1. 在左侧输入一个本地目录路径并 **Open project**
-2. **New session**
-3. 发送消息，观察中间栏流式输出与 Tool 卡片（Fake runtime）
-4. 可用 **Stop** 取消进行中的 run
+1. Open a local project folder from the sidebar
+2. Create a **New task**
+3. Send a message and watch streaming replies plus tool cards
+4. Use **Stop** to cancel an in-flight run
 
-## 脚本
+## Scripts
 
-| 命令 | 说明 |
-|------|------|
-| `pnpm dev` | 启动 Electron + Vite 开发模式（默认真实 Pi） |
-| `PI_DESKTOP_FAKE_RUNTIME=1 pnpm dev` | 离线 Fake Runtime |
-| `pnpm typecheck` | 全仓类型检查 |
+| Command | Description |
+|---------|-------------|
+| `pnpm dev` | Electron + Vite in development (real Pi by default) |
+| `PI_DESKTOP_FAKE_RUNTIME=1 pnpm dev` | Offline Fake Runtime |
+| `pnpm typecheck` | Workspace typecheck |
 | `pnpm test` | Vitest |
-| `pnpm test:fixture` | 固定评测 fixture 基线测试 |
+| `pnpm test:fixture` | Fixed eval fixture baseline tests |
 | `pnpm lint` | ESLint |
-| `pnpm build` | 构建 packages + desktop |
-| `pnpm package:dir` | macOS arm64 目录安装包（electron-builder） |
-| `pnpm smoke:packaged` | 检查已打包 app 的 asar / Pi 依赖 |
-| `pnpm smoke:runtime` | Headless Fake Runtime 流式冒烟 |
-| `pnpm smoke:runtime:pi` | Headless 真实 Pi createSession（需已 build packages） |
+| `pnpm build` | Build packages + desktop |
+| `pnpm package:dir` | macOS arm64 directory package (electron-builder) |
+| `pnpm smoke:packaged` | Check packaged app asar / Pi deps |
+| `pnpm smoke:runtime` | Headless Fake Runtime streaming smoke |
+| `pnpm smoke:runtime:pi` | Headless real Pi `createSession` (packages must be built) |
 
-真模型调用：优先使用 **OpenCode Go**（自动读取 `~/.local/share/opencode/auth.json`，也可设置 `OPENCODE_API_KEY`）。右侧 Auth 行显示已就绪 provider。
+For live model calls, prefer **OpenCode Go** (reads `~/.local/share/opencode/auth.json`, or set `OPENCODE_API_KEY`). The Auth line in the UI shows which providers are ready.
 
 ```bash
-pnpm eval:fixture   # headless 真改码验收（默认 opencode-go/kimi-k2.7-code）
+pnpm eval:fixture   # headless real-edit acceptance (default opencode-go/kimi-k2.7-code)
 ```
 
-## 架构约束（摘要）
+## Architecture constraints (summary)
 
-- Renderer **无** Node Integration；只经 Preload 白名单 API 通信
-- 所有 IPC 输入/输出/事件经 Zod 校验（`@pi-desktop/protocol`）
-- Pi SDK 只允许出现在 `packages/agent-pi`；UI 不导入 Pi 类型
-- 权限判定在 Main Process；Checkpoint 快照才是可靠恢复来源
+- Renderer has **no** Node integration; communication goes through a Preload whitelist only
+- All IPC inputs, outputs, and events are validated with Zod (`@pi-desktop/protocol`)
+- Pi SDK types may only appear in `packages/agent-pi`; the UI never imports Pi types
+- Permission decisions run in the Main process; checkpoint snapshots are the source of truth for recovery
+
+## Product docs
+
+| Doc | Description |
+|-----|-------------|
+| [`docs/product-and-engineering-plan.md`](./docs/product-and-engineering-plan.md) | Product & engineering master plan |
+| [`docs/product-scope.md`](./docs/product-scope.md) | MVP in / out of scope freeze |
+| [`docs/architecture.md`](./docs/architecture.md) | Process boundaries and package graph |
+| [`docs/TODOS.md`](./docs/TODOS.md) | Milestone todos and acceptance gates |
+| [`docs/decisions/`](./docs/decisions/) | Architecture decision records |
+
+## Acknowledgments
+
+Huge thanks to **[Pi](https://github.com/earendil-works/pi)** — the open-source coding agent that powers this desktop app. PiX stands on the shoulders of the Pi Agent team and community.
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=penouc/pix&type=Date)](https://www.star-history.com/#penouc/pix&Date)

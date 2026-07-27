@@ -41,6 +41,7 @@ export function App() {
   const [blankRun, setBlankRun] = useState(true);
   const [projectError, setProjectError] = useState<string | null>(null);
   const [recoveryRunId, setRecoveryRunId] = useState<string | undefined>();
+  const [diffFocusPath, setDiffFocusPath] = useState<string | undefined>();
   const [panelOpen, setPanelOpen] = useState(true);
   const [dismissedApproval, setDismissedApproval] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -267,7 +268,7 @@ export function App() {
       { id: 'terminal', title: 'Open terminal', run: () => setView('terminal') },
       { id: 'automations', title: 'Open automations', run: () => setView('automations') },
       { id: 'skills', title: 'Open skills', run: () => setView('skills') },
-      { id: 'review', title: 'Review changes', run: () => setView('diff') },
+      { id: 'review', title: 'Review changes', run: () => { setDiffFocusPath(undefined); setView('diff'); } },
       { id: 'open-project', title: 'Open project folder', hint: '⌘O', run: () => void browseForProject() },
       { id: 'settings', title: 'Open settings', hint: '⌘,', run: () => setView('settings') },
     ],
@@ -351,7 +352,7 @@ export function App() {
         </div>
       ) : null}
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1">
         {view === 'settings' ? (
           <SettingsView onClose={() => setView('run')} />
         ) : view === 'terminal' ? (
@@ -375,6 +376,7 @@ export function App() {
           <DiffPanel
             onContinue={() => setView('run')}
             onBack={() => setView('run')}
+            focusPath={diffFocusPath}
             onRecoveryResolved={() => setView('run')}
           />
         ) : (
@@ -417,7 +419,10 @@ export function App() {
       main={main}
       right={
         <RightDock
-          onOpenFullDiff={() => setView('diff')}
+          onOpenFullDiff={(path) => {
+            setDiffFocusPath(path);
+            setView('diff');
+          }}
           onContinue={() => setView('run')}
           onInsertPath={(path) =>
             // A trailing space so you can keep typing after the reference.

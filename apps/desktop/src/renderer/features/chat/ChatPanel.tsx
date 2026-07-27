@@ -172,11 +172,11 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
       invoke<IndexSearchResult>({
         method: 'index.search',
         // Scoped to this project: a path from another one would not resolve here.
-        params: { query: fileQuery || '', projectId: project!.id, limit: 6 },
+        params: { query: fileQuery ?? '', projectId: project!.id, limit: 6 },
       }),
   });
   const fileMatches = fileQuery === undefined ? [] : (fileHits.data?.paths ?? []);
-  const fileMenuOpen = fileQuery !== undefined && fileMatches.length > 0;
+  const fileMenuOpen = fileQuery !== undefined && Boolean(project?.id);
 
   function applyFile(path: string) {
     // Replaces the partial `@…` token, leaving a trailing space to keep typing.
@@ -555,17 +555,27 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
       <div className="flex-none px-5 pt-2.5 pb-4">
         {fileMenuOpen ? (
           <div className="mx-auto mb-1.5 max-w-[700px] overflow-hidden rounded-[18px] border border-border bg-background shadow-[var(--shadow-md)]">
-            {fileMatches.map((hit) => (
-              <button
-                key={hit.path}
-                type="button"
-                onClick={() => applyFile(hit.path)}
-                className="flex w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-3.5 py-2 text-left hover:bg-foreground/[0.06]"
-              >
-                <FileText className="h-3.5 w-3.5 flex-none text-muted" />
-                <span className="min-w-0 flex-1 truncate font-mono text-[12px]">{hit.path}</span>
-              </button>
-            ))}
+            {fileHits.isLoading ? (
+              <p className="px-3.5 py-2 text-[12px] text-muted">Searching files…</p>
+            ) : fileMatches.length ? (
+              fileMatches.map((hit) => (
+                <button
+                  key={hit.path}
+                  type="button"
+                  onClick={() => applyFile(hit.path)}
+                  className="flex w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-3.5 py-2 text-left hover:bg-foreground/[0.06]"
+                >
+                  <FileText className="h-3.5 w-3.5 flex-none text-muted" />
+                  <span className="min-w-0 flex-1 truncate font-mono text-[12px]">{hit.path}</span>
+                </button>
+              ))
+            ) : (
+              <p className="px-3.5 py-2 text-[12px] text-muted">
+                {project?.trusted
+                  ? 'No files indexed yet — open Files and tap Refresh, or keep typing to filter.'
+                  : 'Trust this project to search and reference files.'}
+              </p>
+            )}
           </div>
         ) : null}
         {skillMenuOpen ? (
@@ -619,7 +629,9 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
               // With a suggestion list open, Enter takes the first suggestion
               // rather than sending a half-typed `$re` or `@src/`.
               if (fileMenuOpen) {
-                applyFile(fileMatches[0]!.path);
+                if (fileMatches.length) {
+                  applyFile(fileMatches[0]!.path);
+                }
                 return;
               }
               if (skillMenuOpen && skillMatches.length) {

@@ -36,9 +36,9 @@ mac:
   hardenedRuntime: false
   gatekeeperAssess: false
   # Uninstall: remove the .app bundle from /Applications, then the user data.
-  # NB the data directory is keyed off package.json `name`, not productName, so
-  # it is ~/Library/Application Support/@pi-desktop/desktop — not "Pi Agent
-  # Desktop". `node scripts/verify-packaged.mjs` prints the real paths.
+  # userData is pinned in Main to Application Support/@pi-desktop/desktop so
+  # Dock productName ("PiX") cannot orphan existing projects. Packaged builds
+  # share that path; `node scripts/verify-packaged.mjs` prints the real paths.
 
 dmg:
   title: PiX

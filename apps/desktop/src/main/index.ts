@@ -29,6 +29,15 @@ import {
 
 import { describeProtectedPaths } from '@pi-desktop/security';
 
+// Dock / taskbar should say PiX, but userData must stay on the historical folder.
+// `productName` / `app.setName` alone would move Application Support to "PiX" and
+// orphan projects, sessions, and settings under `@pi-desktop/desktop`.
+app.setPath('userData', path.join(app.getPath('appData'), '@pi-desktop', 'desktop'));
+app.setName('PiX');
+if (process.platform === 'win32') {
+  app.setAppUserModelId('dev.pi.agent.desktop');
+}
+
 import { getWorkingTreeDiff } from './git/git-diff-service.js';
 import {
   captureCheckpointBaseline,
