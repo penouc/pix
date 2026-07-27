@@ -23,7 +23,7 @@ import type {
   ProviderLoginQuestion,
 } from '@pi-desktop/agent-domain';
 import { DomainError, agentError } from '@pi-desktop/agent-domain';
-import type { ApprovalDecision, DesktopAgentEvent, ModelRef, RunRef } from '@pi-desktop/protocol';
+import type { ApprovalDecision, DesktopAgentEvent, ModelRef, RunRef, ThinkingLevel, ThinkingLevelState } from '@pi-desktop/protocol';
 import { PermissionPipeline, type ApprovalMode, type RememberedRule } from '@pi-desktop/security';
 
 import {
@@ -423,6 +423,23 @@ export class PiAgentRuntime implements AgentRuntime {
     const record = this.requireSession(sessionId);
     await this.applyModel(record.pi, model);
     record.desktop.updatedAt = Date.now();
+  }
+
+  async setThinkingLevel(sessionId: string, level: ThinkingLevel): Promise<void> {
+    this.assertAlive();
+    const record = this.requireSession(sessionId);
+    record.pi.setThinkingLevel(level);
+    record.desktop.updatedAt = Date.now();
+  }
+
+  async getThinkingLevel(sessionId: string): Promise<ThinkingLevelState> {
+    this.assertAlive();
+    const record = this.requireSession(sessionId);
+    return {
+      level: record.pi.thinkingLevel,
+      available: record.pi.getAvailableThinkingLevels(),
+      supportsThinking: record.pi.supportsThinking(),
+    };
   }
 
   async setApprovalMode(mode: ApprovalMode, sessionId?: string): Promise<void> {

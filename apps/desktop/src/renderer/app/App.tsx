@@ -47,6 +47,8 @@ export function App() {
   const [composerInsert, setComposerInsert] = useState<{ text: string; token: number } | null>(
     null,
   );
+  /** Session to restore when leaving an unstarted new task — back is not "new task again". */
+  const [priorSession, setPriorSession] = useState<SessionSummary | null>(null);
 
   const queryClient = useQueryClient();
   const setProject = useWorkspaceStore((s) => s.setProject);
@@ -85,8 +87,10 @@ export function App() {
   });
 
   const newTask = useCallback(async () => {
+    const current = useWorkspaceStore.getState().session;
     const created = await createTask();
     if (created) {
+      if (current) setPriorSession(current);
       setBlankRun(true);
       setView('run');
     }
@@ -94,6 +98,7 @@ export function App() {
 
   const selectSession = useCallback(
     (session: SessionSummary) => {
+      setPriorSession(null);
       setSession(session);
       resetSessionView();
       setScope(session.projectId, session.id);
@@ -119,6 +124,20 @@ export function App() {
     },
     [setSession, resetSessionView, setScope, loadHistory],
   );
+
+  const goBackFromRun = useCallback(() => {
+    if (priorSession) {
+      const back = priorSession;
+      setPriorSession(null);
+      selectSession(back);
+      return;
+    }
+    setSession(null);
+    resetSessionView();
+    const activeProject = useWorkspaceStore.getState().project;
+    if (activeProject) setScope(activeProject.id, null);
+    setBlankRun(true);
+  }, [priorSession, selectSession, resetSessionView, setSession, setScope]);
 
   /**
    * Open a session we only know the id of (an automation just started it).
@@ -174,6 +193,7 @@ export function App() {
       setProject(opened);
       resetSessionView();
       setScope(opened.id, null);
+      setPriorSession(null);
       await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
       setBlankRun(true);
       setView('run');
@@ -194,6 +214,7 @@ export function App() {
       setProject(opened);
       resetSessionView();
       setScope(opened.id, null);
+      setPriorSession(null);
       await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
       setBlankRun(true);
       setView('run');
@@ -322,7 +343,7 @@ export function App() {
           />
         ) : (
           <ChatPanel
-            onBack={() => void newTask()}
+            onBack={goBackFromRun}
             panelOpen={panelOpen}
             onTogglePanel={() => setPanelOpen((open) => !open)}
             insert={composerInsert}
@@ -340,7 +361,8 @@ export function App() {
           activeNav={view}
           isBlankRun={blankRun}
           onOpenSettings={() => setView(view === 'settings' ? 'run' : 'settings')}
-          onNewTask={() => {
+          onNewTask={(previous) => {
+            if (previous) setPriorSession(previous);
             setBlankRun(true);
             setView('run');
           }}
@@ -349,6 +371,7 @@ export function App() {
           onBrowseForProject={() => void browseForProject()}
           externalError={projectError}
           onProjectSwitched={() => {
+            setPriorSession(null);
             setBlankRun(true);
             setView('run');
           }}

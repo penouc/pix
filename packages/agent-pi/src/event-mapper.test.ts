@@ -48,6 +48,38 @@ describe('mapPiSessionEvent', () => {
     });
   });
 
+  it('maps thinking_delta to thinking.delta', () => {
+    const ctx = makeCtx();
+    const events = mapPiSessionEvent(
+      {
+        type: 'message_update',
+        assistantMessageEvent: { type: 'thinking_delta', delta: 'Planning the fix' },
+      },
+      ctx,
+    );
+    expect(events[0]).toMatchObject({
+      type: 'thinking.delta',
+      delta: 'Planning the fix',
+      messageId: 'msg-1',
+    });
+  });
+
+  it('maps thinking_end to thinking.completed', () => {
+    const ctx = makeCtx();
+    const events = mapPiSessionEvent(
+      {
+        type: 'message_update',
+        assistantMessageEvent: { type: 'thinking_end', content: 'Done planning.' },
+      },
+      ctx,
+    );
+    expect(events[0]).toMatchObject({
+      type: 'thinking.completed',
+      content: 'Done planning.',
+      messageId: 'msg-1',
+    });
+  });
+
   it('maps tool_execution_start with risk', () => {
     const ctx = makeCtx();
     const events = mapPiSessionEvent(

@@ -16,7 +16,7 @@ export function TitleBar({ right }: { right?: ReactNode }) {
     <div className="flex h-11 flex-none items-center gap-3 bg-surface px-4" style={drag}>
       <div className="w-[78px] flex-none" />
       <div className="flex-1" />
-      <div className="text-[12px] tracking-[0.02em] text-muted">Pi Agent Desktop</div>
+      <div className="text-[12px] tracking-[0.02em] text-muted">PiX</div>
       <div className="flex flex-1 justify-end gap-2" style={noDrag}>
         {right}
       </div>

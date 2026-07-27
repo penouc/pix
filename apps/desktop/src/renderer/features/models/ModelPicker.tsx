@@ -2,7 +2,9 @@ import { ChevronDown, ChevronLeft, ChevronRight, Search, Star } from 'lucide-rea
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
-import type { ModelInfo } from '@pi-desktop/protocol';
+import type { ModelInfo, Settings } from '@pi-desktop/protocol';
+
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { modelKey } from '@/features/models/model-key';
 import {
@@ -36,6 +38,11 @@ export function ModelPicker() {
   const selectedModel = useWorkspaceStore((s) => s.selectedModel);
   const setSelectedModel = useWorkspaceStore((s) => s.setSelectedModel);
   const { models, favorites, toggleFavorite, isLoading } = useOfferedModels();
+  const queryClient = useQueryClient();
+  const saved = useQuery({
+    queryKey: ['settings.get'],
+    queryFn: () => invoke<Settings>({ method: 'settings.get' }),
+  });
 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -45,12 +52,19 @@ export function ModelPicker() {
 
   const active = models.find((model) => modelKey(model) === selectedModel);
 
-  // Default to something usable, preferring a favourite.
+  // Last-used model (settings default) → favourite → first runnable model.
   useEffect(() => {
-    if (!models.length || selectedModel) return;
-    const preferred = models.find((model) => favorites.has(modelKey(model))) ?? models[0]!;
+    if (!models.length || selectedModel || saved.isLoading) return;
+    const savedKey = saved.data?.defaultModel
+      ? `${saved.data.defaultModel.providerId}/${saved.data.defaultModel.modelId}`
+      : '';
+    const fromSaved = savedKey ? models.find((model) => modelKey(model) === savedKey) : undefined;
+    const preferred =
+      fromSaved ??
+      models.find((model) => favorites.has(modelKey(model))) ??
+      models[0]!;
     setSelectedModel(modelKey(preferred));
-  }, [models, favorites, selectedModel, setSelectedModel]);
+  }, [models, favorites, selectedModel, saved.data?.defaultModel, saved.isLoading, setSelectedModel]);
 
   const menuRef = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
@@ -76,14 +90,20 @@ export function ModelPicker() {
     setOpen(false);
     setQuery('');
     setProvider(null);
+    const ref = { providerId: model.providerId, modelId: model.modelId };
+    // Remember globally so the next launch and new tasks reopen on this model.
+    void invoke({
+      method: 'settings.setDefaultModel',
+      params: { model: ref },
+    })
+      .then(() => void queryClient.invalidateQueries({ queryKey: ['settings.get'] }))
+      .catch(console.error);
     if (!session) return;
     void invoke({
       method: 'agent.setModel',
-      params: {
-        sessionId: session.id,
-        model: { providerId: model.providerId, modelId: model.modelId },
-      },
+      params: { sessionId: session.id, model: ref },
     }).catch(console.error);
+    void queryClient.invalidateQueries({ queryKey: ['agent.getThinkingLevel', session.id] });
   }
 
   const label = active

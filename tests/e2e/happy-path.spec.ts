@@ -63,7 +63,7 @@ test('IPC app.getInfo returns runtime info', async () => {
     piSdk: string;
     runtimeMode: string;
   };
-  expect(info.name).toBe('Pi Agent Desktop');
+  expect(info.name).toBe('PiX');
   expect(info.version).toMatch(/\S/);
   expect(info.platform).toBe(process.platform);
   expect(info.electron).toMatch(/\S/);

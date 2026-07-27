@@ -46,8 +46,18 @@ export function mapPiSessionEvent(
 
     case 'message_update': {
       const assistantEvent = event['assistantMessageEvent'] as
-        | { type?: string; delta?: string }
+        | { type?: string; delta?: string; content?: string }
         | undefined;
+      if (assistantEvent?.type === 'thinking_delta' && typeof assistantEvent.delta === 'string') {
+        return [
+          {
+            type: 'thinking.delta',
+            ...base(),
+            messageId: ctx.ensureMessageId(),
+            delta: assistantEvent.delta,
+          },
+        ];
+      }
       if (assistantEvent?.type === 'text_delta' && typeof assistantEvent.delta === 'string') {
         return [
           {
@@ -56,6 +66,16 @@ export function mapPiSessionEvent(
             messageId: ctx.ensureMessageId(),
             role: 'assistant',
             delta: assistantEvent.delta,
+          },
+        ];
+      }
+      if (assistantEvent?.type === 'thinking_end' && typeof assistantEvent.content === 'string') {
+        return [
+          {
+            type: 'thinking.completed',
+            ...base(),
+            messageId: ctx.ensureMessageId(),
+            content: assistantEvent.content,
           },
         ];
       }

@@ -71,6 +71,20 @@ export const DesktopAgentEventSchema = z.discriminatedUnion('type', [
     .merge(EventScopeSchema),
   z
     .object({
+      type: z.literal('thinking.delta'),
+      messageId: z.string(),
+      delta: z.string(),
+    })
+    .merge(EventScopeSchema),
+  z
+    .object({
+      type: z.literal('thinking.completed'),
+      messageId: z.string(),
+      content: z.string(),
+    })
+    .merge(EventScopeSchema),
+  z
+    .object({
       type: z.literal('tool.requested'),
       toolCallId: z.string(),
       toolName: z.string(),

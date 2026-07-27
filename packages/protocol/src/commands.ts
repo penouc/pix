@@ -290,12 +290,37 @@ export const SetUiSettingInputSchema = z.object({
 export const ApprovalModeSchema = z.enum(['ask', 'auto-reads', 'read-only']);
 export type ApprovalMode = z.infer<typeof ApprovalModeSchema>;
 
+/** Pi reasoning depth — off through max. Only meaningful on reasoning-capable models. */
+export const ThinkingLevelSchema = z.enum([
+  'off',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+]);
+export type ThinkingLevel = z.infer<typeof ThinkingLevelSchema>;
+
+export const ThinkingLevelStateSchema = z.object({
+  level: ThinkingLevelSchema,
+  available: z.array(ThinkingLevelSchema),
+  supportsThinking: z.boolean(),
+});
+export type ThinkingLevelState = z.infer<typeof ThinkingLevelStateSchema>;
+
 export const SetApprovalModeInputSchema = z.object({
   mode: ApprovalModeSchema,
   /** Omit to change the default applied to new sessions. */
   sessionId: z.string().min(1).optional(),
 });
 export type SetApprovalModeInput = z.infer<typeof SetApprovalModeInputSchema>;
+
+export const SetThinkingLevelInputSchema = z.object({
+  level: ThinkingLevelSchema,
+  sessionId: z.string().min(1).optional(),
+});
+export type SetThinkingLevelInput = z.infer<typeof SetThinkingLevelInputSchema>;
 
 export const ClearRememberedInputSchema = z.object({
   scope: z.enum(['session', 'project']).optional(),
@@ -409,6 +434,11 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('agent.setApprovalMode'), params: SetApprovalModeInputSchema }),
   z.object({
     method: z.literal('agent.getApprovalMode'),
+    params: z.object({ sessionId: z.string().min(1).optional() }).optional(),
+  }),
+  z.object({ method: z.literal('agent.setThinkingLevel'), params: SetThinkingLevelInputSchema }),
+  z.object({
+    method: z.literal('agent.getThinkingLevel'),
     params: z.object({ sessionId: z.string().min(1).optional() }).optional(),
   }),
   z.object({ method: z.literal('permissions.listRemembered'), params: z.object({}).optional() }),

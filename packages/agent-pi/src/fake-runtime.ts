@@ -8,11 +8,22 @@ import type {
   CreateSessionOptions,
 } from '@pi-desktop/agent-domain';
 import { DomainError, agentError } from '@pi-desktop/agent-domain';
-import type { ApprovalDecision, DesktopAgentEvent, ModelRef, RunRef } from '@pi-desktop/protocol';
+import type { ApprovalDecision, DesktopAgentEvent, ModelRef, RunRef, ThinkingLevel, ThinkingLevelState } from '@pi-desktop/protocol';
+
+const ALL_THINKING_LEVELS: ThinkingLevel[] = [
+  'off',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+];
 
 interface SessionRecord extends AgentSession {
   projectPath: string;
   model?: ModelRef;
+  thinkingLevel: ThinkingLevel;
 }
 
 interface ActiveRun {
@@ -48,6 +59,7 @@ export class FakeAgentRuntime implements AgentRuntime {
       createdAt: options.createdAt ?? now,
       updatedAt: options.updatedAt ?? now,
       model: options.model,
+      thinkingLevel: 'medium',
     };
     this.sessions.set(session.id, session);
     return this.toPublic(session);
@@ -125,6 +137,29 @@ export class FakeAgentRuntime implements AgentRuntime {
     }
     session.model = model;
     session.updatedAt = Date.now();
+  }
+
+  async setThinkingLevel(sessionId: string, level: ThinkingLevel): Promise<void> {
+    this.assertAlive();
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new DomainError(agentError('SESSION_NOT_FOUND', `Session ${sessionId} not found`));
+    }
+    session.thinkingLevel = level;
+    session.updatedAt = Date.now();
+  }
+
+  async getThinkingLevel(sessionId: string): Promise<ThinkingLevelState> {
+    this.assertAlive();
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new DomainError(agentError('SESSION_NOT_FOUND', `Session ${sessionId} not found`));
+    }
+    return {
+      level: session.thinkingLevel,
+      available: ALL_THINKING_LEVELS,
+      supportsThinking: true,
+    };
   }
 
   private approvalMode: 'ask' | 'auto-reads' | 'read-only' = 'auto-reads';

@@ -21,6 +21,13 @@ export interface ToolCallCard {
   order: number;
 }
 
+export interface ThinkingCard {
+  id: string;
+  content: string;
+  streaming: boolean;
+  order: number;
+}
+
 export interface RunUsage {
   inputTokens?: number;
   outputTokens?: number;
@@ -54,6 +61,7 @@ interface AgentStreamState {
     | 'cancelled';
   messages: ChatMessage[];
   tools: ToolCallCard[];
+  thinkings: ThinkingCard[];
   usage: RunUsage | null;
   model: { providerId: string; modelId: string } | null;
   startedAt: number | null;
@@ -106,12 +114,13 @@ const nextOrder = () => (timelineSeq += 1);
 
 /** Pending message.delta chunks coalesced per animation frame (plan §14.1). */
 const pendingDeltas = new Map<string, { role: ChatMessage['role']; chunks: string[] }>();
+const pendingThinkingDeltas = new Map<string, string[]>();
 let deltaFlushHandle: number | null = null;
 let lastSequenceByRunBuffer: Record<string, number> = {};
 
 function scheduleDeltaFlush(
   get: () => AgentStreamState,
-  set: (partial: Partial<AgentStreamState>) => void,
+  set: (partial: Partial<AgentStreamState> | ((state: AgentStreamState) => Partial<AgentStreamState>)) => void,
 ) {
   if (deltaFlushHandle != null) return;
   const raf =
@@ -121,7 +130,7 @@ function scheduleDeltaFlush(
 
   deltaFlushHandle = raf(() => {
     deltaFlushHandle = null;
-    if (pendingDeltas.size === 0) return;
+    if (pendingDeltas.size === 0 && pendingThinkingDeltas.size === 0) return;
 
     const state = get();
     let messages = state.messages;
@@ -150,8 +159,34 @@ function scheduleDeltaFlush(
       }
     }
     pendingDeltas.clear();
+
+    let thinkings = state.thinkings;
+    for (const [thinkingId, chunks] of pendingThinkingDeltas) {
+      const delta = chunks.join('');
+      chunks.length = 0;
+      if (!delta) continue;
+      const existing = thinkings.find((t) => t.id === thinkingId);
+      if (existing) {
+        thinkings = thinkings.map((t) =>
+          t.id === thinkingId ? { ...t, content: t.content + delta, streaming: true } : t,
+        );
+      } else {
+        thinkings = [
+          ...thinkings,
+          {
+            id: thinkingId,
+            content: delta,
+            streaming: true,
+            order: nextOrder(),
+          },
+        ];
+      }
+    }
+    pendingThinkingDeltas.clear();
+
     set({
       messages,
+      thinkings,
       lastSequenceByRun: {
         ...state.lastSequenceByRun,
         ...lastSequenceByRunBuffer,
@@ -163,6 +198,7 @@ function scheduleDeltaFlush(
 
 function clearDeltaBatch() {
   pendingDeltas.clear();
+  pendingThinkingDeltas.clear();
   lastSequenceByRunBuffer = {};
   if (deltaFlushHandle != null && typeof cancelAnimationFrame === 'function') {
     cancelAnimationFrame(deltaFlushHandle);
@@ -177,6 +213,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
   status: 'idle',
   messages: [],
   tools: [],
+  thinkings: [],
   usage: null,
   model: null,
   startedAt: null,
@@ -216,6 +253,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
         order: index,
       })),
       tools: [],
+      thinkings: [],
       status: 'idle',
       activeRunId: null,
       error: null,
@@ -230,6 +268,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       status: 'idle',
       messages: [],
       tools: [],
+      thinkings: [],
       usage: null,
       model: null,
       startedAt: null,
@@ -286,6 +325,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
           activeRunId: event.runId,
           lastSequenceByRun,
           messages: get().messages.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
+          thinkings: get().thinkings.map((t) => (t.streaming ? { ...t, streaming: false } : t)),
         });
         break;
       case 'run.failed':
@@ -305,6 +345,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
           activeRunId: event.runId,
           lastSequenceByRun,
           messages: get().messages.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
+          thinkings: get().thinkings.map((t) => (t.streaming ? { ...t, streaming: false } : t)),
         });
         break;
       case 'message.delta': {
@@ -353,6 +394,46 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
               },
             ],
           });
+        }
+        break;
+      }
+      case 'thinking.delta': {
+        const pending = pendingThinkingDeltas.get(event.messageId) ?? [];
+        pending.push(event.delta);
+        pendingThinkingDeltas.set(event.messageId, pending);
+        lastSequenceByRunBuffer[event.runId] = event.sequence;
+        set({ lastSequenceByRun });
+        scheduleDeltaFlush(get, set);
+        break;
+      }
+      case 'thinking.completed': {
+        const buffered = pendingThinkingDeltas.get(event.messageId)?.join('') ?? '';
+        pendingThinkingDeltas.delete(event.messageId);
+        const current = get().thinkings.find((t) => t.id === event.messageId);
+        const content = event.content || (current ? current.content + buffered : buffered);
+        const existing = get().thinkings.find((t) => t.id === event.messageId);
+        if (existing) {
+          set({
+            lastSequenceByRun,
+            thinkings: get().thinkings.map((t) =>
+              t.id === event.messageId ? { ...t, content, streaming: false } : t,
+            ),
+          });
+        } else if (content) {
+          set({
+            lastSequenceByRun,
+            thinkings: [
+              ...get().thinkings,
+              {
+                id: event.messageId,
+                content,
+                streaming: false,
+                order: nextOrder(),
+              },
+            ],
+          });
+        } else {
+          set({ lastSequenceByRun });
         }
         break;
       }

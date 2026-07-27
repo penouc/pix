@@ -1,4 +1,11 @@
-import type { ApprovalDecision, DesktopAgentEvent, ModelRef, RunRef } from '@pi-desktop/protocol';
+import type {
+  ApprovalDecision,
+  DesktopAgentEvent,
+  ModelRef,
+  RunRef,
+  ThinkingLevel,
+  ThinkingLevelState,
+} from '@pi-desktop/protocol';
 
 export interface CreateSessionOptions {
   /**
@@ -123,6 +130,8 @@ export interface AgentRuntime {
   followUp(sessionId: string, input: AgentInput): Promise<void>;
   abort(runId: string): Promise<void>;
   setModel(sessionId: string, model: ModelRef): Promise<void>;
+  setThinkingLevel?(sessionId: string, level: ThinkingLevel): Promise<void>;
+  getThinkingLevel?(sessionId: string): Promise<ThinkingLevelState>;
   configureProvider?(providerId: string, apiKey: string): Promise<void>;
   /**
    * Approval policy. Omitting `sessionId` sets the default for new sessions.

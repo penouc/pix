@@ -30,6 +30,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ApprovalModePicker } from '@/features/chat/ApprovalModePicker';
+import { ThinkingLevelPicker } from '@/features/chat/ThinkingLevelPicker';
+import { ThinkingPlaceholderRow, ThinkingStreamRow } from '@/features/chat/ThinkingStream';
 import { Markdown } from '@/features/chat/Markdown';
 import { ModelPicker } from '@/features/models/ModelPicker';
 import { useCreateTask } from '@/features/sessions/use-create-task';
@@ -76,6 +78,7 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
   const { createTask } = useCreateTask();
   const messages = useAgentStreamStore((s) => s.messages);
   const tools = useAgentStreamStore((s) => s.tools);
+  const thinkings = useAgentStreamStore((s) => s.thinkings);
   const status = useAgentStreamStore((s) => s.status);
   const activeRunId = useAgentStreamStore((s) => s.activeRunId);
   const usage = useAgentStreamStore((s) => s.usage);
@@ -94,6 +97,13 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
   const scrollerRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const nearBottomRef = useRef(true);
+  /** IME composition (中文等) — Enter confirms candidates, it must not send. */
+  const composingRef = useRef(false);
+  const prevStatusRef = useRef(status);
+
+  function focusComposer() {
+    requestAnimationFrame(() => composerRef.current?.focus());
+  }
 
   const queryClient = useQueryClient();
   const approvalMode = useQuery({
@@ -132,6 +142,20 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
     setDraft((current) => (current ? `${current}${insert.text}` : insert.text));
     composerRef.current?.focus();
   }, [insert]);
+
+  // When a run finishes, put the caret back in the composer so the next message
+  // does not need a click — the thread just stole focus while streaming.
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = status;
+    const wasRunning =
+      prev === 'running' || prev === 'starting' || prev === 'stopping';
+    const finished =
+      status === 'completed' || status === 'failed' || status === 'cancelled';
+    if (wasRunning && finished && !approval && project) {
+      focusComposer();
+    }
+  }, [status, approval, project]);
 
   /**
    * `@` at the start of a word offers files from the workspace index.
@@ -196,7 +220,7 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
     const el = scrollerRef.current;
     if (!el || !nearBottomRef.current) return;
     el.scrollTop = el.scrollHeight;
-  }, [messages, tools, status, approval]);
+  }, [messages, tools, status, approval, thinkings]);
 
   const running =
     status === 'running' ||
@@ -206,20 +230,27 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
 
   const hasStreamingAssistant = messages.some((m) => m.role === 'assistant' && m.streaming);
   const hasRunningTools = tools.some((t) => t.status === 'running');
+  const hasStreamingThinking = thinkings.some((t) => t.streaming);
   const showThinking =
     (status === 'starting' || status === 'running' || status === 'stopping') &&
+    !hasStreamingThinking &&
     !hasStreamingAssistant &&
     !hasRunningTools &&
     !approval;
 
-  /** Messages and tool calls share an arrival counter, so the thread reads in order. */
+  /** Messages, reasoning, and tool calls share an arrival counter. */
   const timeline = useMemo(
     () =>
       [
         ...messages.map((message) => ({ kind: 'message' as const, order: message.order, message })),
+        ...thinkings.map((thinking) => ({
+          kind: 'thinking' as const,
+          order: thinking.order,
+          thinking,
+        })),
         ...tools.map((tool) => ({ kind: 'tool' as const, order: tool.order, tool })),
       ].sort((a, b) => a.order - b.order),
-    [messages, tools],
+    [messages, thinkings, tools],
   );
 
   async function send() {
@@ -327,7 +358,7 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Run header */}
       <div className="flex flex-none items-center gap-3 border-b border-border px-5 py-3">
-        <Button variant="quiet" size="icon" onClick={onBack} title="Back to tasks">
+        <Button variant="quiet" size="icon" onClick={onBack} title="Back">
           <ChevronLeft className="h-4 w-4" />
         </Button>
         <div className="min-w-0 flex-1">
@@ -384,15 +415,25 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
                   {entry.message.content}
                 </div>
               ) : (
-                // No avatar on either side: in a two-party conversation the
-                // alignment already says who is speaking, and a mark on every
-                // turn is repetition that crowds the text.
                 <AssistantMessage
                   key={entry.message.id}
                   content={entry.message.content}
                   streaming={entry.message.streaming}
                 />
               )
+            ) : entry.kind === 'thinking' ? (
+              <ThinkingStreamRow
+                key={entry.thinking.id}
+                content={entry.thinking.content}
+                streaming={entry.thinking.streaming}
+                expanded={Boolean(expanded[entry.thinking.id])}
+                onToggle={() =>
+                  setExpanded((state) => ({
+                    ...state,
+                    [entry.thinking.id]: !state[entry.thinking.id],
+                  }))
+                }
+              />
             ) : (
               <ToolCard
                 key={entry.tool.id}
@@ -496,7 +537,7 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
             </div>
           ) : null}
 
-          {showThinking ? <ThinkingRow /> : null}
+          {showThinking ? <ThinkingPlaceholderRow /> : null}
 
           {status === 'waiting_for_approval' && !approval ? (
             <div className="text-[12.5px] text-muted">
@@ -557,8 +598,19 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
             disabled={!project || sending}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
+            onCompositionStart={() => {
+              composingRef.current = true;
+            }}
+            onCompositionEnd={() => {
+              composingRef.current = false;
+            }}
             onKeyDown={(event) => {
               if (event.key !== 'Enter') return;
+              // While the IME is open (拼音选字等), Enter confirms the candidate —
+              // not sends. Without this, Chinese input accidentally submits mid-word.
+              if (event.nativeEvent.isComposing || composingRef.current || event.keyCode === 229) {
+                return;
+              }
               // Shift+Enter is the newline. Enter sends, which is what a chat
               // composer is expected to do; ⌘/Ctrl+Enter keeps working for the
               // muscle memory it was built with.
@@ -583,6 +635,7 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
               mode={approvalMode.data?.mode ?? 'auto-reads'}
               onChange={(mode) => setApprovalMode.mutate(mode)}
             />
+            <ThinkingLevelPicker disabled={!project || sending} />
             {branch.data?.branch ? (
               <ContextPill icon={<GitBranch className="h-3 w-3" />}>
                 {branch.data.branch}
@@ -629,23 +682,6 @@ function AssistantMessage({ content, streaming }: { content: string; streaming: 
   return (
     <div className="min-w-0 flex-1">
       <Markdown>{content}</Markdown>
-    </div>
-  );
-}
-
-function ThinkingRow() {
-  return (
-    <div className="flex items-center gap-2 text-[12.5px] text-muted">
-      <span>Thinking</span>
-      <span className="inline-flex gap-1">
-        {[0, 0.18, 0.36].map((delay) => (
-          <span
-            key={delay}
-            className="size-[5px] rounded-full bg-accent"
-            style={{ animation: `pi-blink 1.1s ${delay}s infinite` }}
-          />
-        ))}
-      </span>
     </div>
   );
 }

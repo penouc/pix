@@ -268,7 +268,7 @@ function createWindow(): void {
     height: 920,
     minWidth: 1024,
     minHeight: 680,
-    title: 'Pi Agent Desktop',
+    title: 'PiX',
     // Organic ground (--color-bg) — avoids a flash of a different colour on show.
     backgroundColor: '#ffffff',
     titleBarStyle: 'hiddenInset',
@@ -642,7 +642,7 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       case 'app.getInfo': {
         const auth = await readAuthStatus(agent);
         return okResult({
-          name: 'Pi Agent Desktop',
+          name: 'PiX',
           version: app.getVersion(),
           platform: process.platform,
           electron: process.versions.electron,
@@ -1185,6 +1185,23 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
           (await agent.getApprovalMode?.(cmd.params?.sessionId)) ??
           getProviderSettings().getDefaultApprovalMode();
         return okResult({ mode });
+      }
+      case 'agent.setThinkingLevel': {
+        if (!cmd.params.sessionId) {
+          return errResult('INVALID_INPUT', 'sessionId is required');
+        }
+        await agent.setThinkingLevel?.(cmd.params.sessionId, cmd.params.level);
+        return okResult({ level: cmd.params.level });
+      }
+      case 'agent.getThinkingLevel': {
+        if (!cmd.params?.sessionId) {
+          return errResult('INVALID_INPUT', 'sessionId is required');
+        }
+        const state = await agent.getThinkingLevel?.(cmd.params.sessionId);
+        if (!state) {
+          return errResult('NOT_SUPPORTED', 'Thinking level is not available');
+        }
+        return okResult(state);
       }
       case 'permissions.listRemembered': {
         return okResult((await agent.listRememberedDecisions?.()) ?? []);

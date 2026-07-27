@@ -25,7 +25,7 @@ export type SidebarDestination = 'terminal' | 'automations' | 'skills';
 
 interface ProjectSidebarProps {
   onOpenSettings: () => void;
-  onNewTask: () => void;
+  onNewTask: (previousSession: SessionSummary | null) => void;
   onSelectSession: (session: SessionSummary) => void;
   onOpenSearch: () => void;
   /** Open the OS folder picker directly — no intermediate dialog. */
@@ -151,8 +151,9 @@ export function ProjectSidebar({
     }
     // Passed explicitly: the store selector above is still the old value in this
     // tick when the playground was only just opened.
+    const prior = session;
     const created = await createTask(target);
-    if (created) onNewTask();
+    if (created) onNewTask(prior);
   }
 
   async function deleteSession(item: SessionSummary) {

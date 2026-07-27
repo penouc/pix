@@ -19,6 +19,7 @@ export function useCreateTask() {
   const queryClient = useQueryClient();
   const project = useWorkspaceStore((s) => s.project);
   const selectedModel = useWorkspaceStore((s) => s.selectedModel);
+  const selectedThinkingLevel = useWorkspaceStore((s) => s.selectedThinkingLevel);
   const setProject = useWorkspaceStore((s) => s.setProject);
   const setSession = useWorkspaceStore((s) => s.setSession);
   const resetSessionView = useAgentStreamStore((s) => s.resetSessionView);
@@ -60,6 +61,10 @@ export function useCreateTask() {
           }).catch((err) => console.error('[createTask] setModel failed', err));
         }
       }
+      await invoke({
+        method: 'agent.setThinkingLevel',
+        params: { sessionId: created.id, level: selectedThinkingLevel },
+      }).catch((err) => console.error('[createTask] setThinkingLevel failed', err));
       setSession(created);
       resetSessionView();
       setScope(trusted.id, created.id);
