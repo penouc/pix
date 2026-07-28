@@ -722,7 +722,6 @@ export class PiAgentRuntime implements AgentRuntime {
         {
           maxTokens: 48,
           temperature: 0.2,
-          reasoning: 'off',
           signal: controller.signal,
         },
       );

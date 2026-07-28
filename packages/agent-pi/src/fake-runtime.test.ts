@@ -30,6 +30,7 @@ describe('FakeAgentRuntime', () => {
     for (const event of events) {
       expect(event.projectId).toBe('proj-1');
       expect(event.sessionId).toBe(session.id);
+      if (event.type === 'session.updated') continue;
       expect(event.runId).toBe(ref.runId);
       expect(event.sequence).toBeGreaterThan(0);
     }

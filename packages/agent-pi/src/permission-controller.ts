@@ -1,12 +1,9 @@
-import type { ApprovalDecision, DesktopAgentEvent } from '@pi-desktop/protocol';
+import type { ApprovalDecision, DesktopAgentEvent, EventScope } from '@pi-desktop/protocol';
 import type { PermissionPipeline, PolicyContext } from '@pi-desktop/security';
 
 export interface PermissionScope {
   context: PolicyContext;
-  nextEventScope: () => Pick<
-    DesktopAgentEvent,
-    'projectId' | 'sessionId' | 'runId' | 'sequence' | 'timestamp'
-  >;
+  nextEventScope: () => EventScope;
 }
 
 export interface ToolCallLike {

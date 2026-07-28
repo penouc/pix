@@ -1,8 +1,9 @@
-import { ArrowLeft, ArrowRight, ExternalLink, RotateCw } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ExternalLink, RotateCw, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { invoke } from '@/lib/ipc';
+import { useUiPrefsStore } from '@/stores/ui-prefs-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 
 /** Ports a dev server is most likely to be on, offered as one-click starts. */
@@ -32,7 +33,14 @@ const STORAGE_PREFIX = 'pi-desktop.browser-url.';
  */
 export function BrowserPanel() {
   const project = useWorkspaceStore((s) => s.project);
+  const setPref = useUiPrefsStore((s) => s.set);
   const storageKey = `${STORAGE_PREFIX}${project?.id ?? 'none'}`;
+
+  function closePanel() {
+    // Browser is a dock tab, not a window — "close" means leave the tab.
+    // URL stays in localStorage so reopening restores where you were.
+    setPref('dockTab', 'changes');
+  }
 
   const [url, setUrl] = useState('');
   const [draft, setDraft] = useState('');
@@ -135,6 +143,15 @@ export function BrowserPanel() {
           }}
         >
           <ExternalLink className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6"
+          title="Close browser"
+          onClick={closePanel}
+        >
+          <X className="h-3.5 w-3.5" />
         </Button>
       </div>
 
