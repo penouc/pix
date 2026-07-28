@@ -33,11 +33,9 @@ const TABS: Array<{ id: DockTab; label: string; icon: ReactNode }> = [
  */
 export function RightDock({
   onOpenFullDiff,
-  onContinue,
   onInsertPath,
 }: {
   onOpenFullDiff: (path?: string) => void;
-  onContinue: () => void;
   onInsertPath: (path: string) => void;
 }) {
   const tab = useUiPrefsStore((s) => s.dockTab);
@@ -87,9 +85,7 @@ export function RightDock({
 
         <div className="flex min-h-0 flex-1 flex-col">
           {tab === 'files' ? <FileTree onInsertPath={onInsertPath} /> : null}
-          {tab === 'changes' ? (
-            <ReviewPanel onOpenFullDiff={onOpenFullDiff} onContinue={onContinue} />
-          ) : null}
+          {tab === 'changes' ? <ReviewPanel onOpenFullDiff={onOpenFullDiff} /> : null}
           {tab === 'browser' ? <BrowserPanel /> : null}
           {terminalTouched.current ? (
             <div className={cn('flex min-h-0 flex-1', tab === 'terminal' ? 'flex' : 'hidden')}>

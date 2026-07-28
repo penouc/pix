@@ -415,7 +415,6 @@ export function App() {
             setDiffFocusPath(path);
             setView('diff');
           }}
-          onContinue={() => setView('run')}
           onInsertPath={(path) =>
             // A trailing space so you can keep typing after the reference.
             setComposerInsert({ text: `@${path} `, token: Date.now() })

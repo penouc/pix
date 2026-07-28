@@ -3,7 +3,6 @@ import { useState } from 'react';
 
 import type { WorkingTreeDiff } from '@pi-desktop/protocol';
 
-import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { invoke } from '@/lib/ipc';
 import {
@@ -35,15 +34,12 @@ interface RecoveryResult {
 }
 
 /**
- * The design's 336px review rail: what changed, how the run went, and the
- * Keep / Continue / Revert decisions — all against the real checkpoint store.
+ * The design's 336px review rail: what changed and how the run went.
  */
 export function ReviewPanel({
   onOpenFullDiff,
-  onContinue,
 }: {
   onOpenFullDiff: (path?: string) => void;
-  onContinue: () => void;
 }) {
   const project = useWorkspaceStore((s) => s.project);
   const diffStyle = useUiPrefsStore((s) => s.diffStyle);
@@ -78,25 +74,6 @@ export function ReviewPanel({
 
   const files = diff.data?.files ?? [];
   const snapshotPaths = new Set(checkpoint.data?.paths ?? []);
-
-  async function act(method: 'checkpoint.keep' | 'checkpoint.continue' | 'checkpoint.revertAll') {
-    if (!activeRunId) return;
-    setBusy(true);
-    try {
-      const result = await invoke<RecoveryResult | { outcome: string }>({
-        method,
-        params: { runId: activeRunId },
-      });
-      if ('conflicts' in result) setConflicts(result.conflicts);
-      await checkpoint.refetch();
-      if (method === 'checkpoint.revertAll') await diff.refetch();
-      if (method === 'checkpoint.continue') onContinue();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function revertFile(path: string) {
     if (!activeRunId) return;
@@ -228,35 +205,6 @@ export function ReviewPanel({
             Revert only restores files that still match the agent&apos;s last recorded write. Files
             you changed since are never overwritten.
           </div>
-        </div>
-      </div>
-
-      <div className="flex flex-none flex-col gap-[7px] border-t border-border px-3.5 pt-3 pb-4">
-        <Button
-          className="btn-block h-9"
-          disabled={!activeRunId || busy}
-          title={activeRunId ? undefined : 'No run to keep yet'}
-          onClick={() => void act('checkpoint.keep')}
-        >
-          Keep changes
-        </Button>
-        <div className="flex gap-[7px]">
-          <Button
-            variant="secondary"
-            className="h-8 flex-1"
-            disabled={!activeRunId || busy}
-            onClick={() => void act('checkpoint.continue')}
-          >
-            Continue
-          </Button>
-          <Button
-            variant="danger"
-            className="h-8 flex-1"
-            disabled={!activeRunId || busy}
-            onClick={() => void act('checkpoint.revertAll')}
-          >
-            Revert all
-          </Button>
         </div>
       </div>
     </div>
