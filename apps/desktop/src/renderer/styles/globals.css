@@ -579,6 +579,15 @@
     font: inherit !important;
   }
 
+  /* Fenced blocks with no language (` ``` ` with no tag) leave an empty header — drop it. */
+  .pi-md [data-streamdown='code-block'][data-language=''] > [data-streamdown='code-block-header'],
+  .pi-md [data-streamdown='code-block']:not([data-language]) > [data-streamdown='code-block-header'],
+  .pi-md [data-streamdown='code-block-header']:has(> span:empty),
+  .pi-md-think [data-streamdown='code-block'][data-language=''] > [data-streamdown='code-block-header'],
+  .pi-md-think [data-streamdown='code-block-header']:has(> span:empty) {
+    display: none !important;
+  }
+
   /* Sticky actions row Streamdown floats over the header — strip its chip chrome */
   .pi-md [data-streamdown='code-block'] > div.pointer-events-none {
     position: absolute !important;

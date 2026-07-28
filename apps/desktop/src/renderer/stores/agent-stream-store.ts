@@ -125,6 +125,15 @@ function shouldAccept(
 let timelineSeq = 0;
 const nextOrder = () => (timelineSeq += 1);
 
+/**
+ * Thinking and assistant text share one `messageId` in the live Pi stream
+ * (`ensureMessageId`). Namespace thinking cards so the timeline never emits
+ * two React children with the same key.
+ */
+function toThinkingId(messageId: string): string {
+  return messageId.startsWith('think-') ? messageId : `think-${messageId}`;
+}
+
 /** Pending message.delta chunks coalesced per animation frame (plan §14.1). */
 const pendingDeltas = new Map<string, { role: ChatMessage['role']; chunks: string[] }>();
 const pendingThinkingDeltas = new Map<string, string[]>();
@@ -174,10 +183,11 @@ function scheduleDeltaFlush(
     pendingDeltas.clear();
 
     let thinkings = state.thinkings;
-    for (const [thinkingId, chunks] of pendingThinkingDeltas) {
+    for (const [messageId, chunks] of pendingThinkingDeltas) {
       const delta = chunks.join('');
       chunks.length = 0;
       if (!delta) continue;
+      const thinkingId = toThinkingId(messageId);
       const existing = thinkings.find((t) => t.id === thinkingId);
       if (existing) {
         thinkings = thinkings.map((t) =>
@@ -298,7 +308,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
         const content = entry.content.trim();
         if (!content) continue;
         thinkings.push({
-          id: entry.id || `history-think-${index}`,
+          id: entry.id ? toThinkingId(entry.id) : `history-think-${index}`,
           content,
           streaming: false,
           order: orderSeq++,
@@ -564,14 +574,15 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       case 'thinking.completed': {
         const buffered = pendingThinkingDeltas.get(event.messageId)?.join('') ?? '';
         pendingThinkingDeltas.delete(event.messageId);
-        const current = get().thinkings.find((t) => t.id === event.messageId);
+        const thinkingId = toThinkingId(event.messageId);
+        const current = get().thinkings.find((t) => t.id === thinkingId);
         const content = event.content || (current ? current.content + buffered : buffered);
-        const existing = get().thinkings.find((t) => t.id === event.messageId);
+        const existing = get().thinkings.find((t) => t.id === thinkingId);
         if (existing) {
           set({
             lastSequenceByRun,
             thinkings: get().thinkings.map((t) =>
-              t.id === event.messageId ? { ...t, content, streaming: false } : t,
+              t.id === thinkingId ? { ...t, content, streaming: false } : t,
             ),
           });
         } else if (content) {
@@ -580,7 +591,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
             thinkings: [
               ...get().thinkings,
               {
-                id: event.messageId,
+                id: thinkingId,
                 content,
                 streaming: false,
                 order: nextOrder(),

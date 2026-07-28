@@ -112,7 +112,7 @@ describe('loadHistory timeline restore', () => {
 
     expect(state.messages.map((m) => m.content)).toEqual(['fix the bug', 'Fixed.']);
     expect(state.thinkings).toEqual([
-      expect.objectContaining({ id: 'th1', content: 'Need to inspect App.tsx', streaming: false }),
+      expect.objectContaining({ id: 'think-th1', content: 'Need to inspect App.tsx', streaming: false }),
     ]);
     expect(state.tools).toEqual([
       expect.objectContaining({
@@ -127,5 +127,43 @@ describe('loadHistory timeline restore', () => {
     // Arrival order is preserved across kinds.
     expect(state.thinkings[0]!.order).toBeLessThan(state.tools[0]!.order);
     expect(state.tools[0]!.order).toBeLessThan(state.messages[1]!.order);
+  });
+});
+
+describe('thinking / message id namespace', () => {
+  beforeEach(() => {
+    useAgentStreamStore.getState().resetSessionView();
+    useAgentStreamStore.getState().setScope('p1', 'agent-session');
+    useAgentStreamStore.setState({ activeRunId: 'agent-run-1' });
+  });
+
+  it('keeps thinking cards distinct from assistant messages that share messageId', () => {
+    // Pi maps thinking + assistant text onto one ensureMessageId() value.
+    const sharedId = '1de04618-0d6d-4260-91bc-92d41fef1eba';
+    useAgentStreamStore.getState().applyEvent({
+      type: 'thinking.completed',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      runId: 'agent-run-1',
+      sequence: 1,
+      timestamp: Date.now(),
+      messageId: sharedId,
+      content: 'plan the fix',
+    } as DesktopAgentEvent);
+    useAgentStreamStore.getState().applyEvent({
+      type: 'message.completed',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      runId: 'agent-run-1',
+      sequence: 2,
+      timestamp: Date.now(),
+      messageId: sharedId,
+      role: 'assistant',
+      content: 'Done.',
+    } as DesktopAgentEvent);
+
+    const state = useAgentStreamStore.getState();
+    expect(state.messages.map((m) => m.id)).toEqual([sharedId]);
+    expect(state.thinkings.map((t) => t.id)).toEqual([`think-${sharedId}`]);
   });
 });

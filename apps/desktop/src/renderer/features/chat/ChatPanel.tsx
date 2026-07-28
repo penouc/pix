@@ -500,21 +500,21 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
               entry.kind === 'message' ? (
                 entry.message.role === 'user' ? (
                   <div
-                    key={entry.message.id}
+                    key={`message:${entry.message.id}`}
                     className="max-w-[78%] self-end rounded-[22px_22px_6px_22px] bg-surface px-4 py-2.5 text-[13.5px] leading-relaxed shadow-[var(--shadow-sm)] whitespace-pre-wrap"
                   >
                     {entry.message.content}
                   </div>
                 ) : (
                   <AssistantMessage
-                    key={entry.message.id}
+                    key={`message:${entry.message.id}`}
                     content={entry.message.content}
                     streaming={entry.message.streaming}
                   />
                 )
               ) : entry.kind === 'thinking' ? (
                 <ThinkingStreamRow
-                  key={entry.thinking.id}
+                  key={`thinking:${entry.thinking.id}`}
                   content={entry.thinking.content}
                   streaming={entry.thinking.streaming}
                   expanded={Boolean(expanded[entry.thinking.id])}
@@ -527,7 +527,7 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
                 />
               ) : (
                 <ToolCard
-                  key={entry.tool.id}
+                  key={`tool:${entry.tool.id}`}
                   tool={entry.tool}
                   expanded={Boolean(expanded[entry.tool.id])}
                   onToggle={() =>
@@ -1008,12 +1008,7 @@ function ToolCard({
         isBash ? (
           <div className="mt-1 flex w-full min-w-0 max-w-full flex-col overflow-hidden rounded-[14px] border border-border/80 bg-[var(--color-output)] text-[var(--color-output-foreground)] shadow-[var(--shadow-sm)]">
             <div className="flex items-center justify-between border-b border-white/10 px-3.5 py-1.5 font-mono text-[10.5px] text-white/50">
-              <div className="flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-rose-500/80" />
-                <span className="size-2 rounded-full bg-amber-500/80" />
-                <span className="size-2 rounded-full bg-emerald-500/80" />
-                <span className="ml-1 font-semibold text-white/70">bash</span>
-              </div>
+              <span className="font-semibold text-white/70">bash</span>
               <span className="uppercase text-[10px] tracking-wider opacity-70">{tool.status}</span>
             </div>
             <div className="flex flex-col gap-2 p-3.5 font-mono text-[11.5px] leading-relaxed">

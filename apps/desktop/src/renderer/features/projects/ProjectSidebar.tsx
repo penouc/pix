@@ -204,14 +204,14 @@ export function ProjectSidebar({
         <NavItem
           icon={<Zap className="h-[15px] w-[15px]" />}
           label="Automations"
-          active={activeNav === 'automations'}
-          onClick={() => onNavigate('automations')}
+          title="Coming soon"
+          disabled
         />
         <NavItem
           icon={<Sparkles className="h-[15px] w-[15px]" />}
           label="Skills"
-          active={activeNav === 'skills'}
-          onClick={() => onNavigate('skills')}
+          title="Coming soon"
+          disabled
         />
       </nav>
 
