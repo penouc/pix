@@ -942,18 +942,36 @@ function ToolCard({
   const ok = tool.status === 'completed';
   const failed = tool.status === 'failed';
   const runningNow = tool.status === 'running';
+  const isBash =
+    tool.toolName.toLowerCase() === 'bash' ||
+    tool.toolName.toLowerCase() === 'exec' ||
+    tool.toolName.toLowerCase() === 'terminal';
+
   const icon = toolIcons[tool.toolName.toLowerCase()] ?? <Wrench className="h-3 w-3" />;
-  const canExpand = Boolean(tool.inputSummary || tool.outputSummary);
-  const summary = tool.inputSummary.replace(new RegExp(`^${tool.toolName}:\\s*`, 'i'), '');
+  const canExpand = Boolean(tool.inputSummary || tool.outputSummary || runningNow);
+
+  let rawSummary = tool.inputSummary.replace(new RegExp(`^${tool.toolName}:\\s*`, 'i'), '');
+  let bashCommand = rawSummary;
+  if (isBash) {
+    try {
+      const parsed = JSON.parse(rawSummary);
+      if (parsed && typeof parsed === 'object' && typeof parsed.command === 'string') {
+        bashCommand = parsed.command;
+      }
+    } catch {
+      // Keep raw string if not JSON
+    }
+  }
 
   return (
-    <div className="flex w-full min-w-0 max-w-full flex-col gap-1 my-0.5">
+    <div className="flex w-full min-w-0 max-w-full flex-col gap-1 my-1">
       <button
         type="button"
         onClick={canExpand ? onToggle : undefined}
         className={cn(
-          'flex w-full min-w-0 items-center gap-2 py-1 px-0.5 text-left transition-opacity',
-          canExpand ? 'cursor-pointer hover:opacity-80' : 'cursor-default',
+          'flex w-full min-w-0 items-center gap-2.5 rounded-[14px] border border-border/70 bg-foreground/[0.03] px-3 py-2 text-left transition-all',
+          canExpand ? 'cursor-pointer hover:bg-foreground/[0.06]' : 'cursor-default',
+          runningNow && 'border-accent/40 bg-accent-100/40 shadow-xs',
         )}
       >
         <span
@@ -968,11 +986,13 @@ function ToolCard({
         >
           {icon}
         </span>
-        <span className="flex-none text-[12px] font-semibold">{tool.toolName}</span>
-        <span className="min-w-0 truncate font-mono text-[11px] text-muted">{summary || tool.inputSummary}</span>
+        <span className="flex-none font-mono text-[12px] font-bold">{tool.toolName}</span>
+        <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-muted">
+          {isBash ? `$ ${bashCommand}` : rawSummary || tool.inputSummary}
+        </span>
         {runningNow ? (
           <span
-            className="size-1.5 flex-none rounded-full bg-accent-2"
+            className="size-2 flex-none rounded-full bg-accent-2"
             style={{ animation: 'pi-pulse 1.2s ease-in-out infinite' }}
           />
         ) : null}
@@ -983,25 +1003,59 @@ function ToolCard({
           />
         ) : null}
       </button>
+
       {expanded ? (
-        <div className="flex w-full min-w-0 max-w-full flex-col gap-2 my-1 pl-3 border-l-2 border-foreground/20 font-mono text-[11.5px] leading-relaxed">
-          {tool.inputSummary ? (
-            <div className="min-w-0 max-w-full">
-              <div className="mb-1 text-[10px] font-bold tracking-wider text-muted uppercase">Input</div>
-              <pre className="output-pre w-full max-w-full whitespace-pre-wrap font-mono text-[11.5px]">
-                {tool.inputSummary}
-              </pre>
+        isBash ? (
+          <div className="mt-1 flex w-full min-w-0 max-w-full flex-col overflow-hidden rounded-[14px] border border-border/80 bg-[var(--color-output)] text-[var(--color-output-foreground)] shadow-[var(--shadow-sm)]">
+            <div className="flex items-center justify-between border-b border-white/10 px-3.5 py-1.5 font-mono text-[10.5px] text-white/50">
+              <div className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-rose-500/80" />
+                <span className="size-2 rounded-full bg-amber-500/80" />
+                <span className="size-2 rounded-full bg-emerald-500/80" />
+                <span className="ml-1 font-semibold text-white/70">bash</span>
+              </div>
+              <span className="uppercase text-[10px] tracking-wider opacity-70">{tool.status}</span>
             </div>
-          ) : null}
-          {tool.outputSummary ? (
-            <div className="min-w-0 max-w-full">
-              <div className="mb-1 text-[10px] font-bold tracking-wider text-muted uppercase">Output</div>
-              <pre className="output-pre w-full max-w-full whitespace-pre-wrap font-mono text-[11.5px]">
-                {tool.outputSummary}
-              </pre>
+            <div className="flex flex-col gap-2 p-3.5 font-mono text-[11.5px] leading-relaxed">
+              <div className="flex items-start gap-2 font-semibold text-emerald-400">
+                <span className="select-none text-emerald-500">$</span>
+                <span className="min-w-0 flex-1 whitespace-pre-wrap break-all">{bashCommand}</span>
+              </div>
+              {tool.outputSummary ? (
+                <pre className="output-pre w-full max-w-full overflow-x-auto whitespace-pre-wrap text-[var(--color-output-foreground)] font-mono text-[11.5px]">
+                  {tool.outputSummary}
+                </pre>
+              ) : runningNow ? (
+                <div className="flex items-center gap-2 text-[11px] text-white/50 pt-1">
+                  <span
+                    className="size-1.5 rounded-full bg-emerald-400"
+                    style={{ animation: 'pi-pulse 1.2s ease-in-out infinite' }}
+                  />
+                  <span>Executing command…</span>
+                </div>
+              ) : null}
             </div>
-          ) : null}
-        </div>
+          </div>
+        ) : (
+          <div className="mt-1 flex w-full min-w-0 max-w-full flex-col gap-2 rounded-[14px] border border-border/70 bg-surface px-3.5 py-2.5 font-mono text-[11.5px] leading-relaxed shadow-xs">
+            {tool.inputSummary ? (
+              <div className="min-w-0 max-w-full">
+                <div className="mb-1 text-[10px] font-bold tracking-wider text-muted uppercase">Input</div>
+                <pre className="output-pre w-full max-w-full whitespace-pre-wrap font-mono text-[11.5px]">
+                  {tool.inputSummary}
+                </pre>
+              </div>
+            ) : null}
+            {tool.outputSummary ? (
+              <div className="min-w-0 max-w-full">
+                <div className="mb-1 text-[10px] font-bold tracking-wider text-muted uppercase">Output</div>
+                <pre className="output-pre w-full max-w-full whitespace-pre-wrap font-mono text-[11.5px]">
+                  {tool.outputSummary}
+                </pre>
+              </div>
+            ) : null}
+          </div>
+        )
       ) : null}
     </div>
   );

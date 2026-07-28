@@ -525,20 +525,147 @@
     line-height: inherit;
   }
 
-  .pi-md pre,
+  /*
+   * Streamdown nests three frames by default:
+   *   1. outer [data-streamdown=code-block]  (border + bg-sidebar + p-2)
+   *   2. actions chip                       (border + bg-sidebar/80)
+   *   3. body [data-streamdown=code-block-body] (border + bg-background + p-4)
+   * Flatten to one terminal surface. Utilities need !important to lose.
+   */
   .pi-md [data-streamdown='code-block'],
-  .pi-md [data-streamdown='code-block-body'] {
+  .pi-md-think [data-streamdown='code-block'] {
+    position: relative;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0 !important;
+    margin-block: 0.85em;
+    width: 100%;
     max-width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+    padding: 0 !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    background: var(--color-output) !important;
+    color: var(--color-output-foreground) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  }
+
+  /* Language label — thin top bar, not a second card */
+  .pi-md [data-streamdown='code-block-header'],
+  .pi-md-think [data-streamdown='code-block-header'] {
+    display: flex !important;
+    align-items: center !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 7px 12px !important;
+    border: none !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+    color: rgba(255, 255, 255, 0.45) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 10.5px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.04em !important;
+    text-transform: lowercase !important;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .pi-md [data-streamdown='code-block-header'] span {
+    margin: 0 !important;
+    color: inherit !important;
+    font: inherit !important;
+  }
+
+  /* Sticky actions row Streamdown floats over the header — strip its chip chrome */
+  .pi-md [data-streamdown='code-block'] > div.pointer-events-none {
+    position: absolute !important;
+    top: 4px !important;
+    right: 6px !important;
+    z-index: 2 !important;
+    display: flex !important;
+    height: auto !important;
+    margin: 0 !important;
+    margin-top: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    pointer-events: none !important;
+  }
+
+  .pi-md [data-streamdown='code-block-actions'] {
+    display: flex !important;
+    align-items: center !important;
+    gap: 2px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    pointer-events: auto !important;
+  }
+
+  .pi-md [data-streamdown='code-block-copy-button'],
+  .pi-md [data-streamdown='code-block-download-button'] {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 26px !important;
+    height: 26px !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 6px !important;
+    background: transparent !important;
+    color: rgba(255, 255, 255, 0.4) !important;
+    box-shadow: none !important;
+    cursor: pointer;
+    transition: color 0.12s ease, background 0.12s ease !important;
+  }
+
+  .pi-md [data-streamdown='code-block-copy-button']:hover,
+  .pi-md [data-streamdown='code-block-download-button']:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .pi-md [data-streamdown='code-block-copy-button'] svg,
+  .pi-md [data-streamdown='code-block-download-button'] svg {
+    width: 12px !important;
+    height: 12px !important;
+  }
+
+  /* Inner body — no second border/background; just the code */
+  .pi-md [data-streamdown='code-block-body'],
+  .pi-md-think [data-streamdown='code-block-body'] {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 12px 14px !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
     box-sizing: border-box;
     overflow-x: auto;
   }
 
-  /* Streamdown defaults to `text-sm` (~14px) — too large next to 13px prose. */
-  .pi-md [data-streamdown='code-block-body'],
   .pi-md [data-streamdown='code-block-body'] pre,
   .pi-md [data-streamdown='code-block-body'] code {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    font-family: var(--font-mono) !important;
     font-size: 11.5px !important;
-    line-height: 1.55 !important;
+    line-height: 1.65 !important;
+    color: inherit;
   }
 
   /*
