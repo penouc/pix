@@ -7,6 +7,8 @@ import {
   FileText,
   FolderSearch,
   GitBranch,
+  ListOrdered,
+  ListPlus,
   Lock,
   PanelRight,
   Pencil,
@@ -15,6 +17,8 @@ import {
   Square,
   Terminal,
   Wrench,
+  X,
+  Zap,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
@@ -29,6 +33,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import { ApprovalModePicker } from '@/features/chat/ApprovalModePicker';
 import { ThinkingLevelPicker } from '@/features/chat/ThinkingLevelPicker';
 import { ThinkingPlaceholderRow, ThinkingStreamRow } from '@/features/chat/ThinkingStream';
@@ -46,7 +51,11 @@ import {
   toneBadge,
 } from '@/lib/status';
 import { cn } from '@/lib/utils';
-import { useAgentStreamStore, type ToolCallCard } from '@/stores/agent-stream-store';
+import {
+  useAgentStreamStore,
+  type QueuedMessage,
+  type ToolCallCard,
+} from '@/stores/agent-stream-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 
 const toolIcons: Record<string, ReactNode> = {
@@ -89,9 +98,15 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
   const lastUserText = useAgentStreamStore((s) => s.lastUserText);
   const appendUserMessage = useAgentStreamStore((s) => s.appendUserMessage);
   const setStopping = useAgentStreamStore((s) => s.setStopping);
+  const queuedMessages = useAgentStreamStore((s) => s.queuedMessages);
+  const addQueuedMessage = useAgentStreamStore((s) => s.addQueuedMessage);
+  const removeQueuedMessage = useAgentStreamStore((s) => s.removeQueuedMessage);
+  const clearQueue = useAgentStreamStore((s) => s.clearQueue);
+  const popNextQueuedMessage = useAgentStreamStore((s) => s.popNextQueuedMessage);
 
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [queueMode, setQueueMode] = useState<'queue' | 'steer'>('queue');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -271,18 +286,11 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
     [messages, thinkings, tools],
   );
 
-  async function send() {
-    if (!draft.trim()) return;
-    const text = draft.trim();
-    setDraft('');
+  async function sendDirect(text: string) {
+    if (!text) return;
     appendUserMessage(text);
     setSending(true);
     try {
-      /*
-       * The unstarted-task screen can be reached with no session behind it —
-       * switching to a project that has no tasks lands there. Sending is what
-       * creates the task in that case; before this, Enter did nothing at all.
-       */
       let active = session;
       if (!active) {
         active = await createTask();
@@ -295,15 +303,11 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
           return;
         }
       }
-      if (running) {
-        await invoke({ method: 'agent.followUp', params: { sessionId: active.id, text } });
-      } else {
-        useAgentStreamStore.setState({ status: 'starting', error: null, errorRetryable: false });
-        await invoke<RunRef>({
-          method: 'agent.sendMessage',
-          params: { sessionId: active.id, text },
-        });
-      }
+      useAgentStreamStore.setState({ status: 'starting', error: null, errorRetryable: false });
+      await invoke<RunRef>({
+        method: 'agent.sendMessage',
+        params: { sessionId: active.id, text },
+      });
     } catch (err) {
       console.error(err);
       useAgentStreamStore.setState({
@@ -314,6 +318,68 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
     } finally {
       setSending(false);
     }
+  }
+
+  // Drain queue automatically when run finishes
+  useEffect(() => {
+    const isFinished = status === 'completed' || status === 'idle';
+    if (isFinished && queuedMessages.length > 0 && !sending && session && !approval) {
+      const next = popNextQueuedMessage();
+      if (next && next.text.trim()) {
+        void sendDirect(next.text.trim());
+      }
+    }
+  }, [status, queuedMessages.length, sending, session, approval]);
+
+  async function send() {
+    if (!draft.trim()) return;
+    const text = draft.trim();
+    setDraft('');
+
+    if (running) {
+      if (queueMode === 'queue') {
+        addQueuedMessage(text, 'queue');
+        return;
+      }
+      // Steer mode: send mid-run immediately
+      appendUserMessage(text);
+      setSending(true);
+      try {
+        if (session) {
+          await invoke({ method: 'agent.followUp', params: { sessionId: session.id, text } });
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
+
+    await sendDirect(text);
+  }
+
+  async function handleSendNow(item: QueuedMessage) {
+    removeQueuedMessage(item.id);
+    if (running && session) {
+      appendUserMessage(item.text);
+      setSending(true);
+      try {
+        await invoke({ method: 'agent.followUp', params: { sessionId: session.id, text: item.text } });
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setSending(false);
+      }
+    } else {
+      await sendDirect(item.text);
+    }
+  }
+
+  function handleEditQueued(item: QueuedMessage) {
+    removeQueuedMessage(item.id);
+    setDraft(item.text);
+    composerRef.current?.focus();
   }
 
   async function retry() {
@@ -634,14 +700,27 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
                 ))}
               </div>
             ) : null}
+            {queuedMessages.length > 0 ? (
+              <QueuePanel
+                queuedMessages={queuedMessages}
+                onRemove={removeQueuedMessage}
+                onEdit={handleEditQueued}
+                onSendNow={(item) => void handleSendNow(item)}
+                onClear={clearQueue}
+              />
+            ) : null}
             <div className="density-composer overflow-hidden rounded-[26px] border border-border bg-surface shadow-[var(--shadow-sm)]">
               <textarea
                 ref={composerRef}
                 className="max-h-44 min-h-[52px] w-full resize-none bg-transparent px-4 py-3 text-[13.5px] leading-normal outline-none placeholder:text-muted"
                 placeholder={
-                  project
-                    ? 'Describe the change you want — @ for a file, $ for a skill'
-                    : 'Open a project to begin…'
+                  !project
+                    ? 'Open a project to begin…'
+                    : running
+                      ? queueMode === 'queue'
+                        ? 'Type a message to queue… (⏎ to Queue)'
+                        : 'Type to interject mid-run… (⏎ to Steer)'
+                      : 'Describe the change you want — @ for a file, $ for a skill'
                 }
                 disabled={!project || sending}
                 value={draft}
@@ -696,26 +775,148 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
                   </ContextPill>
                 ) : null}
                 <span className="min-w-0 flex-1" />
+                {running ? (
+                  <Segmented
+                    aria-label="Queue mode"
+                    size="sm"
+                    options={[
+                      { value: 'queue', label: 'Queue' },
+                      { value: 'steer', label: 'Steer' },
+                    ]}
+                    value={queueMode}
+                    onChange={(val) => setQueueMode(val as 'queue' | 'steer')}
+                  />
+                ) : null}
                 {/* Model choice belongs with the send button: it is a property of the
                     message you are about to send, not of the window. */}
                 <ModelPicker />
                 <span className="flex-none font-mono text-[11px] text-muted">↵</span>
                 <Button
-                  size="icon"
-                  className="h-[30px] w-[30px] flex-none"
-                  // Not `!session`: the unstarted-task screen has no session yet and
-                  // sending is what creates one, so gating on it left a dead button
-                  // next to a working ⌘↵.
+                  size={running && queueMode === 'queue' ? 'sm' : 'icon'}
+                  className={cn(
+                    running && queueMode === 'queue'
+                      ? 'h-[30px] px-3 gap-1.5 font-semibold text-[12px] bg-accent text-accent-foreground hover:bg-accent/90'
+                      : 'h-[30px] w-[30px] flex-none',
+                  )}
                   disabled={!project || !draft.trim() || sending}
                   onClick={() => void send()}
-                  title="Send (⏎ — use ⇧⏎ for a new line)"
+                  title={
+                    running
+                      ? queueMode === 'queue'
+                        ? 'Queue message for when agent finishes (⏎)'
+                        : 'Interject mid-run immediately (⏎)'
+                      : 'Send (⏎ — use ⇧⏎ for a new line)'
+                  }
                 >
-                  <ArrowUp className="h-3.5 w-3.5" />
+                  {running ? (
+                    queueMode === 'queue' ? (
+                      <>
+                        <ListPlus className="h-3.5 w-3.5" />
+                        <span>Queue</span>
+                      </>
+                    ) : (
+                      <Zap className="h-3.5 w-3.5" />
+                    )
+                  ) : (
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  )}
                 </Button>
               </div>
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function QueuePanel({
+  queuedMessages,
+  onRemove,
+  onEdit,
+  onSendNow,
+  onClear,
+}: {
+  queuedMessages: QueuedMessage[];
+  onRemove: (id: string) => void;
+  onEdit: (item: QueuedMessage) => void;
+  onSendNow: (item: QueuedMessage) => void;
+  onClear: () => void;
+}) {
+  if (!queuedMessages.length) return null;
+
+  return (
+    <div className="mb-2 overflow-hidden rounded-[20px] border border-border bg-surface shadow-[var(--shadow-md)]">
+      <div className="flex items-center justify-between gap-2 border-b border-border px-3.5 py-2">
+        <div className="flex items-center gap-2">
+          <ListOrdered className="h-3.5 w-3.5 text-accent" />
+          <span className="text-[12.5px] font-bold text-foreground">
+            Message Queue ({queuedMessages.length})
+          </span>
+          <span className="text-[11px] text-muted">
+            Will run automatically after current turn finishes
+          </span>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClear}
+          className="h-6 px-2 text-[11px] text-muted hover:text-foreground"
+        >
+          Clear queue
+        </Button>
+      </div>
+      <div className="flex max-h-40 flex-col gap-1 overflow-y-auto p-2">
+        {queuedMessages.map((item, idx) => (
+          <div
+            key={item.id}
+            className="flex items-center justify-between gap-2 rounded-xl bg-background/80 px-3 py-1.5 transition-colors hover:bg-background"
+          >
+            <span className="font-mono text-[10.5px] font-bold text-muted">#{idx + 1}</span>
+            <span
+              className={cn(
+                'rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold',
+                item.mode === 'steer'
+                  ? 'bg-warning/15 text-warning-700'
+                  : 'bg-accent/15 text-accent-700',
+              )}
+            >
+              {item.mode === 'steer' ? 'Steer' : 'Queued'}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-[12.5px] text-foreground">
+              {item.text}
+            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-accent hover:bg-accent/10"
+                title="Send now"
+                onClick={() => onSendNow(item)}
+              >
+                <Zap className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-muted hover:text-foreground"
+                title="Edit in composer"
+                onClick={() => onEdit(item)}
+              >
+                <Pencil className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-muted hover:text-danger"
+                title="Remove from queue"
+                onClick={() => onRemove(item.id)}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

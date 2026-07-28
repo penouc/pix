@@ -75,14 +75,6 @@
   --color-accent-2-800: #2f5042;
   --color-accent-2-900: #1e3429;
 
-  /*
-   * Usage heatmap — sequential sage ramp on the light theme.
-   */
-  --color-heat-0: #eef2ee;
-  --color-heat-1: #e2ead9;
-  --color-heat-2: #aebf92;
-  --color-heat-3: #728157;
-  --color-heat-4: #56633f;
 
   /* Terminal / tool-output surface. Declared as its own pair rather than
      reusing neutral-900 + neutral-200: the dark theme inverts the neutral
@@ -123,6 +115,18 @@
   --shadow-lg: 0 12px 32px rgba(20, 21, 24, 0.14);
 
   color-scheme: light;
+
+  /*
+   * Usage heatmap — sequential sage ramp (light theme).
+   * Declared in :root (not @theme) so var(--color-heat-*) resolves correctly
+   * as a standard CSS custom property. Dark theme overrides in [data-theme='dark'].
+   * heat-0 is neutral-400 so empty cells are legible against the #f8faf8 background.
+   */
+  --color-heat-0: #ffffff;
+  --color-heat-1: #c4d9a8;
+  --color-heat-2: #aebf92;
+  --color-heat-3: #728157;
+  --color-heat-4: #56633f;
 }
 
 /* ── Dark theme (the design's THEME_DARK map) ──────────────────────────────
@@ -165,7 +169,8 @@
   --color-output: #0e100f;
   --color-output-foreground: #d4dad6;
 
-  --color-heat-0: #282c2a;
+  /* Dark: empty cell must stand out from --color-background (#1a1c1b). */
+  --color-heat-0: #2e3a33;
   --color-heat-1: #334027;
   --color-heat-2: #728157;
   --color-heat-3: #8fa073;

@@ -46,6 +46,13 @@ export interface ApprovalRequest {
   rememberable: boolean;
 }
 
+export interface QueuedMessage {
+  id: string;
+  text: string;
+  mode: 'queue' | 'steer';
+  createdAt: number;
+}
+
 interface AgentStreamState {
   activeRunId: string | null;
   activeProjectId: string | null;
@@ -70,6 +77,12 @@ interface AgentStreamState {
   approval: ApprovalRequest | null;
   error: string | null;
   lastSequenceByRun: Record<string, number>;
+  queuedMessages: QueuedMessage[];
+  addQueuedMessage: (text: string, mode?: 'queue' | 'steer') => QueuedMessage;
+  removeQueuedMessage: (id: string) => void;
+  updateQueuedMessage: (id: string, text: string) => void;
+  clearQueue: () => void;
+  popNextQueuedMessage: () => QueuedMessage | undefined;
   appendUserMessage: (text: string) => void;
   resetSessionView: () => void;
   /** Replace the thread with a stored transcript (oldest first). */
@@ -222,6 +235,38 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
   approval: null,
   error: null,
   lastSequenceByRun: {},
+  queuedMessages: [],
+
+  addQueuedMessage: (text, mode = 'queue') => {
+    const msg: QueuedMessage = {
+      id: `queue-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      text: text.trim(),
+      mode,
+      createdAt: Date.now(),
+    };
+    set((state) => ({ queuedMessages: [...state.queuedMessages, msg] }));
+    return msg;
+  },
+
+  removeQueuedMessage: (id) => {
+    set((state) => ({ queuedMessages: state.queuedMessages.filter((m) => m.id !== id) }));
+  },
+
+  updateQueuedMessage: (id, text) => {
+    set((state) => ({
+      queuedMessages: state.queuedMessages.map((m) => (m.id === id ? { ...m, text: text.trim() } : m)),
+    }));
+  },
+
+  clearQueue: () => set({ queuedMessages: [] }),
+
+  popNextQueuedMessage: () => {
+    const list = get().queuedMessages;
+    if (!list.length) return undefined;
+    const [next, ...rest] = list;
+    set({ queuedMessages: rest });
+    return next;
+  },
 
   appendUserMessage: (text) => {
     set((state) => ({
@@ -363,6 +408,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       activeRunId: null,
       error: null,
       errorRetryable: false,
+      queuedMessages: [],
     });
   },
   resetSessionView: () => {
@@ -382,11 +428,12 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       approval: null,
       error: null,
       lastSequenceByRun: {},
+      queuedMessages: [],
     });
   },
 
   setScope: (projectId, sessionId) => {
-    set({ activeProjectId: projectId, activeSessionId: sessionId });
+    set({ activeProjectId: projectId, activeSessionId: sessionId, queuedMessages: [] });
   },
 
   setStopping: (runId) => {

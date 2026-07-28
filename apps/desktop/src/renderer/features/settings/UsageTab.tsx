@@ -143,7 +143,7 @@ export function UsageTab() {
           {totals?.runs ? `busiest day: ${peak} run${peak === 1 ? '' : 's'}` : 'nothing recorded'}
         </span>
       </div>
-      <div className="mb-2 overflow-x-auto rounded-[18px] border border-border p-3.5">
+      <div className="mb-2 overflow-x-auto rounded-[18px] border border-border p-3.5" style={{ background: 'var(--color-neutral-300)' }}>
         <div style={{ minWidth: 'max-content' }}>
           {/* Month ruler — a column is labelled when its month differs from the
               previous column's, which is where the month actually starts. */}
@@ -151,7 +151,7 @@ export function UsageTab() {
             {weeks.map((week, index) => (
               <span
                 key={index}
-                className="text-[9px] whitespace-nowrap text-muted"
+                className="inline-block shrink-0 text-[9px] whitespace-nowrap text-muted overflow-visible"
                 style={{ width: CELL }}
               >
                 {monthLabelFor(weeks, index)}
@@ -166,6 +166,7 @@ export function UsageTab() {
                     return (
                       <span
                         key={dayIndex}
+                        className="inline-block shrink-0"
                         style={{ width: CELL, height: CELL }}
                         aria-hidden="true"
                       />
@@ -183,7 +184,7 @@ export function UsageTab() {
                       title={`${key} · ${runs} run${runs === 1 ? '' : 's'}${
                         entry ? ` · ${formatCost(entry.costUsd)}` : ''
                       }`}
-                      className="rounded-[3px]"
+                      className="inline-block shrink-0 rounded-[3px]"
                       style={{
                         width: CELL,
                         height: CELL,
@@ -202,7 +203,7 @@ export function UsageTab() {
         {[0, 1, 2, 3, 4].map((level) => (
           <span
             key={level}
-            className="rounded-[3px]"
+            className="inline-block shrink-0 rounded-[3px]"
             style={{ width: CELL, height: CELL, background: `var(--color-heat-${level})` }}
           />
         ))}
