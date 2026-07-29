@@ -10,6 +10,9 @@
   },
   "scripts": {
     "dev": "pnpm --filter @pi-desktop/desktop dev",
+    "dev:website": "pnpm --filter @pi-desktop/website dev",
+    "build:website": "pnpm --filter @pi-desktop/website build",
+    "deploy:website": "pnpm --filter @pi-desktop/website run deploy",
     "build": "pnpm -r --filter './packages/*' build && pnpm --filter @pi-desktop/desktop build",
     "build:packages": "pnpm -r --filter './packages/*' build",
     "typecheck": "pnpm -r typecheck",

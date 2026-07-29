@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" data-i18n="meta.description" content="" />
+    <meta property="og:title" content="PiX" />
+    <meta property="og:description" data-i18n-content="meta.description" content="" />
+    <meta property="og:image" content="/icon.png" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Schibsted+Grotesk:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <title>PiX</title>
+  </head>
+  <body>
+    <a class="skip" href="#main" data-i18n="a11y.skip">Skip to content</a>
+
+    <header class="site-header">
+      <div class="wrap header-inner">
+        <a class="brand" href="/" data-i18n-aria="a11y.home">
+          <img src="/pix-mascot.png" alt="" width="36" height="36" />
+          <span>PiX</span>
+        </a>
+        <nav class="nav" data-i18n-aria="a11y.nav">
+          <a href="#pi" data-i18n="nav.pi">Pi Agent</a>
+          <a href="#own" data-i18n="nav.own">Your agent</a>
+          <a href="#how" data-i18n="nav.how">How it works</a>
+          <div class="lang-switch" role="group" data-i18n-aria="a11y.lang">
+            <button type="button" data-locale="zh" aria-pressed="false">中文</button>
+            <button type="button" data-locale="en" aria-pressed="false">EN</button>
+          </div>
+          <a
+            class="nav-cta"
+            href="https://github.com/penouc/pix"
+            target="_blank"
+            rel="noopener noreferrer"
+            >GitHub</a
+          >
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="hero-atmosphere" aria-hidden="true"></div>
+        <div class="wrap hero-grid">
+          <div class="hero-copy">
+            <p class="brand-mark">PiX</p>
+            <h1 data-i18n="hero.title">A desktop shell on Pi Agent — fork it into yours</h1>
+            <p class="lede" data-i18n="hero.lede">
+              PiX is a local coding workbench built on the open-source Pi Agent SDK. Use it as-is,
+              or take the codebase and shape your own agent product.
+            </p>
+            <div class="cta-row">
+              <a
+                class="btn btn-primary"
+                href="https://github.com/penouc/pix"
+                target="_blank"
+                rel="noopener noreferrer"
+                data-i18n="hero.ctaPrimary"
+                >View on GitHub</a
+              >
+              <a
+                class="btn btn-ghost"
+                href="https://github.com/earendil-works/pi"
+                target="_blank"
+                rel="noopener noreferrer"
+                data-i18n="hero.ctaSecondary"
+                >About Pi Agent</a
+              >
+            </div>
+          </div>
+          <div class="hero-visual">
+            <img
+              class="mascot"
+              src="/pix-mascot.png"
+              data-i18n-alt="hero.mascotAlt"
+              alt="PiX mascot"
+              width="512"
+              height="512"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section id="pi" class="section how">
+        <div class="wrap">
+          <h2 data-i18n="pi.title">Built on Pi Agent</h2>
+          <p class="section-lede" data-i18n="pi.lede">
+            The agent runtime comes from Pi — multi-provider models, tools, and the coding loop —
+            so PiX can focus on the desktop workbench around it.
+          </p>
+          <ul class="points">
+            <li>
+              <h3 data-i18n="pi.p1.title">Pi Agent SDK</h3>
+              <p data-i18n="pi.p1.body">
+                Powered by the open-source Pi coding agent. Providers, models, and tool calls ride
+                on Pi instead of a closed proprietary runtime.
+              </p>
+            </li>
+            <li>
+              <h3 data-i18n="pi.p2.title">Desktop workbench</h3>
+              <p data-i18n="pi.p2.body">
+                Chat, approvals, multi-file diffs, checkpoints, and local Git — the UI and process
+                boundaries live in PiX.
+              </p>
+            </li>
+            <li>
+              <h3 data-i18n="pi.p3.title">Local by default</h3>
+              <p data-i18n="pi.p3.body">
+                Open a Git project on your machine. Files, shell, and review stay with you.
+              </p>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="own" class="section why">
+        <div class="wrap">
+          <h2 data-i18n="own.title">Make it your own agent</h2>
+          <p class="section-lede" data-i18n="own.lede">
+            PiX is a starting point, not a black box. Fork the repo, swap the branding, tune the
+            workbench, and ship an agent that fits your product.
+          </p>
+          <ol class="steps">
+            <li>
+              <span class="step-num">1</span>
+              <div>
+                <h3 data-i18n="own.s1.title">Fork the shell</h3>
+                <p data-i18n="own.s1.body">
+                  Electron + React desktop app with typed IPC — keep what you need, cut what you
+                  don't.
+                </p>
+              </div>
+            </li>
+            <li>
+              <span class="step-num">2</span>
+              <div>
+                <h3 data-i18n="own.s2.title">Keep Pi as the engine</h3>
+                <p data-i18n="own.s2.body">
+                  The AgentRuntime adapter wraps Pi. You stay on the Pi ecosystem while owning the
+                  product surface.
+                </p>
+              </div>
+            </li>
+            <li>
+              <span class="step-num">3</span>
+              <div>
+                <h3 data-i18n="own.s3.title">Ship your agent</h3>
+                <p data-i18n="own.s3.body">
+                  Rename, rebrand, add your workflows — turn PiX into the agent experience you want
+                  to offer.
+                </p>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section id="how" class="section how">
+        <div class="wrap">
+          <h2 data-i18n="how.title">The coding loop</h2>
+          <p class="section-lede" data-i18n="how.lede">
+            Understand the task → edit code → verify → review the diff → keep or revert.
+          </p>
+          <ol class="steps">
+            <li>
+              <span class="step-num">1</span>
+              <div>
+                <h3 data-i18n="how.s1.title">Open a local project</h3>
+                <p data-i18n="how.s1.body">Pick a Git repo on your machine and start a task.</p>
+              </div>
+            </li>
+            <li>
+              <span class="step-num">2</span>
+              <div>
+                <h3 data-i18n="how.s2.title">Let the agent work</h3>
+                <p data-i18n="how.s2.body">
+                  Watch reads, edits, and commands stream in — transparent, not a black box.
+                </p>
+              </div>
+            </li>
+            <li>
+              <span class="step-num">3</span>
+              <div>
+                <h3 data-i18n="how.s3.title">Review, then decide</h3>
+                <p data-i18n="how.s3.body">
+                  Inspect the multi-file diff. Keep the result or revert the whole round safely.
+                </p>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="section close">
+        <div class="wrap close-inner">
+          <img src="/pix-mascot.png" alt="" width="64" height="64" />
+          <h2 data-i18n="close.title">Start from the source</h2>
+          <p data-i18n="close.body">
+            Clone PiX, explore the Pi integration, and build the agent you want on top.
+          </p>
+          <a
+            class="btn btn-primary"
+            href="https://github.com/penouc/pix"
+            target="_blank"
+            rel="noopener noreferrer"
+            data-i18n="close.cta"
+            >Open the repo</a
+          >
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap footer-stack">
+        <div class="contact">
+          <h2 data-i18n="contact.title">Connect</h2>
+          <p class="contact-links">
+            <a
+              href="https://x.com/aisikream"
+              target="_blank"
+              rel="noopener noreferrer"
+              >X</a
+            >
+            <span aria-hidden="true">/</span>
+            <a href="mailto:hi@penglei.dev">hi@penglei.dev</a>
+            <span aria-hidden="true">/</span>
+            <a href="https://penglei.dev/" target="_blank" rel="noopener noreferrer"
+              >penglei.dev</a
+            >
+          </p>
+        </div>
+        <div class="footer-inner">
+          <p>
+            <span class="footer-brand">PiX</span>
+            <span data-i18n="footer.line">
+              · Local desktop coding agent, built on
+            </span>
+            <a href="https://github.com/earendil-works/pi" target="_blank" rel="noopener noreferrer"
+              >Pi Agent</a
+            >
+          </p>
+          <p class="footer-meta">© <span id="year"></span> PiX</p>
+        </div>
+      </div>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
