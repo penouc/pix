@@ -120,8 +120,11 @@
    * Usage heatmap — sequential sage ramp (light theme).
    * Declared in :root (not @theme) so var(--color-heat-*) resolves correctly
    * as a standard CSS custom property. Dark theme overrides in [data-theme='dark'].
-   * heat-0 is neutral-400 so empty cells are legible against the #f8faf8 background.
+   * heat-surface is the plate the grid sits on; every step is picked against it,
+   * so the two must be changed together.
    */
+  --color-heat-surface: #e4eae4;
+  --color-heat-ring: rgba(20, 21, 24, 0.07);
   --color-heat-0: #ffffff;
   --color-heat-1: #c4d9a8;
   --color-heat-2: #aebf92;
@@ -169,12 +172,16 @@
   --color-output: #0e100f;
   --color-output-foreground: #d4dad6;
 
-  /* Dark: empty cell must stand out from --color-background (#1a1c1b). */
-  --color-heat-0: #2e3a33;
-  --color-heat-1: #334027;
-  --color-heat-2: #728157;
-  --color-heat-3: #8fa073;
-  --color-heat-4: #ccdbb2;
+  /* Dark: the plate drops below --color-background instead of sitting on a
+     mid-grey, so the low steps have somewhere to go. The ramp climbs from a
+     near-neutral empty cell to a bright sage, each step ~1.6:1 on the last. */
+  --color-heat-surface: #151817;
+  --color-heat-ring: rgba(255, 255, 255, 0.05);
+  --color-heat-0: #2a302c;
+  --color-heat-1: #3c5330;
+  --color-heat-2: #5b7a44;
+  --color-heat-3: #89a967;
+  --color-heat-4: #c9e0a4;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 3px 10px rgba(0, 0, 0, 0.45);

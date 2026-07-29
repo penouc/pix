@@ -143,7 +143,10 @@ export function UsageTab() {
           {totals?.runs ? `busiest day: ${peak} run${peak === 1 ? '' : 's'}` : 'nothing recorded'}
         </span>
       </div>
-      <div className="mb-2 overflow-x-auto rounded-[18px] border border-border p-3.5" style={{ background: 'var(--color-neutral-300)' }}>
+      <div
+        className="mb-2 overflow-x-auto rounded-[18px] border border-border p-3.5"
+        style={{ background: 'var(--color-heat-surface)' }}
+      >
         <div style={{ minWidth: 'max-content' }}>
           {/* Month ruler — a column is labelled when its month differs from the
               previous column's, which is where the month actually starts. */}
@@ -189,6 +192,7 @@ export function UsageTab() {
                         width: CELL,
                         height: CELL,
                         background: `var(--color-heat-${level})`,
+                        boxShadow: 'inset 0 0 0 1px var(--color-heat-ring)',
                       }}
                     />
                   );
@@ -200,13 +204,25 @@ export function UsageTab() {
       </div>
       <div className="mb-6 flex items-center gap-1.5 text-[11px] text-muted">
         <span>Less</span>
-        {[0, 1, 2, 3, 4].map((level) => (
-          <span
-            key={level}
-            className="inline-block shrink-0 rounded-[3px]"
-            style={{ width: CELL, height: CELL, background: `var(--color-heat-${level})` }}
-          />
-        ))}
+        {/* Swatches carry the grid's own plate, or the darkest steps would be
+            judged against the page background instead of the one they sit on. */}
+        <span
+          className="inline-flex items-center gap-1.5 rounded-[6px] px-1.5 py-1"
+          style={{ background: 'var(--color-heat-surface)' }}
+        >
+          {[0, 1, 2, 3, 4].map((level) => (
+            <span
+              key={level}
+              className="inline-block shrink-0 rounded-[3px]"
+              style={{
+                width: CELL,
+                height: CELL,
+                background: `var(--color-heat-${level})`,
+                boxShadow: 'inset 0 0 0 1px var(--color-heat-ring)',
+              }}
+            />
+          ))}
+        </span>
         <span>More</span>
       </div>
 
