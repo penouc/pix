@@ -694,7 +694,119 @@
     border: 1px solid color-mix(in srgb, var(--color-foreground) 12%, transparent);
   }
 
-  .pi-md table {
+  /*
+   * Tables get the same treatment as code blocks: Streamdown ships an outer
+   * card (border + bg-sidebar + p-2), an always-visible toolbar, and a second
+   * bordered scroll box. Flatten to one bordered surface with the toolbar
+   * revealed on hover. `bg-muted/80` on the header is the inline-code bug
+   * again — `--color-muted` is a text token, so it paints a dirty mid-grey.
+   */
+  .pi-md [data-streamdown='table-wrapper'],
+  .pi-md-think [data-streamdown='table-wrapper'] {
+    position: relative;
+    gap: 0 !important;
+    margin-block: 0.85em !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+  }
+
+  .pi-md [data-streamdown='table-wrapper'] > div:first-child,
+  .pi-md-think [data-streamdown='table-wrapper'] > div:first-child {
+    position: absolute !important;
+    top: 4px !important;
+    right: 4px !important;
+    z-index: 2;
+    gap: 1px !important;
+    padding: 1px !important;
+    border-radius: 7px !important;
+    background: color-mix(in srgb, var(--color-surface-raised) 92%, transparent) !important;
+    box-shadow: var(--shadow-sm);
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+
+  .pi-md [data-streamdown='table-wrapper']:hover > div:first-child,
+  .pi-md [data-streamdown='table-wrapper']:focus-within > div:first-child,
+  .pi-md-think [data-streamdown='table-wrapper']:hover > div:first-child {
+    opacity: 1;
+  }
+
+  .pi-md [data-streamdown='table-wrapper'] button,
+  .pi-md-think [data-streamdown='table-wrapper'] button {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 22px !important;
+    height: 22px !important;
+    padding: 0 !important;
+    border-radius: 6px !important;
+    color: var(--color-muted) !important;
+  }
+
+  .pi-md [data-streamdown='table-wrapper'] button:hover,
+  .pi-md-think [data-streamdown='table-wrapper'] button:hover {
+    background: color-mix(in srgb, var(--color-foreground) 8%, transparent) !important;
+    color: var(--color-foreground) !important;
+  }
+
+  .pi-md [data-streamdown='table-wrapper'] button svg,
+  .pi-md-think [data-streamdown='table-wrapper'] button svg {
+    width: 12px !important;
+    height: 12px !important;
+  }
+
+  /* Single bordered scroll surface around the table */
+  .pi-md [data-streamdown='table-wrapper'] > div:has(> table),
+  .pi-md-think [data-streamdown='table-wrapper'] > div:has(> table) {
+    border-radius: 10px !important;
+    border: 1px solid var(--color-border) !important;
+    background: transparent !important;
+  }
+
+  .pi-md [data-streamdown='table'],
+  .pi-md-think [data-streamdown='table'] {
+    display: table !important;
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  .pi-md [data-streamdown='table-header'],
+  .pi-md-think [data-streamdown='table-header'] {
+    background: color-mix(in srgb, var(--color-foreground) 5%, transparent) !important;
+  }
+
+  .pi-md [data-streamdown='table-header-cell'],
+  .pi-md-think [data-streamdown='table-header-cell'] {
+    padding: 7px 12px !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    line-height: 1.5 !important;
+    letter-spacing: 0.02em !important;
+    color: var(--color-muted) !important;
+  }
+
+  .pi-md [data-streamdown='table-cell'],
+  .pi-md-think [data-streamdown='table-cell'] {
+    padding: 7px 12px !important;
+    font-size: 12.5px !important;
+    line-height: 1.5 !important;
+    vertical-align: top;
+  }
+
+  .pi-md [data-streamdown='table-body'] > tr,
+  .pi-md-think [data-streamdown='table-body'] > tr {
+    border-color: color-mix(in srgb, var(--color-foreground) 7%, transparent) !important;
+  }
+
+  .pi-md [data-streamdown='table-body'] > tr:hover,
+  .pi-md-think [data-streamdown='table-body'] > tr:hover {
+    background: color-mix(in srgb, var(--color-foreground) 3%, transparent);
+  }
+
+  /* Bare tables (no Streamdown wrapper) still need to scroll on their own. */
+  .pi-md table:not([data-streamdown='table']) {
     display: block;
     max-width: 100%;
     overflow-x: auto;
