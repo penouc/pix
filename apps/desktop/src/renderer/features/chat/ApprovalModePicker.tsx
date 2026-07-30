@@ -10,10 +10,7 @@ import { cn } from '@/lib/utils';
 /**
  * The three approval modes, each with a one-word label and what it actually does.
  *
- * The descriptions are the same strings the composer used to print beside the
- * control, and they match PolicyEngine rather than the labels' implications —
- * which is the whole reason they are kept. "Auto" alone would suggest everything
- * runs freely; bash still stops, and the menu has to say so.
+ * Descriptions mirror PolicyEngine so the compact label is still unambiguous.
  */
 const MODES: Array<{
   value: ApprovalMode;
@@ -30,7 +27,7 @@ const MODES: Array<{
   {
     value: 'auto-reads',
     word: 'Auto',
-    detail: 'writes run freely, bash asks',
+    detail: 'all tools run without approval',
     icon: <Zap className="h-3.5 w-3.5" />,
   },
   {

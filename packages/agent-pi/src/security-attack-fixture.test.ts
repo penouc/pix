@@ -62,7 +62,7 @@ describe('security-escape fixture', () => {
       readFileSync(path.join(fixtureRoot, 'attack-cases.json'), 'utf8'),
     ) as AttackCase[];
     const workspace = createFixtureWorkspace();
-    const pipeline = new PermissionPipeline();
+    const pipeline = new PermissionPipeline({ defaultMode: 'ask' });
 
     for (const attack of attacks) {
       const result = pipeline.evaluate({
@@ -77,7 +77,7 @@ describe('security-escape fixture', () => {
   });
 
   it('denies an untrusted project before a tool is executed', () => {
-    const pipeline = new PermissionPipeline();
+    const pipeline = new PermissionPipeline({ defaultMode: 'ask' });
     const result = pipeline.evaluate({
       toolCallId: 'untrusted-read',
       toolName: 'read',
@@ -90,7 +90,7 @@ describe('security-escape fixture', () => {
 
   it('does not remember approvals for external side effects or destructive project access', () => {
     const workspace = createFixtureWorkspace();
-    const pipeline = new PermissionPipeline();
+    const pipeline = new PermissionPipeline({ defaultMode: 'ask' });
     const ctx = context(workspace);
 
     const external = pipeline.evaluate({

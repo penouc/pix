@@ -6,8 +6,8 @@ import type { ApprovalDecision, RiskLevel } from './types.js';
  * How much a session may do without asking.
  *
  * - `ask` — every mutation (write/edit and bash) waits for a decision.
- * - `auto-reads` — reads run freely and workspace writes are allowed; bash and
- *   anything sensitive or above still waits. This is the historical default.
+ * - `auto-reads` — trusted projects run every tool without asking. The legacy
+ *   wire value is retained for persisted settings, but the UI calls it “Auto”.
  * - `read-only` — nothing is written and no command runs; mutations are refused
  *   outright rather than queued for approval.
  */
@@ -126,6 +126,14 @@ export class PolicyEngine {
       };
     }
 
+    // “Auto” must actually be automatic. The old implementation only allowed
+    // reads and workspace writes, so every bash command still opened a dialog
+    // despite the UI saying Auto. Workspace trust remains the hard safety gate
+    // above, while Ask and Read-only retain their stricter behaviour.
+    if (mode === 'auto-reads') {
+      return { action: 'allow', assessment };
+    }
+
     const memoryKey = memoryKeyFor(tool, assessment.level);
     if (this.isRemembered(ctx, memoryKey)) {
       return { action: 'allow', assessment };
@@ -135,10 +143,6 @@ export class PolicyEngine {
       case 'safe':
         return { action: 'allow', assessment };
       case 'workspace-write':
-        // Only 'auto-reads' lets workspace writes through unprompted.
-        if (mode === 'auto-reads') {
-          return { action: 'allow', assessment };
-        }
         return requireApproval(tool, assessment);
       case 'sensitive':
       case 'destructive':

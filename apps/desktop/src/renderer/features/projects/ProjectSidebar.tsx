@@ -58,6 +58,7 @@ export function ProjectSidebar({
   const setProject = useWorkspaceStore((s) => s.setProject);
   const setSession = useWorkspaceStore((s) => s.setSession);
   const status = useAgentStreamStore((s) => s.status);
+  const activeRunId = useAgentStreamStore((s) => s.activeRunId);
   const activeSessionId = useAgentStreamStore((s) => s.activeSessionId);
   const resetSessionView = useAgentStreamStore((s) => s.resetSessionView);
   const setScope = useAgentStreamStore((s) => s.setScope);
@@ -158,6 +159,14 @@ export function ProjectSidebar({
 
   async function deleteSession(item: SessionSummary) {
     try {
+      const isRunning =
+        status === 'starting' ||
+        status === 'running' ||
+        status === 'waiting_for_approval' ||
+        status === 'stopping';
+      if (item.id === activeSessionId && activeRunId && isRunning) {
+        await invoke({ method: 'agent.abort', params: { runId: activeRunId } });
+      }
       await invoke<SessionSummary>({
         method: 'session.delete',
         params: { sessionId: item.id, deleted: true },

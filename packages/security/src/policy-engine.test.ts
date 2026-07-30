@@ -39,8 +39,8 @@ describe('PolicyEngine', () => {
     expect(d.action).toBe('deny');
   });
 
-  it('requires approval for git push', () => {
-    const engine = new PolicyEngine();
+  it('requires approval for git push in ask mode', () => {
+    const engine = new PolicyEngine({ defaultMode: 'ask' });
     const tool = normalizeToolCall({
       toolCallId: '1',
       toolName: 'bash',
@@ -56,7 +56,7 @@ describe('PolicyEngine', () => {
   });
 
   it('remembers allow-session for sensitive tools', () => {
-    const engine = new PolicyEngine();
+    const engine = new PolicyEngine({ defaultMode: 'ask' });
     const tool = normalizeToolCall({
       toolCallId: '1',
       toolName: 'bash',
@@ -92,9 +92,25 @@ describe('approval modes', () => {
     workspaceRoot: '/tmp/ws',
   });
 
-  it('auto-reads lets a workspace write through', () => {
+  const bash = normalizeToolCall({
+    toolCallId: 't3',
+    toolName: 'bash',
+    args: { command: 'pnpm install' },
+    workspaceRoot: '/tmp/ws',
+  });
+
+  const external = normalizeToolCall({
+    toolCallId: 't4',
+    toolName: 'bash',
+    args: { command: 'git push origin main' },
+    workspaceRoot: '/tmp/ws',
+  });
+
+  it('auto runs writes and commands without asking', () => {
     const engine = new PolicyEngine({ defaultMode: 'auto-reads' });
     expect(engine.evaluate(write, ctx).action).toBe('allow');
+    expect(engine.evaluate(bash, ctx).action).toBe('allow');
+    expect(engine.evaluate(external, ctx).action).toBe('allow');
   });
 
   it('ask holds a workspace write for a decision', () => {

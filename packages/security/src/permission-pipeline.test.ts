@@ -15,7 +15,7 @@ const ctx = {
 
 describe('PermissionPipeline', () => {
   it('audits and resolves approval decisions', async () => {
-    const pipeline = new PermissionPipeline();
+    const pipeline = new PermissionPipeline({ defaultMode: 'ask' });
     const result = pipeline.evaluate({
       toolCallId: 'tc1',
       toolName: 'bash',

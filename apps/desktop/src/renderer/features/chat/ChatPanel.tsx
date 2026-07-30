@@ -124,6 +124,16 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
   }
 
   const queryClient = useQueryClient();
+  // Composer state belongs to one task. ChatPanel stays mounted while tasks
+  // change, so without an explicit reset an unsent draft from the task we left
+  // became the text sent from the newly-created task.
+  useEffect(() => {
+    setDraft('');
+    setSending(false);
+    setExpanded({});
+    setSkillMenuOpen(false);
+  }, [session?.id]);
+
   const approvalMode = useQuery({
     queryKey: ['agent.getApprovalMode', session?.id],
     queryFn: () =>
@@ -288,8 +298,8 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
 
   async function sendDirect(text: string) {
     if (!text) return;
-    appendUserMessage(text);
     setSending(true);
+    let targetSessionId: string | null = null;
     try {
       let active = session;
       if (!active) {
@@ -303,6 +313,10 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
           return;
         }
       }
+      targetSessionId = active.id;
+      // Creating a session resets the timeline, so append only after the final
+      // destination exists. Otherwise the first message is immediately erased.
+      appendUserMessage(text);
       useAgentStreamStore.setState({ status: 'starting', error: null, errorRetryable: false });
       await invoke<RunRef>({
         method: 'agent.sendMessage',
@@ -310,11 +324,15 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
       });
     } catch (err) {
       console.error(err);
-      useAgentStreamStore.setState({
-        status: 'failed',
-        error: err instanceof Error ? err.message : String(err),
-        errorRetryable: true,
-      });
+      // A slow failure from a task we already left must not turn the new task's
+      // timeline into an error state.
+      if (useAgentStreamStore.getState().activeSessionId === targetSessionId) {
+        useAgentStreamStore.setState({
+          status: 'failed',
+          error: err instanceof Error ? err.message : String(err),
+          errorRetryable: true,
+        });
+      }
     } finally {
       setSending(false);
     }
@@ -341,12 +359,14 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
         addQueuedMessage(text, 'queue');
         return;
       }
-      // Steer mode: send mid-run immediately
+      // Steer mode interrupts the active turn. This used to call followUp,
+      // which deliberately waits until the turn settles and therefore behaved
+      // exactly like a second queue.
       appendUserMessage(text);
       setSending(true);
       try {
-        if (session) {
-          await invoke({ method: 'agent.followUp', params: { sessionId: session.id, text } });
+        if (session && activeRunId) {
+          await invoke({ method: 'agent.steer', params: { runId: activeRunId, text } });
         }
       } catch (err) {
         console.error(err);
@@ -361,11 +381,11 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
 
   async function handleSendNow(item: QueuedMessage) {
     removeQueuedMessage(item.id);
-    if (running && session) {
+    if (running && session && activeRunId) {
       appendUserMessage(item.text);
       setSending(true);
       try {
-        await invoke({ method: 'agent.followUp', params: { sessionId: session.id, text: item.text } });
+        await invoke({ method: 'agent.steer', params: { runId: activeRunId, text: item.text } });
       } catch (err) {
         console.error(err);
       } finally {

@@ -390,6 +390,14 @@ export class PiAgentRuntime implements AgentRuntime {
     if (!record) return;
 
     record.abortedRunIds.add(runId);
+    // A tool hook can be blocked on an approval promise. Deny those requests
+    // before asking Pi to abort or Stop waits forever for a decision the user
+    // is explicitly trying to cancel.
+    for (const pending of this.permissionPipeline?.listPending() ?? []) {
+      if (pending.runId === runId) {
+        this.permissionPipeline?.resolve(pending.requestId, 'deny');
+      }
+    }
     try {
       await record.pi.abort();
       record.pi.abortBash();

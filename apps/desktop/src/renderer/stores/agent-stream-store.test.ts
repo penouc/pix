@@ -44,6 +44,23 @@ describe('agent stream scoping', () => {
     expect(useAgentStreamStore.getState().approval).toBeNull();
   });
 
+  it('rejects run events while the blank task screen has no session', () => {
+    useAgentStreamStore.getState().resetSessionView();
+    useAgentStreamStore.getState().setScope('p1', null);
+    useAgentStreamStore.getState().applyEvent({
+      type: 'message.completed',
+      projectId: 'p1',
+      sessionId: 'task-we-left',
+      runId: 'old-run',
+      sequence: 1,
+      timestamp: Date.now(),
+      messageId: 'old-message',
+      role: 'assistant',
+      content: 'This must not leak into the next task.',
+    } as DesktopAgentEvent);
+    expect(useAgentStreamStore.getState().messages).toHaveLength(0);
+  });
+
   it('still scopes non-approval events to the active session', () => {
     useAgentStreamStore.getState().applyEvent({
       type: 'tool.requested',

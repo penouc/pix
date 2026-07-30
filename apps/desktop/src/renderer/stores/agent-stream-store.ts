@@ -106,8 +106,14 @@ function shouldAccept(
   // waiting forever, so they are exempt from run/session scoping.
   const isApproval = event.type === 'approval.requested' || event.type === 'approval.resolved';
 
-  if (!isApproval && state.activeSessionId && event.sessionId !== state.activeSessionId) {
-    return false;
+  if (!isApproval) {
+    // A null session means the blank “New task” screen, not “accept every
+    // session”. Treating it as a wildcard let a run from the task we just left
+    // repopulate the cleared timeline and made its messages appear in the next
+    // task while that task was being created.
+    if (!state.activeSessionId || event.sessionId !== state.activeSessionId) {
+      return false;
+    }
   }
   if (
     !isApproval &&
@@ -498,6 +504,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
         set({
           status: 'failed',
           activeRunId: event.runId,
+          approval: null,
           error: event.error.message,
           errorRetryable: event.error.retryable,
           lastSequenceByRun,
@@ -508,6 +515,8 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
         set({
           status: 'cancelled',
           activeRunId: event.runId,
+          approval: null,
+          queuedMessages: [],
           lastSequenceByRun,
           messages: get().messages.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
           thinkings: get().thinkings.map((t) => (t.streaming ? { ...t, streaming: false } : t)),

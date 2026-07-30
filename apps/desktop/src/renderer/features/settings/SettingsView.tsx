@@ -278,7 +278,7 @@ function PermissionsTab() {
 
 const MODE_DESC: Record<ApprovalMode, string> = {
   ask: 'Every write and every command waits for you.',
-  'auto-reads': 'Writes inside the project run freely; commands still wait.',
+  'auto-reads': 'All tools run without approval in trusted projects.',
   'read-only': 'Nothing is written and no command runs — mutations are refused, not queued.',
 };
 
@@ -301,7 +301,7 @@ function DefaultApprovalModeRow() {
         aria-label="Default approval mode"
         options={[
           { value: 'ask', label: 'Ask' },
-          { value: 'auto-reads', label: 'Auto writes' },
+          { value: 'auto-reads', label: 'Auto' },
           { value: 'read-only', label: 'Read-only' },
         ]}
         value={current}
