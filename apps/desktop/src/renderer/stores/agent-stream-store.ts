@@ -32,6 +32,8 @@ export interface RunUsage {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  /** Tokens in the latest model call, used for context-window occupancy. */
+  contextTokens?: number;
   costUsd?: number;
 }
 
@@ -70,6 +72,8 @@ interface AgentStreamState {
   tools: ToolCallCard[];
   thinkings: ThinkingCard[];
   usage: RunUsage | null;
+  /** Last reported context occupancy per task, persisted across restarts. */
+  contextTokensBySession: Record<string, number>;
   model: { providerId: string; modelId: string } | null;
   startedAt: number | null;
   lastUserText: string | null;
@@ -125,6 +129,35 @@ function shouldAccept(
   }
   const last = state.lastSequenceByRun[event.runId] ?? -1;
   return event.sequence > last;
+}
+
+const CONTEXT_USAGE_STORAGE_KEY = 'pix:context-usage-by-session';
+
+function readPersistedContextUsage(): Record<string, number> {
+  if (typeof localStorage === 'undefined') return {};
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CONTEXT_USAGE_STORAGE_KEY) ?? '{}') as Record<
+      string,
+      unknown
+    >;
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        (entry): entry is [string, number] =>
+          typeof entry[1] === 'number' && Number.isFinite(entry[1]) && entry[1] >= 0,
+      ),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function persistContextUsage(value: Record<string, number>): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(CONTEXT_USAGE_STORAGE_KEY, JSON.stringify(value));
+  } catch {
+    // Private mode / a full storage quota must not break the chat stream.
+  }
 }
 
 /** Monotonic arrival counter shared by messages and tool cards. */
@@ -244,6 +277,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
   tools: [],
   thinkings: [],
   usage: null,
+  contextTokensBySession: readPersistedContextUsage(),
   model: null,
   startedAt: null,
   lastUserText: null,
@@ -422,6 +456,9 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       thinkings,
       status: 'idle',
       activeRunId: null,
+      usage: get().activeSessionId
+        ? { contextTokens: get().contextTokensBySession[get().activeSessionId!] }
+        : null,
       error: null,
       errorRetryable: false,
       queuedMessages: [],
@@ -449,7 +486,13 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
   },
 
   setScope: (projectId, sessionId) => {
-    set({ activeProjectId: projectId, activeSessionId: sessionId, queuedMessages: [] });
+    const remembered = sessionId ? get().contextTokensBySession[sessionId] : undefined;
+    set({
+      activeProjectId: projectId,
+      activeSessionId: sessionId,
+      usage: remembered == null ? null : { contextTokens: remembered },
+      queuedMessages: [],
+    });
   },
 
   setStopping: (runId) => {
@@ -479,8 +522,12 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
           activeSessionId: event.sessionId,
           status: 'running',
           // Keep prior tool cards in the thread — clearing them made follow-up
-          // runs look like the agent never used any tools.
-          usage: null,
+          // runs look like the agent never used any tools. Keep the last known
+          // context value visible until this run reports a fresher one.
+          usage:
+            state.contextTokensBySession[event.sessionId] == null
+              ? null
+              : { contextTokens: state.contextTokensBySession[event.sessionId] },
           model: event.model ?? null,
           startedAt: event.timestamp,
           approval: null,
@@ -516,7 +563,6 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
           status: 'cancelled',
           activeRunId: event.runId,
           approval: null,
-          queuedMessages: [],
           lastSequenceByRun,
           messages: get().messages.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
           thinkings: get().thinkings.map((t) => (t.streaming ? { ...t, streaming: false } : t)),
@@ -532,8 +578,10 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
         pending.chunks.push(event.delta);
         pendingDeltas.set(event.messageId, pending);
         lastSequenceByRunBuffer[event.runId] = event.sequence;
-        // Still advance sequence bookkeeping immediately so late/dupe events drop.
-        set({ lastSequenceByRun });
+        // Still advance sequence bookkeeping immediately so late/dupe events
+        // drop. A visible content delta also keeps the turn interactive even if
+        // a provider reported its terminal state slightly early.
+        set({ lastSequenceByRun, status: state.status === 'stopping' ? 'stopping' : 'running' });
         scheduleDeltaFlush(get, set);
         break;
       }
@@ -576,7 +624,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
         pending.push(event.delta);
         pendingThinkingDeltas.set(event.messageId, pending);
         lastSequenceByRunBuffer[event.runId] = event.sequence;
-        set({ lastSequenceByRun });
+        set({ lastSequenceByRun, status: state.status === 'stopping' ? 'stopping' : 'running' });
         scheduleDeltaFlush(get, set);
         break;
       }
@@ -686,12 +734,30 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
             inputTokens != null && outputTokens != null
               ? inputTokens + outputTokens
               : event.totalTokens ?? prev?.totalTokens;
+          // Billing totals accumulate across tool/model turns, but context
+          // occupancy is the latest call only. Summing every turn can report
+          // more than 100% even though each individual prompt fits.
+          const contextTokens =
+            event.totalTokens ??
+            (event.inputTokens != null || event.outputTokens != null
+              ? (event.inputTokens ?? 0) + (event.outputTokens ?? 0)
+              : prev?.contextTokens);
+          const contextTokensBySession =
+            contextTokens == null
+              ? state.contextTokensBySession
+              : {
+                  ...state.contextTokensBySession,
+                  [event.sessionId]: contextTokens,
+                };
+          if (contextTokens != null) persistContextUsage(contextTokensBySession);
           return {
             lastSequenceByRun,
+            contextTokensBySession,
             usage: {
               inputTokens,
               outputTokens,
               totalTokens,
+              contextTokens,
               costUsd,
             },
           };

@@ -19,7 +19,6 @@ import { ChatPanel } from '@/features/chat/ChatPanel';
 import { DiffPanel } from '@/features/diff/DiffPanel';
 import { ProjectSidebar, type SidebarDestination } from '@/features/projects/ProjectSidebar';
 import { SearchPalette, type PaletteCommand } from '@/features/search/SearchPalette';
-import { useCreateTask } from '@/features/sessions/use-create-task';
 import { SettingsView } from '@/features/settings/SettingsView';
 import { SkillsView } from '@/features/skills/SkillsView';
 import { TerminalView } from '@/features/terminal/TerminalView';
@@ -41,7 +40,7 @@ export function App() {
   const [projectError, setProjectError] = useState<string | null>(null);
   const [recoveryRunId, setRecoveryRunId] = useState<string | undefined>();
   const [diffFocusPath, setDiffFocusPath] = useState<string | undefined>();
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [dismissedApproval, setDismissedApproval] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [composerInsert, setComposerInsert] = useState<{ text: string; token: number } | null>(
@@ -58,7 +57,6 @@ export function App() {
   const approval = useAgentStreamStore((s) => s.approval);
   const applyEvent = useAgentStreamStore((s) => s.applyEvent);
   const loadHistory = useAgentStreamStore((s) => s.loadHistory);
-  const { createTask } = useCreateTask();
 
   /**
    * Subscribed at the shell, not in the thread: a run keeps streaming while the
@@ -99,15 +97,19 @@ export function App() {
     queryFn: () => invoke<CheckpointRecoverySummary[]>({ method: 'checkpoint.listRecoverable' }),
   });
 
-  const newTask = useCallback(async () => {
-    const current = useWorkspaceStore.getState().session;
-    const created = await createTask();
-    if (created) {
+  const newTask = useCallback(
+    (previous?: SessionSummary | null) => {
+      const workspace = useWorkspaceStore.getState();
+      const current = previous === undefined ? workspace.session : previous;
       if (current) setPriorSession(current);
+      setSession(null);
+      resetSessionView();
+      if (workspace.project) setScope(workspace.project.id, null);
       setBlankRun(true);
       setView('run');
-    }
-  }, [createTask]);
+    },
+    [resetSessionView, setScope, setSession],
+  );
 
   const setActiveProject = useWorkspaceStore((s) => s.setActiveProject);
 
@@ -164,14 +166,7 @@ export function App() {
         }
       })();
     },
-    [
-      queryClient,
-      setActiveProject,
-      setSession,
-      resetSessionView,
-      setScope,
-      loadHistory,
-    ],
+    [queryClient, setActiveProject, setSession, resetSessionView, setScope, loadHistory],
   );
 
   const goBackFromRun = useCallback(() => {
@@ -276,12 +271,24 @@ export function App() {
 
   const commands = useMemo<PaletteCommand[]>(
     () => [
-      { id: 'new-task', title: 'New task', hint: '⌘N', run: () => void newTask() },
+      { id: 'new-task', title: 'New task', hint: '⌘N', run: () => newTask() },
       { id: 'terminal', title: 'Open terminal', run: () => setView('terminal') },
       { id: 'automations', title: 'Open automations', run: () => setView('automations') },
       { id: 'skills', title: 'Open skills', run: () => setView('skills') },
-      { id: 'review', title: 'Review changes', run: () => { setDiffFocusPath(undefined); setView('diff'); } },
-      { id: 'open-project', title: 'Open project folder', hint: '⌘O', run: () => void browseForProject() },
+      {
+        id: 'review',
+        title: 'Review changes',
+        run: () => {
+          setDiffFocusPath(undefined);
+          setView('diff');
+        },
+      },
+      {
+        id: 'open-project',
+        title: 'Open project folder',
+        hint: '⌘O',
+        run: () => void browseForProject(),
+      },
       { id: 'settings', title: 'Open settings', hint: '⌘,', run: () => setView('settings') },
     ],
     [newTask, browseForProject],
@@ -292,7 +299,7 @@ export function App() {
       if (!(event.metaKey || event.ctrlKey)) return;
       if (event.key === 'n') {
         event.preventDefault();
-        void newTask();
+        newTask();
       }
       if (event.key === 'k') {
         event.preventDefault();
@@ -378,6 +385,7 @@ export function App() {
             onTogglePanel={() => setPanelOpen((open) => !open)}
             insert={composerInsert}
             blank={blankRun}
+            onTaskStarted={() => setBlankRun(false)}
           />
         )}
       </div>
@@ -391,11 +399,7 @@ export function App() {
           activeNav={view}
           isBlankRun={blankRun}
           onOpenSettings={() => setView(view === 'settings' ? 'run' : 'settings')}
-          onNewTask={(previous) => {
-            if (previous) setPriorSession(previous);
-            setBlankRun(true);
-            setView('run');
-          }}
+          onNewTask={newTask}
           onSelectSession={selectSession}
           onOpenSearch={() => setSearchOpen(true)}
           onBrowseForProject={() => void browseForProject()}

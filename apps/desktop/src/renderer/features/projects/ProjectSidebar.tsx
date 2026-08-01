@@ -14,7 +14,6 @@ import { useEffect, useState, type ReactNode } from 'react';
 
 import type { ProjectSummary, SessionSummary } from '@pi-desktop/protocol';
 
-import { useCreateTask } from '@/features/sessions/use-create-task';
 import { invoke } from '@/lib/ipc';
 import { dotStyle, statusTone, type RunStatus } from '@/lib/status';
 import { cn } from '@/lib/utils';
@@ -63,7 +62,6 @@ export function ProjectSidebar({
   const resetSessionView = useAgentStreamStore((s) => s.resetSessionView);
   const setScope = useAgentStreamStore((s) => s.setScope);
 
-  const { createTask, busy: creating, error: createError } = useCreateTask();
   /** Which projects show their tasks. The open one starts expanded. */
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [opening, setOpening] = useState(false);
@@ -87,8 +85,8 @@ export function ProjectSidebar({
     });
   }
 
-  const busy = creating || opening;
-  const error = openError ?? createError ?? externalError ?? null;
+  const busy = opening;
+  const error = openError ?? externalError ?? null;
 
   const queryClient = useQueryClient();
   const recent = useQuery({
@@ -96,8 +94,8 @@ export function ProjectSidebar({
     queryFn: () => invoke<ProjectSummary[]>({ method: 'project.listRecent' }),
   });
 
-  async function openProjectPath(path: string) {
-    if (!path.trim() || opening) return;
+  async function openProjectPath(path: string): Promise<ProjectSummary | null> {
+    if (!path.trim() || opening) return null;
     setOpening(true);
     setOpenError(null);
     try {
@@ -113,25 +111,26 @@ export function ProjectSidebar({
       // No task is selected in the project you just switched to, so the run
       // screen would otherwise keep showing the previous project's thread.
       onProjectSwitched();
+      return opened;
     } catch (err) {
       setOpenError(err instanceof Error ? err.message : String(err));
+      return null;
     } finally {
       setOpening(false);
     }
   }
 
   /**
-   * New task, always. When no project is open this used to raise the project
-   * picker instead — a button labelled "New task" that asked for a folder — so
-   * it now falls back to the playground workspace and puts the task there.
+   * Prepare an unstarted task. Session creation is deliberately deferred until
+   * the first message, so the project selector above the composer can still
+   * change where the task belongs without leaving empty sessions behind.
    */
   async function handleNewTask(into?: ProjectSummary) {
+    const prior = session;
     let target = into ?? project;
-    // Creating a task in a project you are not in switches to it first, or the
-    // task would open behind the wrong workspace.
     if (into && into.id !== project?.id) {
-      await openProjectPath(into.path);
-      target = into;
+      target = await openProjectPath(into.path);
+      if (!target) return;
     }
     if (!target) {
       setOpening(true);
@@ -150,11 +149,7 @@ export function ProjectSidebar({
         setOpening(false);
       }
     }
-    // Passed explicitly: the store selector above is still the old value in this
-    // tick when the playground was only just opened.
-    const prior = session;
-    const created = await createTask(target);
-    if (created) onNewTask(prior);
+    onNewTask(prior);
   }
 
   async function deleteSession(item: SessionSummary) {
@@ -232,38 +227,39 @@ export function ProjectSidebar({
         and grouping by project is now the structure of the list itself, not a
         setting. The second only ever said it was not implemented.
       */}
-      <div className="flex items-center justify-end px-2.5 pb-2.5">
-        <IconButton title="Open project folder" disabled={busy} onClick={onBrowseForProject}>
-          <FolderOpen className="h-3.5 w-3.5" />
-        </IconButton>
-      </div>
-
       {error ? (
         <div className="px-3.5 pb-2 text-[11px] leading-snug text-danger">{error}</div>
       ) : null}
 
       {/* Projects, each owning its own task list */}
       <div className="min-h-0 flex-1 overflow-y-auto px-2.5 pb-2">
-        <SectionLabel>Projects</SectionLabel>
+        <div className="flex h-7 items-center justify-between px-1.5 pb-1">
+          <SectionLabel>Projects</SectionLabel>
+          <IconButton title="Open project folder" disabled={busy} onClick={onBrowseForProject}>
+            <FolderOpen className="h-3.5 w-3.5" />
+          </IconButton>
+        </div>
         <div className="flex flex-col gap-px">
           {recent.data?.length ? (
-            recent.data.slice(0, 12).map((item) => (
-              <ProjectBranch
-                key={item.id}
-                project={item}
-                isActive={project?.id === item.id}
-                expanded={expanded.has(item.id)}
-                busy={busy}
-                activeSessionId={activeSessionId}
-                runStatus={status}
-                selectedSessionId={session?.id ?? null}
-                onToggle={() => toggleExpanded(item.id)}
-                onOpenProject={() => void openProjectPath(item.path)}
-                onSelectSession={selectSession}
-                onDeleteSession={(item) => void deleteSession(item)}
-                onNewTask={() => void handleNewTask(item)}
-              />
-            ))
+            recent.data
+              .slice(0, 12)
+              .map((item) => (
+                <ProjectBranch
+                  key={item.id}
+                  project={item}
+                  isActive={project?.id === item.id}
+                  expanded={expanded.has(item.id)}
+                  busy={busy}
+                  activeSessionId={activeSessionId}
+                  runStatus={status}
+                  selectedSessionId={session?.id ?? null}
+                  onToggle={() => toggleExpanded(item.id)}
+                  onOpenProject={() => void openProjectPath(item.path)}
+                  onSelectSession={selectSession}
+                  onDeleteSession={(item) => void deleteSession(item)}
+                  onNewTask={() => void handleNewTask(item)}
+                />
+              ))
           ) : (
             <EmptyHint>No projects yet</EmptyHint>
           )}
@@ -351,7 +347,7 @@ function IconButton({
 
 function SectionLabel({ children }: { children: string }) {
   return (
-    <div className="px-1.5 pt-0.5 pb-1 text-[10px] font-bold tracking-[0.14em] text-foreground/45 uppercase">
+    <div className="text-[10px] font-bold tracking-[0.14em] text-foreground/45 uppercase">
       {children}
     </div>
   );

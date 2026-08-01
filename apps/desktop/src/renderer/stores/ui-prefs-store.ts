@@ -21,6 +21,7 @@ interface UiPrefs {
   dockTab: DockTab;
   dockWidth: number;
   sidebarWidth: number;
+  sidebarCollapsed: boolean;
 }
 
 interface UiPrefsState extends UiPrefs {
@@ -40,6 +41,7 @@ const DEFAULTS: UiPrefs = {
   // Wide enough for a terminal line and a diff hunk without horizontal scroll.
   dockWidth: 440,
   sidebarWidth: 210,
+  sidebarCollapsed: false,
 };
 
 /**
@@ -63,6 +65,7 @@ function load(): UiPrefs {
       // squeeze the thread to nothing on this one.
       dockWidth: clampDockWidth(parsed.dockWidth ?? DEFAULTS.dockWidth),
       sidebarWidth: clampSidebarWidth(parsed.sidebarWidth ?? DEFAULTS.sidebarWidth),
+      sidebarCollapsed: parsed.sidebarCollapsed ?? DEFAULTS.sidebarCollapsed,
     };
   } catch {
     return DEFAULTS;
@@ -125,6 +128,7 @@ export const useUiPrefsStore = create<UiPrefsState>((set, get) => ({
       dockTab: next.dockTab,
       dockWidth: next.dockWidth,
       sidebarWidth: next.sidebarWidth,
+      sidebarCollapsed: next.sidebarCollapsed,
     };
     const resolved = resolve(prefs.theme);
     set({ resolvedTheme: resolved });
@@ -156,6 +160,7 @@ export function initUiPrefs() {
         dockTab: state.dockTab,
         dockWidth: state.dockWidth,
         sidebarWidth: state.sidebarWidth,
+        sidebarCollapsed: state.sidebarCollapsed,
       },
       resolved,
     );

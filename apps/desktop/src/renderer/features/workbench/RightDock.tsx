@@ -1,5 +1,5 @@
 import { FileCode2, FolderTree, Globe, SquareTerminal } from 'lucide-react';
-import { useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { PanelResizer } from '@/components/layout/PanelResizer';
 import { BrowserPanel } from '@/features/browser/BrowserPanel';
@@ -13,6 +13,9 @@ import {
   DOCK_MAX_WIDTH,
   type DockTab,
 } from '@/stores/ui-prefs-store';
+
+const MIN_THREAD_WIDTH = 440;
+const RESIZER_WIDTH = 8;
 
 const TABS: Array<{ id: DockTab; label: string; icon: ReactNode }> = [
   { id: 'files', label: 'Files', icon: <FolderTree className="h-3.5 w-3.5" /> },
@@ -41,23 +44,44 @@ export function RightDock({
   const tab = useUiPrefsStore((s) => s.dockTab);
   const setPref = useUiPrefsStore((s) => s.set);
   const width = useUiPrefsStore((s) => s.dockWidth);
+  const sidebarWidth = useUiPrefsStore((s) => s.sidebarWidth);
+  const sidebarCollapsed = useUiPrefsStore((s) => s.sidebarCollapsed);
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   /** Once the terminal has been opened it is never torn down — see above. */
   const terminalTouched = useRef(false);
   if (tab === 'terminal') terminalTouched.current = true;
 
+  useEffect(() => {
+    const updateViewportWidth = () => setViewportWidth(window.innerWidth);
+    window.addEventListener('resize', updateViewportWidth);
+    return () => window.removeEventListener('resize', updateViewportWidth);
+  }, []);
+
+  // Never let the dock cover or collapse the conversation. The preferred width
+  // is retained in the store, while the rendered width adapts to this window.
+  const occupiedSidebarWidth = sidebarCollapsed ? 0 : sidebarWidth + RESIZER_WIDTH;
+  const availableDockWidth =
+    viewportWidth - occupiedSidebarWidth - MIN_THREAD_WIDTH - RESIZER_WIDTH;
+  const maxWidth = Math.max(
+    DOCK_MIN_WIDTH,
+    Math.min(DOCK_MAX_WIDTH, Math.floor(availableDockWidth)),
+  );
+  const renderedWidth = Math.min(width, maxWidth);
+
   return (
-    <>
+    <section
+      aria-label="Workbench dock"
+      className="relative z-0 flex min-h-0 flex-none isolate overflow-hidden bg-surface"
+      style={{ width: renderedWidth + RESIZER_WIDTH, backgroundColor: 'var(--color-surface)' }}
+    >
       <PanelResizer
         side="right"
-        value={width}
+        value={renderedWidth}
         min={DOCK_MIN_WIDTH}
-        max={DOCK_MAX_WIDTH}
+        max={maxWidth}
         onChange={(next) => setPref('dockWidth', next)}
       />
-      <aside
-        className="flex min-h-0 flex-none flex-col border-l border-border bg-surface"
-        style={{ width }}
-      >
+      <aside className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-l border-border bg-surface">
         <div
           role="tablist"
           aria-label="Workbench panels"
@@ -94,6 +118,6 @@ export function RightDock({
           ) : null}
         </div>
       </aside>
-    </>
+    </section>
   );
 }

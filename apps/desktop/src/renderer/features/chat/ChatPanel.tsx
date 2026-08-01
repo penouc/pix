@@ -1,10 +1,14 @@
 import {
   ArrowUp,
   BookOpen,
+  Check,
   ChevronDown,
   ChevronLeft,
+  Copy,
+  FileCode2,
   FilePlus2,
   FileText,
+  FolderOpen,
   FolderSearch,
   GitBranch,
   ListOrdered,
@@ -20,17 +24,20 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import type {
   ApprovalDecision,
   ApprovalMode,
   IndexSearchResult,
+  ModelInfo,
+  ProjectSummary,
   RunRef,
   SkillInfo,
 } from '@pi-desktop/protocol';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { SearchableSelect } from '@/components/SearchableSelect';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
@@ -40,7 +47,7 @@ import { ThinkingPlaceholderRow, ThinkingStreamRow } from '@/features/chat/Think
 import { Markdown } from '@/features/chat/Markdown';
 import { ModelPicker } from '@/features/models/ModelPicker';
 import { useCreateTask } from '@/features/sessions/use-create-task';
-import { invoke } from '@/lib/ipc';
+import { invoke, IpcError } from '@/lib/ipc';
 import {
   dotStyle,
   formatDuration,
@@ -57,6 +64,8 @@ import {
   type ToolCallCard,
 } from '@/stores/agent-stream-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
+
+const LAST_TASK_PROJECT_KEY = 'pi-desktop.last-task-project-id';
 
 const toolIcons: Record<string, ReactNode> = {
   read: <BookOpen className="h-3 w-3" />,
@@ -79,11 +88,22 @@ interface ChatPanelProps {
    * list with this state: same screen, no run to report on yet.
    */
   blank: boolean;
+  /** Called once the deferred session for a new task has been created. */
+  onTaskStarted: () => void;
 }
 
-export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: ChatPanelProps) {
+export function ChatPanel({
+  onBack,
+  panelOpen,
+  onTogglePanel,
+  insert,
+  blank,
+  onTaskStarted,
+}: ChatPanelProps) {
   const session = useWorkspaceStore((s) => s.session);
   const project = useWorkspaceStore((s) => s.project);
+  const selectedModel = useWorkspaceStore((s) => s.selectedModel);
+  const setProject = useWorkspaceStore((s) => s.setProject);
   const { createTask } = useCreateTask();
   const messages = useAgentStreamStore((s) => s.messages);
   const tools = useAgentStreamStore((s) => s.tools);
@@ -91,6 +111,7 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
   const status = useAgentStreamStore((s) => s.status);
   const activeRunId = useAgentStreamStore((s) => s.activeRunId);
   const usage = useAgentStreamStore((s) => s.usage);
+  const model = useAgentStreamStore((s) => s.model);
   const startedAt = useAgentStreamStore((s) => s.startedAt);
   const approval = useAgentStreamStore((s) => s.approval);
   const error = useAgentStreamStore((s) => s.error);
@@ -103,12 +124,16 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
   const removeQueuedMessage = useAgentStreamStore((s) => s.removeQueuedMessage);
   const clearQueue = useAgentStreamStore((s) => s.clearQueue);
   const popNextQueuedMessage = useAgentStreamStore((s) => s.popNextQueuedMessage);
+  const resetSessionView = useAgentStreamStore((s) => s.resetSessionView);
+  const setScope = useAgentStreamStore((s) => s.setScope);
 
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [queueMode, setQueueMode] = useState<'queue' | 'steer'>('queue');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
+  const [projectSwitching, setProjectSwitching] = useState(false);
+  const [projectSwitchError, setProjectSwitchError] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const composerDockRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -124,6 +149,76 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
   }
 
   const queryClient = useQueryClient();
+  const recentProjects = useQuery({
+    queryKey: ['project.listRecent'],
+    queryFn: () => invoke<ProjectSummary[]>({ method: 'project.listRecent' }),
+  });
+  const projectOptions = useMemo(() => {
+    const byId = new Map<string, ProjectSummary>();
+    if (project) byId.set(project.id, project);
+    for (const item of recentProjects.data ?? []) byId.set(item.id, item);
+    return [
+      ...[...byId.values()]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((item) => ({ value: item.id, label: item.name, sublabel: item.path })),
+      { value: '__browse__', label: 'Open another folder…', sublabel: 'Choose a project folder' },
+    ];
+  }, [project, recentProjects.data]);
+
+  async function selectProject(projectId: string) {
+    if (projectSwitching || projectId === project?.id) return;
+    setProjectSwitching(true);
+    setProjectSwitchError(null);
+    try {
+      const target = (recentProjects.data ?? []).find((item) => item.id === projectId);
+      if (projectId !== '__browse__' && !target) throw new Error('Project is no longer available.');
+      const opened =
+        projectId === '__browse__'
+          ? await invoke<ProjectSummary>({ method: 'project.pickFolder' })
+          : await invoke<ProjectSummary>({
+              method: 'project.open',
+              params: { path: target!.path },
+            });
+      setProject(opened);
+      resetSessionView();
+      setScope(opened.id, null);
+      await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
+      focusComposer();
+    } catch (err) {
+      if (err instanceof IpcError && err.code === 'CANCELLED') return;
+      setProjectSwitchError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setProjectSwitching(false);
+    }
+  }
+
+  useEffect(() => {
+    if (session && project) {
+      try {
+        localStorage.setItem(LAST_TASK_PROJECT_KEY, project.id);
+      } catch {
+        // Storage is optional; the active project still remains the in-window default.
+      }
+    }
+  }, [project, session]);
+
+  useEffect(() => {
+    if (!blank || project || !recentProjects.data?.length) return;
+    let preferredId = '';
+    try {
+      preferredId = localStorage.getItem(LAST_TASK_PROJECT_KEY) ?? '';
+    } catch {
+      // Fall back to the most recently opened project below.
+    }
+    const fallback =
+      recentProjects.data.find((item) => item.id === preferredId) ??
+      [...recentProjects.data].sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)[0];
+    if (!fallback) return;
+    setProject(fallback);
+    resetSessionView();
+    setScope(fallback.id, null);
+  }, [blank, project, recentProjects.data, resetSessionView, setProject, setScope]);
+
   // Composer state belongs to one task. ChatPanel stays mounted while tasks
   // change, so without an explicit reset an unsent draft from the task we left
   // became the text sent from the newly-created task.
@@ -133,6 +228,12 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
     setExpanded({});
     setSkillMenuOpen(false);
   }, [session?.id]);
+
+  // New task should always arrive ready for typing. Project selection is
+  // separate from the textarea, so changing folders never steals the draft.
+  useEffect(() => {
+    if (blank) focusComposer();
+  }, [blank, project?.id]);
 
   const approvalMode = useQuery({
     queryKey: ['agent.getApprovalMode', session?.id],
@@ -147,6 +248,15 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
       invoke({ method: 'agent.setApprovalMode', params: { mode, sessionId: session?.id } }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['agent.getApprovalMode'] }),
   });
+
+  const models = useQuery({
+    queryKey: ['agent.models'],
+    queryFn: () => invoke<ModelInfo[]>({ method: 'agent.listModels' }),
+  });
+  const activeModelKey = model ? `${model.providerId}/${model.modelId}` : selectedModel;
+  const contextWindow = models.data?.find(
+    (entry) => `${entry.providerId}/${entry.modelId}` === activeModelKey,
+  )?.contextWindow;
 
   const branch = useQuery({
     queryKey: ['git.getBranch', project?.id],
@@ -164,6 +274,20 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
       invoke<SkillInfo[]>({ method: 'skills.list', params: { projectId: project?.id } }),
   });
 
+  // Grow with the prompt up to a useful ceiling, then scroll internally. A
+  // fixed 52px composer made long instructions feel like editing through a
+  // keyhole and hid most of the text being sent.
+  useLayoutEffect(() => {
+    const textarea = composerRef.current;
+    if (!textarea) return;
+    const minHeight = 52;
+    const maxHeight = 240;
+    textarea.style.height = '0px';
+    const nextHeight = Math.min(maxHeight, Math.max(minHeight, textarea.scrollHeight));
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
+  }, [draft]);
+
   // Text handed in from the Skills screen or the ⌘K palette.
   useEffect(() => {
     if (!insert) return;
@@ -176,10 +300,8 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
   useEffect(() => {
     const prev = prevStatusRef.current;
     prevStatusRef.current = status;
-    const wasRunning =
-      prev === 'running' || prev === 'starting' || prev === 'stopping';
-    const finished =
-      status === 'completed' || status === 'failed' || status === 'cancelled';
+    const wasRunning = prev === 'running' || prev === 'starting' || prev === 'stopping';
+    const finished = status === 'completed' || status === 'failed' || status === 'cancelled';
     if (wasRunning && finished && !approval && project) {
       focusComposer();
     }
@@ -265,15 +387,20 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
     el.scrollTop = el.scrollHeight;
   }, [messages, tools, status, approval, thinkings, composerPad]);
 
+  const hasStreamingAssistant = messages.some((m) => m.role === 'assistant' && m.streaming);
+  const hasRunningTools = tools.some((t) => t.status === 'running');
+  const hasStreamingThinking = thinkings.some((t) => t.streaming);
+  // Some providers report their terminal run state just ahead of the final
+  // render batch. Streaming content is itself proof that the turn is still
+  // interactive, so keep Queue / Steer available for the whole visible output.
   const running =
     status === 'running' ||
     status === 'starting' ||
     status === 'waiting_for_approval' ||
-    status === 'stopping';
-
-  const hasStreamingAssistant = messages.some((m) => m.role === 'assistant' && m.streaming);
-  const hasRunningTools = tools.some((t) => t.status === 'running');
-  const hasStreamingThinking = thinkings.some((t) => t.streaming);
+    status === 'stopping' ||
+    hasStreamingAssistant ||
+    hasStreamingThinking ||
+    hasRunningTools;
   const showThinking =
     (status === 'starting' || status === 'running' || status === 'stopping') &&
     !hasStreamingThinking &&
@@ -312,6 +439,7 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
           });
           return;
         }
+        onTaskStarted();
       }
       targetSessionId = active.id;
       // Creating a session resets the timeline, so append only after the final
@@ -506,166 +634,169 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
               {!timeline.length && !approval ? (
                 <div className="flex flex-col items-center gap-2 px-5 py-20 text-center">
                   <div className="text-sm font-bold">
-                    {session ? 'Describe what it should do' : 'Open a project to start'}
+                    {project ? 'Describe what it should do' : 'Choose a project to start'}
                   </div>
                   <p className="max-w-[320px] text-[12.5px] leading-relaxed text-muted">
-                    {session
+                    {project
                       ? "Type below — @ for a file, $ for a skill, ⌘K for commands. It'll read the project, plan, then ask before running anything risky."
-                      : 'Use Open project in the sidebar, then start a task.'}
+                      : 'Choose a project above the composer. You can start typing while it loads.'}
                   </p>
                 </div>
               ) : null}
 
-            {timeline.map((entry) =>
-              entry.kind === 'message' ? (
-                entry.message.role === 'user' ? (
-                  <div
-                    key={`message:${entry.message.id}`}
-                    className="max-w-[78%] self-end rounded-[22px_22px_6px_22px] bg-surface px-4 py-2.5 text-[13.5px] leading-relaxed shadow-[var(--shadow-sm)] whitespace-pre-wrap"
-                  >
-                    {entry.message.content}
-                  </div>
-                ) : (
-                  <AssistantMessage
-                    key={`message:${entry.message.id}`}
-                    content={entry.message.content}
-                    streaming={entry.message.streaming}
-                  />
-                )
-              ) : entry.kind === 'thinking' ? (
-                <ThinkingStreamRow
-                  key={`thinking:${entry.thinking.id}`}
-                  content={entry.thinking.content}
-                  streaming={entry.thinking.streaming}
-                  expanded={Boolean(expanded[entry.thinking.id])}
-                  onToggle={() =>
-                    setExpanded((state) => ({
-                      ...state,
-                      [entry.thinking.id]: !state[entry.thinking.id],
-                    }))
-                  }
-                />
-              ) : (
-                <ToolCard
-                  key={`tool:${entry.tool.id}`}
-                  tool={entry.tool}
-                  expanded={Boolean(expanded[entry.tool.id])}
-                  onToggle={() =>
-                    setExpanded((state) => ({ ...state, [entry.tool.id]: !state[entry.tool.id] }))
-                  }
-                />
-              ),
-            )}
-
-            {/* Approval */}
-            {approval ? (
-              <div className="flex flex-col gap-3 rounded-[20px] border border-accent/30 bg-accent-100 px-4 py-4">
-                <div className="flex items-center gap-2.5">
-                  <Lock className="h-4 w-4 flex-none text-accent-800" />
-                  <div className="text-sm font-bold text-accent-900">Approval required</div>
-                  <Badge tone="outline" className="text-[10.5px]">
-                    risk: {approval.riskLevel}
-                  </Badge>
-                </div>
-                <div className="pl-[26px] text-[13px] leading-normal text-accent-900">
-                  {approval.summary}
-                </div>
-                {approval.command ? (
-                  <pre className="output-pre ml-[26px] rounded-[14px] px-3.5 py-2.5">
-                    {approval.command}
-                  </pre>
-                ) : null}
-                {approval.reasons.length ? (
-                  <div className="flex flex-col gap-1.5 pl-[26px]">
-                    {approval.reasons.map((reason) => (
-                      <div key={reason} className="flex items-start gap-2.5 text-[12.5px]">
-                        <span className="mt-[7px] h-1.5 w-1.5 flex-none rounded-full bg-accent-2" />
-                        <span className="leading-normal text-accent-900">{reason}</span>
+              {timeline.map((entry) =>
+                entry.kind === 'message' ? (
+                  entry.message.role === 'user' ? (
+                    <div
+                      key={`message:${entry.message.id}`}
+                      className="group/message flex max-w-[78%] self-end flex-col items-end gap-1.5"
+                    >
+                      <div className="rounded-[22px_22px_6px_22px] bg-surface px-4 py-2.5 text-[13.5px] leading-relaxed shadow-[var(--shadow-sm)] whitespace-pre-wrap">
+                        {entry.message.content}
                       </div>
-                    ))}
+                      <MessageCopyButton content={entry.message.content} />
+                    </div>
+                  ) : (
+                    <AssistantMessage
+                      key={`message:${entry.message.id}`}
+                      content={entry.message.content}
+                      streaming={entry.message.streaming}
+                    />
+                  )
+                ) : entry.kind === 'thinking' ? (
+                  <ThinkingStreamRow
+                    key={`thinking:${entry.thinking.id}`}
+                    content={entry.thinking.content}
+                    streaming={entry.thinking.streaming}
+                    expanded={Boolean(expanded[entry.thinking.id])}
+                    onToggle={() =>
+                      setExpanded((state) => ({
+                        ...state,
+                        [entry.thinking.id]: !state[entry.thinking.id],
+                      }))
+                    }
+                  />
+                ) : (
+                  <ToolCard
+                    key={`tool:${entry.tool.id}`}
+                    tool={entry.tool}
+                    expanded={Boolean(expanded[entry.tool.id])}
+                    onToggle={() =>
+                      setExpanded((state) => ({ ...state, [entry.tool.id]: !state[entry.tool.id] }))
+                    }
+                  />
+                ),
+              )}
+
+              {/* Approval */}
+              {approval ? (
+                <div className="flex flex-col gap-3 rounded-[20px] border border-accent/30 bg-accent-100 px-4 py-4">
+                  <div className="flex items-center gap-2.5">
+                    <Lock className="h-4 w-4 flex-none text-accent-800" />
+                    <div className="text-sm font-bold text-accent-900">Approval required</div>
+                    <Badge tone="outline" className="text-[10.5px]">
+                      risk: {approval.riskLevel}
+                    </Badge>
                   </div>
-                ) : null}
-                {approval.affectedPaths.length ? (
-                  <div className="pl-[26px] font-mono text-[11px] text-accent-800/80">
-                    {approval.affectedPaths.slice(0, 4).join('  ')}
-                    {approval.affectedPaths.length > 4
-                      ? `  +${approval.affectedPaths.length - 4} more`
-                      : ''}
+                  <div className="pl-[26px] text-[13px] leading-normal text-accent-900">
+                    {approval.summary}
                   </div>
-                ) : null}
-                <div className="flex flex-wrap items-center gap-2 pl-[26px]">
-                  <Button size="sm" onClick={() => void resolveApproval('allow-once')}>
-                    Allow once
-                  </Button>
-                  {approval.rememberable ? (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className="border-accent/35"
-                        onClick={() => void resolveApproval('allow-session')}
-                      >
-                        Allow session
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className="border-accent/35"
-                        onClick={() => void resolveApproval('allow-project')}
-                      >
-                        Allow project
-                      </Button>
-                    </>
+                  {approval.command ? (
+                    <pre className="output-pre ml-[26px] rounded-[14px] px-3.5 py-2.5">
+                      {approval.command}
+                    </pre>
                   ) : null}
-                  <span className="flex-1" />
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-accent-800"
-                    onClick={() => void resolveApproval('deny')}
-                  >
-                    Deny
-                  </Button>
+                  {approval.reasons.length ? (
+                    <div className="flex flex-col gap-1.5 pl-[26px]">
+                      {approval.reasons.map((reason) => (
+                        <div key={reason} className="flex items-start gap-2.5 text-[12.5px]">
+                          <span className="mt-[7px] h-1.5 w-1.5 flex-none rounded-full bg-accent-2" />
+                          <span className="leading-normal text-accent-900">{reason}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {approval.affectedPaths.length ? (
+                    <div className="pl-[26px] font-mono text-[11px] text-accent-800/80">
+                      {approval.affectedPaths.slice(0, 4).join('  ')}
+                      {approval.affectedPaths.length > 4
+                        ? `  +${approval.affectedPaths.length - 4} more`
+                        : ''}
+                    </div>
+                  ) : null}
+                  <div className="flex flex-wrap items-center gap-2 pl-[26px]">
+                    <Button size="sm" onClick={() => void resolveApproval('allow-once')}>
+                      Allow once
+                    </Button>
+                    {approval.rememberable ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="border-accent/35"
+                          onClick={() => void resolveApproval('allow-session')}
+                        >
+                          Allow session
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="border-accent/35"
+                          onClick={() => void resolveApproval('allow-project')}
+                        >
+                          Allow project
+                        </Button>
+                      </>
+                    ) : null}
+                    <span className="flex-1" />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-accent-800"
+                      onClick={() => void resolveApproval('deny')}
+                    >
+                      Deny
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ) : null}
+              ) : null}
 
-            {/* Error */}
-            {error ? (
-              <div className="flex items-center justify-between gap-3 rounded-[18px] border border-danger/30 bg-danger/10 px-4 py-2.5 text-[12.5px] text-danger">
-                <span className="min-w-0 flex-1">{error}</span>
-                {errorRetryable && lastUserText ? (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={sending || running}
-                    onClick={() => void retry()}
-                  >
-                    <RotateCcw className="h-3 w-3" />
-                    Retry
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
+              {/* Error */}
+              {error ? (
+                <div className="flex items-center justify-between gap-3 rounded-[18px] border border-danger/30 bg-danger/10 px-4 py-2.5 text-[12.5px] text-danger">
+                  <span className="min-w-0 flex-1">{error}</span>
+                  {errorRetryable && lastUserText ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={sending || running}
+                      onClick={() => void retry()}
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      Retry
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
 
-            {showThinking ? <ThinkingPlaceholderRow /> : null}
+              {showThinking ? <ThinkingPlaceholderRow /> : null}
 
-            {status === 'waiting_for_approval' && !approval ? (
-              <div className="text-[12.5px] text-muted">
-                Waiting for your decision — the run is paused.
-              </div>
-            ) : null}
+              {status === 'waiting_for_approval' && !approval ? (
+                <div className="text-[12.5px] text-muted">
+                  Waiting for your decision — the run is paused.
+                </div>
+              ) : null}
 
-            {status === 'stopping' ? (
-              <div className="text-[12.5px] text-muted">Stopping the run…</div>
-            ) : null}
+              {status === 'stopping' ? (
+                <div className="text-[12.5px] text-muted">Stopping the run…</div>
+              ) : null}
 
-            {/* Bottom spacer guarantees last message scrolls cleanly above floating composer */}
-            <div
-              style={{ height: Math.max(composerPad + 60, 180) }}
-              className="flex-none pointer-events-none"
-              aria-hidden
-            />
+              {/* Bottom spacer guarantees last message scrolls cleanly above floating composer */}
+              <div
+                style={{ height: Math.max(composerPad + 60, 180) }}
+                className="flex-none pointer-events-none"
+                aria-hidden
+              />
             </div>
           </div>
         </div>
@@ -690,7 +821,9 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
                       className="flex w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-3.5 py-2 text-left hover:bg-foreground/[0.06]"
                     >
                       <FileText className="h-3.5 w-3.5 flex-none text-muted" />
-                      <span className="min-w-0 flex-1 truncate font-mono text-[12px]">{hit.path}</span>
+                      <span className="min-w-0 flex-1 truncate font-mono text-[12px]">
+                        {hit.path}
+                      </span>
                     </button>
                   ))
                 ) : (
@@ -729,20 +862,46 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
                 onClear={clearQueue}
               />
             ) : null}
+            {blank ? (
+              <div className="mb-2 flex min-h-9 items-center gap-2 rounded-[18px] border border-border bg-surface px-2.5 py-1 shadow-[var(--shadow-sm)]">
+                <FolderOpen className="h-3.5 w-3.5 flex-none text-muted" />
+                <span className="flex-none text-[11px] font-semibold text-muted">Project</span>
+                <SearchableSelect
+                  options={projectOptions}
+                  value={project?.id ?? ''}
+                  onChange={(value) => void selectProject(value)}
+                  placeholder={recentProjects.isLoading ? 'Loading projects…' : 'Choose a project'}
+                  searchPlaceholder="Search projects…"
+                  emptyText="No matching projects."
+                  disabled={projectSwitching}
+                  className="h-7 min-w-0 flex-1 border-0 bg-transparent px-2 py-1 text-[12.5px] hover:bg-foreground/[0.04]"
+                />
+                {projectSwitching ? (
+                  <span className="flex-none text-[10.5px] text-muted">Opening…</span>
+                ) : null}
+              </div>
+            ) : null}
+            {projectSwitchError ? (
+              <div className="mb-2 px-2 text-[11px] text-danger">{projectSwitchError}</div>
+            ) : null}
             <div className="density-composer overflow-hidden rounded-[26px] border border-border bg-surface shadow-[var(--shadow-sm)]">
               <textarea
                 ref={composerRef}
-                className="max-h-44 min-h-[52px] w-full resize-none bg-transparent px-4 py-3 text-[13.5px] leading-normal outline-none placeholder:text-muted"
+                rows={1}
+                className="max-h-[240px] min-h-[52px] w-full resize-none overflow-y-hidden bg-transparent px-4 py-3 text-[13.5px] leading-normal outline-none placeholder:text-muted"
                 placeholder={
                   !project
-                    ? 'Open a project to begin…'
+                    ? 'Choose a project above — you can start typing now…'
                     : running
                       ? queueMode === 'queue'
                         ? 'Type a message to queue… (⏎ to Queue)'
                         : 'Type to interject mid-run… (⏎ to Steer)'
                       : 'Describe the change you want — @ for a file, $ for a skill'
                 }
-                disabled={!project || sending}
+                // The model can begin streaming before the initial send IPC
+                // finishes its checkpoint bookkeeping. Once a run is visible,
+                // keep the composer enabled so the user can queue immediately.
+                disabled={sending && !running}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 onCompositionStart={() => {
@@ -807,6 +966,7 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
                     onChange={(val) => setQueueMode(val as 'queue' | 'steer')}
                   />
                 ) : null}
+                <ContextUsageRing used={usage?.contextTokens} capacity={contextWindow} />
                 {/* Model choice belongs with the send button: it is a property of the
                     message you are about to send, not of the window. */}
                 <ModelPicker />
@@ -818,7 +978,7 @@ export function ChatPanel({ onBack, panelOpen, onTogglePanel, insert, blank }: C
                       ? 'h-[30px] px-3 gap-1.5 font-semibold text-[12px] bg-accent text-accent-foreground hover:bg-accent/90'
                       : 'h-[30px] w-[30px] flex-none',
                   )}
-                  disabled={!project || !draft.trim() || sending}
+                  disabled={!project || !draft.trim() || (sending && !running)}
                   onClick={() => void send()}
                   title={
                     running
@@ -942,10 +1102,115 @@ function QueuePanel({
   );
 }
 
-function AssistantMessage({ content, streaming }: { content: string; streaming: boolean }) {
+function MessageCopyButton({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copyMessage() {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch (error) {
+      console.error('[chat] copy failed', error);
+    }
+  }
+
   return (
-    <div className="w-full min-w-0 max-w-full overflow-x-hidden">
-      <Markdown streaming={streaming}>{content}</Markdown>
+    <button
+      type="button"
+      className="message-copy-button"
+      onClick={() => void copyMessage()}
+      title={copied ? 'Copied' : 'Copy message'}
+      aria-label={copied ? 'Message copied' : 'Copy message'}
+    >
+      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+      <span>{copied ? 'Copied' : 'Copy'}</span>
+    </button>
+  );
+}
+
+function AssistantMessage({ content, streaming }: { content: string; streaming: boolean }) {
+  const renderedRef = useRef<HTMLDivElement>(null);
+  const [copied, setCopied] = useState<'markdown' | 'formatted' | null>(null);
+
+  function showCopied(format: 'markdown' | 'formatted') {
+    setCopied(format);
+    window.setTimeout(() => setCopied((current) => (current === format ? null : current)), 1600);
+  }
+
+  async function copyMarkdown() {
+    try {
+      await navigator.clipboard.writeText(content);
+      showCopied('markdown');
+    } catch (error) {
+      console.error('[chat] copy markdown failed', error);
+    }
+  }
+
+  async function copyFormatted() {
+    const rendered = renderedRef.current;
+    if (!rendered) return;
+
+    const copy = rendered.cloneNode(true) as HTMLDivElement;
+    copy
+      .querySelectorAll('button, [data-streamdown="code-block-actions"]')
+      .forEach((control) => control.remove());
+    const html = copy.innerHTML;
+    const plainText = rendered.innerText;
+    try {
+      if (typeof ClipboardItem !== 'undefined' && navigator.clipboard.write) {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/html': new Blob([html], { type: 'text/html' }),
+            'text/plain': new Blob([plainText], { type: 'text/plain' }),
+          }),
+        ]);
+      } else {
+        await navigator.clipboard.writeText(plainText);
+      }
+      showCopied('formatted');
+    } catch (error) {
+      console.error('[chat] copy formatted output failed', error);
+    }
+  }
+
+  return (
+    <div className="group/assistant flex w-full min-w-0 max-w-full flex-col gap-1.5 overflow-x-hidden py-1">
+      <div ref={renderedRef} className="min-w-0 max-w-full">
+        <Markdown streaming={streaming}>{content}</Markdown>
+      </div>
+      {!streaming && content ? (
+        <div className="assistant-message-actions" aria-label="Copy response">
+          <button
+            type="button"
+            className="message-icon-button"
+            onClick={() => void copyMarkdown()}
+            title={copied === 'markdown' ? 'Markdown copied' : 'Copy original Markdown'}
+            aria-label={copied === 'markdown' ? 'Markdown copied' : 'Copy original Markdown'}
+          >
+            {copied === 'markdown' ? (
+              <Check className="h-3.5 w-3.5" />
+            ) : (
+              <FileCode2 className="h-3.5 w-3.5" />
+            )}
+          </button>
+          <button
+            type="button"
+            className="message-icon-button"
+            onClick={() => void copyFormatted()}
+            title={copied === 'formatted' ? 'Formatted response copied' : 'Copy formatted response'}
+            aria-label={
+              copied === 'formatted' ? 'Formatted response copied' : 'Copy formatted response'
+            }
+          >
+            {copied === 'formatted' ? (
+              <Check className="h-3.5 w-3.5" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -970,7 +1235,7 @@ function ToolCard({
   const icon = toolIcons[tool.toolName.toLowerCase()] ?? <Wrench className="h-3 w-3" />;
   const canExpand = Boolean(tool.inputSummary || tool.outputSummary || runningNow);
 
-  let rawSummary = tool.inputSummary.replace(new RegExp(`^${tool.toolName}:\\s*`, 'i'), '');
+  const rawSummary = tool.inputSummary.replace(new RegExp(`^${tool.toolName}:\\s*`, 'i'), '');
   let bashCommand = rawSummary;
   if (isBash) {
     try {
@@ -984,94 +1249,138 @@ function ToolCard({
   }
 
   return (
-    <div className="flex w-full min-w-0 max-w-full flex-col gap-1 my-1">
+    <div className="my-0.5 flex w-full min-w-0 max-w-full flex-col gap-1">
       <button
         type="button"
         onClick={canExpand ? onToggle : undefined}
         className={cn(
-          'flex w-full min-w-0 items-center gap-2.5 rounded-[14px] border border-border/70 bg-foreground/[0.03] px-3 py-2 text-left transition-all',
-          canExpand ? 'cursor-pointer hover:bg-foreground/[0.06]' : 'cursor-default',
-          runningNow && 'border-accent/40 bg-accent-100/40 shadow-xs',
+          'flex w-full min-w-0 items-center gap-2 px-0.5 py-1 text-left transition-colors',
+          canExpand ? 'cursor-pointer hover:opacity-80' : 'cursor-default',
         )}
       >
         <span
-          className="grid size-5 flex-none place-items-center rounded-full"
-          style={
-            failed
-              ? { background: 'var(--color-accent-200)', color: 'var(--color-accent-800)' }
-              : ok
-                ? { background: 'var(--color-accent-2-200)', color: 'var(--color-accent-2-800)' }
-                : { background: 'var(--color-neutral-200)', color: 'var(--color-neutral-700)' }
-          }
+          className={cn(
+            'flex h-5 w-5 flex-none items-center justify-center rounded-full bg-accent/10 text-accent-700',
+            ok && 'bg-accent-2/10 text-accent-2',
+            failed && 'bg-danger/10 text-danger',
+            runningNow && 'animate-[pi-think-pulse_1.8s_ease-in-out_infinite]',
+          )}
         >
           {icon}
         </span>
-        <span className="flex-none font-mono text-[12px] font-bold">{tool.toolName}</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-muted">
+        <span
+          className={cn(
+            'flex-none text-[12px] font-semibold tracking-[0.01em] text-muted',
+            runningNow && 'think-label-shimmer',
+          )}
+        >
+          {tool.toolName}
+        </span>
+        <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] leading-snug text-muted">
           {isBash ? `$ ${bashCommand}` : rawSummary || tool.inputSummary}
         </span>
-        {runningNow ? (
-          <span
-            className="size-2 flex-none rounded-full bg-accent-2"
-            style={{ animation: 'pi-pulse 1.2s ease-in-out infinite' }}
-          />
-        ) : null}
         {canExpand ? (
           <ChevronDown
-            className="size-3.5 flex-none opacity-45 transition-transform"
-            style={expanded ? { transform: 'rotate(180deg)' } : undefined}
+            className={cn(
+              'h-3.5 w-3.5 flex-none text-muted transition-transform',
+              expanded && 'rotate-180',
+            )}
           />
         ) : null}
       </button>
 
       {expanded ? (
-        isBash ? (
-          <div className="mt-1 flex w-full min-w-0 max-w-full flex-col overflow-hidden rounded-[14px] border border-border/80 bg-[var(--color-output)] text-[var(--color-output-foreground)] shadow-[var(--shadow-sm)]">
-            <div className="flex items-center justify-between border-b border-white/10 px-3.5 py-1.5 font-mono text-[10.5px] text-white/50">
-              <span className="font-semibold text-white/70">bash</span>
-              <span className="uppercase text-[10px] tracking-wider opacity-70">{tool.status}</span>
-            </div>
-            <div className="flex flex-col gap-2 p-3.5 font-mono text-[11.5px] leading-relaxed">
-              <div className="flex items-start gap-2 font-semibold text-emerald-400">
-                <span className="select-none text-emerald-500">$</span>
+        <div className="max-h-72 overflow-y-auto py-1 pl-7 font-mono text-[11.5px] leading-relaxed">
+          {isBash ? (
+            <>
+              <div className="flex items-start gap-2 font-semibold text-foreground/80">
+                <span className="select-none text-accent-700">$</span>
                 <span className="min-w-0 flex-1 whitespace-pre-wrap break-all">{bashCommand}</span>
               </div>
               {tool.outputSummary ? (
-                <pre className="output-pre w-full max-w-full overflow-x-auto whitespace-pre-wrap text-[var(--color-output-foreground)] font-mono text-[11.5px]">
+                <pre className="output-pre mt-2 w-full max-w-full overflow-x-auto whitespace-pre-wrap font-mono text-[11.5px] text-muted">
                   {tool.outputSummary}
                 </pre>
               ) : runningNow ? (
-                <div className="flex items-center gap-2 text-[11px] text-white/50 pt-1">
+                <div className="mt-2 flex items-center gap-2 text-[11px] text-muted">
                   <span
-                    className="size-1.5 rounded-full bg-emerald-400"
+                    className="size-1.5 rounded-full bg-accent"
                     style={{ animation: 'pi-pulse 1.2s ease-in-out infinite' }}
                   />
                   <span>Executing command…</span>
                 </div>
               ) : null}
-            </div>
-          </div>
-        ) : (
-          <div className="mt-1 flex w-full min-w-0 max-w-full flex-col gap-2 rounded-[14px] border border-border/70 bg-surface px-3.5 py-2.5 font-mono text-[11.5px] leading-relaxed shadow-xs">
-            {tool.inputSummary ? (
-              <div className="min-w-0 max-w-full">
-                <div className="mb-1 text-[10px] font-bold tracking-wider text-muted uppercase">Input</div>
-                <pre className="output-pre w-full max-w-full whitespace-pre-wrap font-mono text-[11.5px]">
+            </>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {tool.inputSummary ? (
+                <pre className="output-pre w-full max-w-full whitespace-pre-wrap font-mono text-[11.5px] text-muted">
                   {tool.inputSummary}
                 </pre>
-              </div>
-            ) : null}
-            {tool.outputSummary ? (
-              <div className="min-w-0 max-w-full">
-                <div className="mb-1 text-[10px] font-bold tracking-wider text-muted uppercase">Output</div>
-                <pre className="output-pre w-full max-w-full whitespace-pre-wrap font-mono text-[11.5px]">
+              ) : null}
+              {tool.outputSummary ? (
+                <pre className="output-pre w-full max-w-full whitespace-pre-wrap font-mono text-[11.5px] text-muted">
                   {tool.outputSummary}
                 </pre>
-              </div>
-            ) : null}
-          </div>
-        )
+              ) : null}
+            </div>
+          )}
+        </div>
       ) : null}
+    </div>
+  );
+}
+
+function ContextUsageRing({ used, capacity }: { used?: number; capacity?: number }) {
+  const ratio = capacity ? Math.min(1, Math.max(0, (used ?? 0) / capacity)) : 0;
+  const percent = Math.round(ratio * 100);
+  const radius = 10;
+  const circumference = 2 * Math.PI * radius;
+  const label = !capacity
+    ? 'Context capacity is loading'
+    : used == null
+      ? `Context usage not reported · ${formatTokens(capacity)} capacity`
+      : `Context ${formatTokens(used)} of ${formatTokens(capacity)} · ${percent}%`;
+
+  return (
+    <div
+      role="img"
+      aria-label={label}
+      title={label}
+      className="relative flex h-[30px] w-[30px] flex-none items-center justify-center text-[8px] font-semibold tabular-nums text-muted"
+    >
+      <svg
+        className="absolute inset-0 h-full w-full -rotate-90"
+        viewBox="0 0 28 28"
+        aria-hidden="true"
+      >
+        <circle
+          cx="14"
+          cy="14"
+          r={radius}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          className="text-foreground/10"
+        />
+        <circle
+          cx="14"
+          cy="14"
+          r={radius}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference * (1 - ratio)}
+          className={cn(
+            'text-accent transition-[stroke-dashoffset] duration-300',
+            percent >= 90 && 'text-danger',
+            percent >= 75 && percent < 90 && 'text-warning',
+          )}
+        />
+      </svg>
+      <span>{!capacity || used == null ? '—' : percent}</span>
     </div>
   );
 }

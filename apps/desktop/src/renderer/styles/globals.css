@@ -75,7 +75,6 @@
   --color-accent-2-800: #2f5042;
   --color-accent-2-900: #1e3429;
 
-
   /* Terminal / tool-output surface. Declared as its own pair rather than
      reusing neutral-900 + neutral-200: the dark theme inverts the neutral
      ramp, so the design's literal `neutral-200 on neutral-900` would render
@@ -532,6 +531,156 @@
     line-height: inherit;
   }
 
+  /* ChatGPT-like prose rhythm. Tailwind's reset removes native Markdown
+     spacing and list markers, so restore them deliberately for chat output. */
+  .pi-md :where(p, ul, ol, blockquote, pre, table) {
+    margin-block: 0.8em;
+  }
+
+  .pi-md
+    :where(p:first-child, ul:first-child, ol:first-child, blockquote:first-child, pre:first-child) {
+    margin-block-start: 0;
+  }
+
+  .pi-md :where(p:last-child, ul:last-child, ol:last-child, blockquote:last-child, pre:last-child) {
+    margin-block-end: 0;
+  }
+
+  .pi-md :where(h1, h2, h3, h4, h5, h6) {
+    margin-block: 1.35em 0.5em;
+    color: var(--color-foreground);
+    font-family: var(--font-body);
+    font-weight: 720;
+    line-height: 1.3;
+    letter-spacing: -0.012em;
+  }
+
+  .pi-md :where(h1:first-child, h2:first-child, h3:first-child, h4:first-child) {
+    margin-block-start: 0;
+  }
+
+  .pi-md h1 {
+    font-size: 1.4em;
+  }
+
+  .pi-md h2 {
+    font-size: 1.22em;
+  }
+
+  .pi-md :where(h3, h4, h5, h6) {
+    font-size: 1.08em;
+  }
+
+  .pi-md :where(ul, ol) {
+    padding-inline-start: 1.55em;
+  }
+
+  .pi-md ul {
+    list-style: disc outside;
+  }
+
+  .pi-md ol {
+    list-style: decimal outside;
+  }
+
+  .pi-md :where(ul ul, ol ul) {
+    list-style-type: circle;
+  }
+
+  .pi-md :where(ul ol, ol ol) {
+    list-style-type: lower-alpha;
+  }
+
+  .pi-md li {
+    padding-inline-start: 0.2em;
+  }
+
+  .pi-md li + li {
+    margin-block-start: 0.35em;
+  }
+
+  .pi-md li > :where(p, ul, ol) {
+    margin-block: 0.35em;
+  }
+
+  .pi-md strong {
+    color: var(--color-foreground);
+    font-weight: 700;
+  }
+
+  .pi-md blockquote {
+    padding: 0.15em 0 0.15em 1em;
+    border-inline-start: 1px solid color-mix(in srgb, var(--color-foreground) 24%, transparent);
+    color: var(--color-muted);
+  }
+
+  .pi-md hr {
+    margin-block: 1.5em;
+    border: 0;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .message-copy-button {
+    display: inline-flex;
+    min-height: 24px;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 7px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--color-muted);
+    font-size: 10.5px;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+      background 140ms ease,
+      color 140ms ease;
+  }
+
+  .message-copy-button:hover {
+    background: color-mix(in srgb, var(--color-foreground) 7%, transparent);
+    color: var(--color-foreground);
+  }
+
+  .message-copy-button:focus-visible {
+    outline: 2px solid var(--color-accent-700);
+    outline-offset: 1px;
+  }
+
+  .assistant-message-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-height: 28px;
+  }
+
+  .message-icon-button {
+    display: inline-grid;
+    width: 28px;
+    height: 28px;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--color-muted);
+    cursor: pointer;
+    transition:
+      background 140ms ease,
+      color 140ms ease;
+  }
+
+  .message-icon-button:hover {
+    background: color-mix(in srgb, var(--color-foreground) 7%, transparent);
+    color: var(--color-foreground);
+  }
+
+  .message-icon-button:focus-visible {
+    outline: 2px solid var(--color-accent-700);
+    outline-offset: 1px;
+  }
+
   /*
    * Streamdown nests three frames by default:
    *   1. outer [data-streamdown=code-block]  (border + bg-sidebar + p-2)
@@ -588,9 +737,13 @@
 
   /* Fenced blocks with no language (` ``` ` with no tag) leave an empty header — drop it. */
   .pi-md [data-streamdown='code-block'][data-language=''] > [data-streamdown='code-block-header'],
-  .pi-md [data-streamdown='code-block']:not([data-language]) > [data-streamdown='code-block-header'],
+  .pi-md
+    [data-streamdown='code-block']:not([data-language])
+    > [data-streamdown='code-block-header'],
   .pi-md [data-streamdown='code-block-header']:has(> span:empty),
-  .pi-md-think [data-streamdown='code-block'][data-language=''] > [data-streamdown='code-block-header'],
+  .pi-md-think
+    [data-streamdown='code-block'][data-language='']
+    > [data-streamdown='code-block-header'],
   .pi-md-think [data-streamdown='code-block-header']:has(> span:empty) {
     display: none !important;
   }
@@ -640,7 +793,9 @@
     color: rgba(255, 255, 255, 0.4) !important;
     box-shadow: none !important;
     cursor: pointer;
-    transition: color 0.12s ease, background 0.12s ease !important;
+    transition:
+      color 0.12s ease,
+      background 0.12s ease !important;
   }
 
   .pi-md [data-streamdown='code-block-copy-button']:hover,

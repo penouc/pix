@@ -101,6 +101,69 @@ describe('agent stream scoping', () => {
     expect(useAgentStreamStore.getState().tools).toHaveLength(1);
     expect(useAgentStreamStore.getState().tools[0]?.toolName).toBe('read');
   });
+
+  it('keeps queued messages when the current run is cancelled', () => {
+    useAgentStreamStore.getState().addQueuedMessage('continue with the tests');
+    useAgentStreamStore.getState().applyEvent({
+      type: 'run.cancelled',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      runId: 'agent-run-1',
+      sequence: 2,
+      timestamp: Date.now(),
+    } as DesktopAgentEvent);
+
+    expect(useAgentStreamStore.getState().queuedMessages.map((item) => item.text)).toEqual([
+      'continue with the tests',
+    ]);
+  });
+
+  it('tracks latest-call context separately from accumulated run usage', () => {
+    for (const [sequence, inputTokens, outputTokens] of [
+      [2, 1_000, 100],
+      [3, 1_500, 200],
+    ] as const) {
+      useAgentStreamStore.getState().applyEvent({
+        type: 'usage.updated',
+        projectId: 'p1',
+        sessionId: 'agent-session',
+        runId: 'agent-run-1',
+        sequence,
+        timestamp: Date.now(),
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+      } as DesktopAgentEvent);
+    }
+
+    expect(useAgentStreamStore.getState().usage).toMatchObject({
+      inputTokens: 2_500,
+      outputTokens: 300,
+      totalTokens: 2_800,
+      contextTokens: 1_700,
+    });
+
+    useAgentStreamStore.getState().setScope('p1', 'another-task');
+    useAgentStreamStore.getState().setScope('p1', 'agent-session');
+    expect(useAgentStreamStore.getState().usage?.contextTokens).toBe(1_700);
+  });
+
+  it('keeps a turn interactive while assistant content is streaming', () => {
+    useAgentStreamStore.setState({ status: 'completed' });
+    useAgentStreamStore.getState().applyEvent({
+      type: 'message.delta',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      runId: 'agent-run-1',
+      sequence: 4,
+      timestamp: Date.now(),
+      messageId: 'streaming-message',
+      role: 'assistant',
+      delta: 'still writing',
+    } as DesktopAgentEvent);
+
+    expect(useAgentStreamStore.getState().status).toBe('running');
+  });
 });
 
 describe('loadHistory timeline restore', () => {

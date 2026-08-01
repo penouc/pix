@@ -1,13 +1,10 @@
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { TitleBar } from '@/components/layout/TitleBar';
 import { PanelResizer } from '@/components/layout/PanelResizer';
 import { cn } from '@/lib/utils';
-import {
-  SIDEBAR_MIN_WIDTH,
-  SIDEBAR_MAX_WIDTH,
-  useUiPrefsStore,
-} from '@/stores/ui-prefs-store';
+import { SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, useUiPrefsStore } from '@/stores/ui-prefs-store';
 
 interface AppShellProps {
   sidebar: ReactNode;
@@ -36,6 +33,7 @@ export function AppShell({
   className,
 }: AppShellProps) {
   const sidebarWidth = useUiPrefsStore((s) => s.sidebarWidth);
+  const sidebarCollapsed = useUiPrefsStore((s) => s.sidebarCollapsed);
   const setPref = useUiPrefsStore((s) => s.set);
 
   return (
@@ -45,22 +43,46 @@ export function AppShell({
         className,
       )}
     >
-      <TitleBar right={titleBarRight} />
-      <div className="flex min-h-0 flex-1">
-        <aside
-          className="flex flex-none select-none flex-col bg-surface"
-          style={{ width: sidebarWidth }}
-        >
-          {sidebar}
-        </aside>
-        <PanelResizer
-          side="left"
-          value={sidebarWidth}
-          min={SIDEBAR_MIN_WIDTH}
-          max={SIDEBAR_MAX_WIDTH}
-          onChange={(width) => setPref('sidebarWidth', width)}
-        />
-        <main className="flex min-w-0 flex-1 flex-col">{main}</main>
+      <TitleBar
+        left={
+          <button
+            type="button"
+            title={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+            aria-label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+            aria-pressed={!sidebarCollapsed}
+            onClick={() => setPref('sidebarCollapsed', !sidebarCollapsed)}
+            className="grid h-6 w-6 cursor-pointer place-items-center rounded-md border-0 bg-transparent text-muted transition-colors hover:bg-foreground/[0.08] hover:text-foreground focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            {sidebarCollapsed ? (
+              <PanelLeftOpen className="h-3.5 w-3.5" />
+            ) : (
+              <PanelLeftClose className="h-3.5 w-3.5" />
+            )}
+          </button>
+        }
+        right={titleBarRight}
+      />
+      <div className="flex min-h-0 min-w-0 w-full flex-1 overflow-hidden">
+        {!sidebarCollapsed ? (
+          <>
+            <aside
+              className="flex flex-none select-none flex-col bg-surface"
+              style={{ width: sidebarWidth }}
+            >
+              {sidebar}
+            </aside>
+            <PanelResizer
+              side="left"
+              value={sidebarWidth}
+              min={SIDEBAR_MIN_WIDTH}
+              max={SIDEBAR_MAX_WIDTH}
+              onChange={(width) => setPref('sidebarWidth', width)}
+            />
+          </>
+        ) : null}
+        <main className="relative z-0 flex min-w-0 flex-1 flex-col overflow-hidden bg-background">
+          {main}
+        </main>
         {right && showRight ? right : null}
       </div>
       {overlay}
