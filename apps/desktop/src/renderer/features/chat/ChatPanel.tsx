@@ -1332,15 +1332,19 @@ function ToolCard({
 }
 
 function ContextUsageRing({ used, capacity }: { used?: number; capacity?: number }) {
-  const ratio = capacity ? Math.min(1, Math.max(0, (used ?? 0) / capacity)) : 0;
-  const percent = Math.round(ratio * 100);
+  // Providers report usage only after a model call finishes. Before the first
+  // response there is still useful information: the whole context window is
+  // available, so show 100% remaining instead of an unexplained dash.
+  const remaining = capacity ? Math.max(0, capacity - (used ?? 0)) : 0;
+  const remainingRatio = capacity ? Math.min(1, Math.max(0, remaining / capacity)) : 0;
+  const remainingPercent = Math.round(remainingRatio * 100);
   const radius = 10;
   const circumference = 2 * Math.PI * radius;
   const label = !capacity
     ? 'Context capacity is loading'
     : used == null
-      ? `Context usage not reported · ${formatTokens(capacity)} capacity`
-      : `Context ${formatTokens(used)} of ${formatTokens(capacity)} · ${percent}%`;
+      ? `${formatTokens(capacity)} context available · 100% remaining`
+      : `${formatTokens(remaining)} context remaining of ${formatTokens(capacity)} · ${remainingPercent}%`;
 
   return (
     <div
@@ -1372,15 +1376,15 @@ function ContextUsageRing({ used, capacity }: { used?: number; capacity?: number
           strokeWidth="2.5"
           strokeLinecap="round"
           strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - ratio)}
+          strokeDashoffset={circumference * (1 - remainingRatio)}
           className={cn(
             'text-accent transition-[stroke-dashoffset] duration-300',
-            percent >= 90 && 'text-danger',
-            percent >= 75 && percent < 90 && 'text-warning',
+            remainingPercent <= 10 && 'text-danger',
+            remainingPercent > 10 && remainingPercent <= 25 && 'text-warning',
           )}
         />
       </svg>
-      <span>{!capacity || used == null ? '—' : percent}</span>
+      <span>{capacity ? remainingPercent : '—'}</span>
     </div>
   );
 }
