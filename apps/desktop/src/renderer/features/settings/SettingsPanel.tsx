@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import type { ProviderCatalogEntry, ProviderSetting, Settings } from '@pi-desktop/protocol';
 
 import { Button } from '@/components/ui/button';
-import { SearchableSelect, type SearchableSelectOption } from '@/components/SearchableSelect';
+import { SearchableSelect } from '@/components/SearchableSelect';
 import { useOfferedModels } from '@/features/models/use-offered-models';
 import { FavoriteModelsSection } from '@/features/models/FavoriteModelsSection';
 import { SubscriptionsSection } from '@/features/settings/SubscriptionsSection';
@@ -48,7 +48,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
   });
   const available = catalog.data ?? [];
 
-
   const chosen = available.find((entry) => entry.id === providerId);
 
   useEffect(() => {
@@ -56,20 +55,29 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
     setModel(`${settings.data.defaultModel.providerId}/${settings.data.defaultModel.modelId}`);
   }, [model, settings.data?.defaultModel]);
 
-  const configured = new Set(
-    providers.data?.filter((e) => e.configured).map((e) => e.providerId),
-  );
+  // `provider.list` only contains keys saved by PiX. Connections discovered
+  // from a provider CLI or the environment (for example OpenCode Go's
+  // ~/.local/share/opencode/auth.json) live in the runtime catalogue instead.
+  const stored = new Set(providers.data?.filter((e) => e.configured).map((e) => e.providerId));
+  const connected = new Set([
+    ...stored,
+    ...available.filter((entry) => entry.hasAuth).map((entry) => entry.id),
+  ]);
 
   async function saveKey() {
     if (!providerId || !apiKey.trim()) return;
     setNotice(null);
     try {
-      await invoke({ method: 'provider.saveApiKey', params: { providerId, apiKey: apiKey.trim() } });
+      await invoke({
+        method: 'provider.saveApiKey',
+        params: { providerId, apiKey: apiKey.trim() },
+      });
       setApiKey('');
       setNoticeType('ok');
       setNotice(`${providerId} configured.`);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['provider.settings'] }),
+        queryClient.invalidateQueries({ queryKey: ['provider.listAvailable'] }),
         queryClient.invalidateQueries({ queryKey: ['agent.models'] }),
       ]);
     } catch (error) {
@@ -84,6 +92,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
       await invoke({ method: 'provider.remove', params: { providerId: id } });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['provider.settings'] }),
+        queryClient.invalidateQueries({ queryKey: ['provider.listAvailable'] }),
         queryClient.invalidateQueries({ queryKey: ['agent.models'] }),
       ]);
     } catch (error) {
@@ -104,6 +113,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
       setChatgptNotice('ChatGPT / OpenAI connected.');
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['provider.settings'] }),
+        queryClient.invalidateQueries({ queryKey: ['provider.listAvailable'] }),
         queryClient.invalidateQueries({ queryKey: ['agent.models'] }),
       ]);
     } catch (error) {
@@ -122,7 +132,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
     await queryClient.invalidateQueries({ queryKey: ['settings'] });
   }
 
-  const chatgptConfigured = configured.has('openai');
+  const chatgptConfigured = connected.has('openai');
 
   return (
     // `relative` so the login dialog's overlay covers this panel rather than
@@ -178,8 +188,8 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                 ) : null}
               </h2>
               <p className="text-xs text-muted mt-0.5">
-                Add an OpenAI API key. To use a ChatGPT Plus/Pro subscription instead, sign in
-                under Subscriptions above.
+                Add an OpenAI API key. To use a ChatGPT Plus/Pro subscription instead, sign in under
+                Subscriptions above.
               </p>
             </div>
           </div>
@@ -190,9 +200,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
               <button
                 type="button"
                 className="inline-flex items-center gap-0.5 text-foreground underline underline-offset-2"
-                onClick={() =>
-                  window.open?.('https://platform.openai.com/api-keys', '_blank')
-                }
+                onClick={() => window.open?.('https://platform.openai.com/api-keys', '_blank')}
               >
                 platform.openai.com
                 <ExternalLink className="h-3 w-3" />
@@ -207,23 +215,27 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                 placeholder="sk-…"
                 value={chatgptKey}
                 onChange={(e) => setChatgptKey(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') void saveChatGptKey(); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void saveChatGptKey();
+                }}
               />
               <Button disabled={!chatgptKey.trim()} onClick={() => void saveChatGptKey()}>
                 Connect
               </Button>
             </div>
-            {chatgptNotice ? (
-              <p className="text-xs text-muted">{chatgptNotice}</p>
-            ) : null}
+            {chatgptNotice ? <p className="text-xs text-muted">{chatgptNotice}</p> : null}
           </div>
 
           {chatgptConfigured ? (
             <div className="flex items-center justify-between pt-2 border-t border-border">
               <span className="text-xs text-muted">OpenAI / ChatGPT is connected.</span>
-              <Button variant="ghost" size="sm" onClick={() => void removeKey('openai')}>
-                Disconnect
-              </Button>
+              {stored.has('openai') ? (
+                <Button variant="ghost" size="sm" onClick={() => void removeKey('openai')}>
+                  Disconnect
+                </Button>
+              ) : (
+                <span className="text-[11px] font-medium text-success">Detected automatically</span>
+              )}
             </div>
           ) : null}
         </section>
@@ -257,7 +269,9 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
               placeholder={chosen?.apiKeyLabel ?? 'API key'}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') void saveKey(); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void saveKey();
+              }}
             />
             <Button disabled={!apiKey.trim() || !providerId} onClick={() => void saveKey()}>
               Save
@@ -271,29 +285,47 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           ) : null}
         </section>
 
-        {/* ── Configured providers ── */}
+        {/* ── Connected providers ── */}
         <section className="space-y-3">
           <div>
-            <h2 className="text-sm font-semibold">Configured providers</h2>
-            <p className="mt-1 text-xs text-muted">Remove a stored key to disconnect.</p>
+            <h2 className="text-sm font-semibold">Connected providers</h2>
+            <p className="mt-1 text-xs text-muted">
+              Includes keys saved in PiX and connections detected from provider CLIs.
+            </p>
           </div>
-          {configured.size === 0 ? (
-            <p className="text-sm text-muted">No API keys saved.</p>
+          {connected.size === 0 ? (
+            <p className="text-sm text-muted">No providers connected.</p>
           ) : (
             <div className="space-y-1">
-              {[...configured].map((id) => (
-                <div
-                  key={id}
-                  className="flex items-center justify-between rounded-xl border border-border bg-surface px-3 py-2.5"
-                >
-                  <span className="text-sm text-foreground">
-                    {available.find((entry) => entry.id === id)?.name ?? id}
-                  </span>
-                  <Button variant="ghost" size="sm" onClick={() => void removeKey(id)}>
-                    Remove
-                  </Button>
-                </div>
-              ))}
+              {[...connected].map((id) => {
+                const storedInPix = stored.has(id);
+                return (
+                  <div
+                    key={id}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2.5"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm text-foreground">
+                        {available.find((entry) => entry.id === id)?.name ?? id}
+                      </span>
+                      <span className="block text-[11px] text-muted">
+                        {storedInPix
+                          ? 'Key saved in PiX'
+                          : 'Detected from a provider CLI or environment'}
+                      </span>
+                    </span>
+                    {storedInPix ? (
+                      <Button variant="ghost" size="sm" onClick={() => void removeKey(id)}>
+                        Remove
+                      </Button>
+                    ) : (
+                      <span className="flex-none text-[11px] font-medium text-success">
+                        Connected
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>
@@ -331,7 +363,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           />
         </section>
       </div>
-
     </div>
   );
 }
