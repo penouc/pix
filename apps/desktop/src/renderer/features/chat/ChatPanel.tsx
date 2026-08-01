@@ -629,7 +629,7 @@ export function ChatPanel({
           ref={scrollerRef}
           className="absolute inset-0 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         >
-          <div className="px-5 pt-5" style={{ paddingBottom: composerPad + 84 }}>
+          <div className="px-5 pt-5" style={{ paddingBottom: composerPad + 48 }}>
             <div className="mx-auto flex w-full min-w-0 max-w-[760px] flex-col gap-3">
               {!timeline.length && !approval ? (
                 <div className="flex flex-col items-center gap-2 px-5 py-20 text-center">
@@ -791,9 +791,9 @@ export function ChatPanel({
                 <div className="text-[12.5px] text-muted">Stopping the run…</div>
               ) : null}
 
-              {/* Bottom spacer guarantees last message scrolls cleanly above floating composer */}
+              {/* Keep the final message clear of the composer without leaving an oversized void. */}
               <div
-                style={{ height: Math.max(composerPad + 60, 180) }}
+                style={{ height: Math.max(composerPad + 40, 160) }}
                 className="flex-none pointer-events-none"
                 aria-hidden
               />
@@ -863,9 +863,8 @@ export function ChatPanel({
               />
             ) : null}
             {blank ? (
-              <div className="mb-2 flex min-h-9 items-center gap-2 rounded-[18px] border border-border bg-surface px-2.5 py-1 shadow-[var(--shadow-sm)]">
-                <FolderOpen className="h-3.5 w-3.5 flex-none text-muted" />
-                <span className="flex-none text-[11px] font-semibold text-muted">Project</span>
+              <div className="mb-1.5 flex h-7 items-center gap-1 px-1.5 text-muted">
+                <FolderOpen className="h-3 w-3 flex-none opacity-60" />
                 <SearchableSelect
                   options={projectOptions}
                   value={project?.id ?? ''}
@@ -874,10 +873,10 @@ export function ChatPanel({
                   searchPlaceholder="Search projects…"
                   emptyText="No matching projects."
                   disabled={projectSwitching}
-                  className="h-7 min-w-0 flex-1 border-0 bg-transparent px-2 py-1 text-[12.5px] hover:bg-foreground/[0.04]"
+                  className="h-6 w-auto min-w-0 max-w-[300px] border-0 bg-transparent px-1.5 py-0 text-[11.5px] shadow-none hover:bg-foreground/[0.035] [&>span]:text-foreground/60 [&>svg]:h-3 [&>svg]:w-3 [&>svg]:opacity-60"
                 />
                 {projectSwitching ? (
-                  <span className="flex-none text-[10.5px] text-muted">Opening…</span>
+                  <span className="flex-none text-[10.5px] text-muted/70">Opening…</span>
                 ) : null}
               </div>
             ) : null}
