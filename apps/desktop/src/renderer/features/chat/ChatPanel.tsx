@@ -24,7 +24,16 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type SetStateAction,
+} from 'react';
 
 import type {
   ApprovalDecision,
@@ -63,6 +72,10 @@ import {
   type QueuedMessage,
   type ToolCallCard,
 } from '@/stores/agent-stream-store';
+import {
+  composerDraftScope,
+  useComposerDraftStore,
+} from '@/stores/composer-draft-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 
 const LAST_TASK_PROJECT_KEY = 'pi-desktop.last-task-project-id';
@@ -127,7 +140,17 @@ export function ChatPanel({
   const resetSessionView = useAgentStreamStore((s) => s.resetSessionView);
   const setScope = useAgentStreamStore((s) => s.setScope);
 
-  const [draft, setDraft] = useState('');
+  const draftScope = composerDraftScope(session?.id, project?.id);
+  const draft = useComposerDraftStore((state) => state.drafts[draftScope] ?? '');
+  const setDraft = useCallback(
+    (next: SetStateAction<string>) => {
+      const current = useComposerDraftStore.getState().drafts[draftScope] ?? '';
+      useComposerDraftStore
+        .getState()
+        .setDraft(draftScope, typeof next === 'function' ? next(current) : next);
+    },
+    [draftScope],
+  );
   const [sending, setSending] = useState(false);
   const [queueMode, setQueueMode] = useState<'queue' | 'steer'>('queue');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -219,11 +242,9 @@ export function ChatPanel({
     setScope(fallback.id, null);
   }, [blank, project, recentProjects.data, resetSessionView, setProject, setScope]);
 
-  // Composer state belongs to one task. ChatPanel stays mounted while tasks
-  // change, so without an explicit reset an unsent draft from the task we left
-  // became the text sent from the newly-created task.
+  // Transient controls reset between tasks, while each task's unsent draft lives
+  // in composerDraftStore and returns when the user comes back.
   useEffect(() => {
-    setDraft('');
     setSending(false);
     setExpanded({});
     setSkillMenuOpen(false);
@@ -294,7 +315,7 @@ export function ChatPanel({
     if (!insert) return;
     setDraft((current) => (current ? `${current}${insert.text}` : insert.text));
     composerRef.current?.focus();
-  }, [insert]);
+  }, [insert, setDraft]);
 
   // When a run finishes, put the caret back in the composer so the next message
   // does not need a click — the thread just stole focus while streaming.

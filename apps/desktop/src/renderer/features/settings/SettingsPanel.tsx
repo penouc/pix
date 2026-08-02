@@ -23,9 +23,9 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeType, setNoticeType] = useState<'ok' | 'err'>('ok');
 
-  // ChatGPT subscription state
-  const [chatgptKey, setChatgptKey] = useState('');
-  const [chatgptNotice, setChatgptNotice] = useState<string | null>(null);
+  // Prominent DeepSeek API-key connection.
+  const [deepseekKey, setDeepseekKey] = useState('');
+  const [deepseekNotice, setDeepseekNotice] = useState<string | null>(null);
 
   const providers = useQuery({
     queryKey: ['provider.settings'],
@@ -101,23 +101,23 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
     }
   }
 
-  async function saveChatGptKey() {
-    if (!chatgptKey.trim()) return;
-    setChatgptNotice(null);
+  async function saveDeepseekKey() {
+    if (!deepseekKey.trim()) return;
+    setDeepseekNotice(null);
     try {
       await invoke({
         method: 'provider.saveApiKey',
-        params: { providerId: 'openai', apiKey: chatgptKey.trim() },
+        params: { providerId: 'deepseek', apiKey: deepseekKey.trim() },
       });
-      setChatgptKey('');
-      setChatgptNotice('ChatGPT / OpenAI connected.');
+      setDeepseekKey('');
+      setDeepseekNotice('DeepSeek connected.');
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['provider.settings'] }),
         queryClient.invalidateQueries({ queryKey: ['provider.listAvailable'] }),
         queryClient.invalidateQueries({ queryKey: ['agent.models'] }),
       ]);
     } catch (error) {
-      setChatgptNotice(error instanceof Error ? error.message : 'Unable to save key.');
+      setDeepseekNotice(error instanceof Error ? error.message : 'Unable to save key.');
     }
   }
 
@@ -132,7 +132,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
     await queryClient.invalidateQueries({ queryKey: ['settings'] });
   }
 
-  const chatgptConfigured = connected.has('openai');
+  const deepseekConfigured = connected.has('deepseek');
 
   return (
     // `relative` so the login dialog's overlay covers this panel rather than
@@ -172,7 +172,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           <SubscriptionsSection />
         </section>
 
-        {/* ── OpenAI API key ── */}
+        {/* ── DeepSeek API key ── */}
         <section className="rounded-2xl border border-border bg-surface p-5 space-y-4">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-foreground/5 border border-border">
@@ -180,57 +180,56 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
             </div>
             <div>
               <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                ChatGPT
-                {chatgptConfigured ? (
+                DeepSeek
+                {deepseekConfigured ? (
                   <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-medium text-success">
                     Connected
                   </span>
                 ) : null}
               </h2>
               <p className="text-xs text-muted mt-0.5">
-                Add an OpenAI API key. To use a ChatGPT Plus/Pro subscription instead, sign in under
-                Subscriptions above.
+                Add a DeepSeek API key to use DeepSeek models.
               </p>
             </div>
           </div>
 
           <div className="space-y-3">
             <p className="text-xs text-muted">
-              Use an API key from{' '}
+              Create an API key at{' '}
               <button
                 type="button"
                 className="inline-flex items-center gap-0.5 text-foreground underline underline-offset-2"
-                onClick={() => window.open?.('https://platform.openai.com/api-keys', '_blank')}
+                onClick={() => window.open?.('https://platform.deepseek.com/api_keys', '_blank')}
               >
-                platform.openai.com
+                platform.deepseek.com
                 <ExternalLink className="h-3 w-3" />
               </button>
-              . This works with any OpenAI plan.
+              .
             </p>
             <div className="flex gap-2">
               <input
                 className="flex-1 rounded-xl border border-border bg-surface-raised px-3 py-2 text-sm outline-none focus:border-border-strong"
                 type="password"
                 autoComplete="off"
-                placeholder="sk-…"
-                value={chatgptKey}
-                onChange={(e) => setChatgptKey(e.target.value)}
+                placeholder="DeepSeek API key"
+                value={deepseekKey}
+                onChange={(e) => setDeepseekKey(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') void saveChatGptKey();
+                  if (e.key === 'Enter') void saveDeepseekKey();
                 }}
               />
-              <Button disabled={!chatgptKey.trim()} onClick={() => void saveChatGptKey()}>
+              <Button disabled={!deepseekKey.trim()} onClick={() => void saveDeepseekKey()}>
                 Connect
               </Button>
             </div>
-            {chatgptNotice ? <p className="text-xs text-muted">{chatgptNotice}</p> : null}
+            {deepseekNotice ? <p className="text-xs text-muted">{deepseekNotice}</p> : null}
           </div>
 
-          {chatgptConfigured ? (
+          {deepseekConfigured ? (
             <div className="flex items-center justify-between pt-2 border-t border-border">
-              <span className="text-xs text-muted">OpenAI / ChatGPT is connected.</span>
-              {stored.has('openai') ? (
-                <Button variant="ghost" size="sm" onClick={() => void removeKey('openai')}>
+              <span className="text-xs text-muted">DeepSeek is connected.</span>
+              {stored.has('deepseek') ? (
+                <Button variant="ghost" size="sm" onClick={() => void removeKey('deepseek')}>
                   Disconnect
                 </Button>
               ) : (
