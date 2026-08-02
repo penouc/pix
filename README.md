@@ -87,6 +87,8 @@ pnpm dev
 3. 在 **Settings → Providers** 中通过订阅登录或 API Key 配置 Provider。
 4. 创建 **New task**，选择模型并发送第一条任务。
 
+模型服务也可以选择 [OpenCode Go](https://opencode.ai/go?ref=RRWCDRNFVQ)（推广链接）。
+
 离线开发 UI 时可以使用 Fake Runtime：
 
 ```bash
