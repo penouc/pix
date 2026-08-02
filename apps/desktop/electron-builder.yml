@@ -2,6 +2,13 @@ appId: dev.pi.agent.desktop
 productName: PiX
 copyright: Copyright © Pi Desktop
 
+# `electron-updater` reads this from the packaged app and resolves updates from
+# the release assets created by `.github/workflows/release.yml`.
+publish:
+  provider: github
+  owner: penouc
+  repo: pix
+
 directories:
   output: release
   buildResources: build
@@ -30,6 +37,11 @@ mac:
       arch:
         - arm64
     - target: dmg
+      arch:
+        - arm64
+    # GitHub releases need a ZIP and latest-mac.yml for in-app updates; DMG
+    # remains the friendlier first-install download.
+    - target: zip
       arch:
         - arm64
   identity: null

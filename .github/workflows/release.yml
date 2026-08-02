@@ -46,10 +46,10 @@ jobs:
       - name: Build desktop
         run: pnpm build
 
-      - name: Package Apple Silicon DMG
+      - name: Package Apple Silicon release and update feed
         run: >-
           pnpm --filter @pi-desktop/desktop exec electron-builder
-          --mac dmg
+          --mac dmg zip
           --arm64
           --config electron-builder.yml
           --publish never
@@ -64,6 +64,9 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" \
             apps/desktop/release/*.dmg \
+            apps/desktop/release/*.zip \
+            apps/desktop/release/*.yml \
+            apps/desktop/release/*.blockmap \
             --verify-tag \
             --title "PiX $GITHUB_REF_NAME" \
             --generate-notes

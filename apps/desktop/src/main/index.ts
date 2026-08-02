@@ -64,6 +64,7 @@ import {
 } from './terminal/terminal-service.js';
 import { AutomationStore } from './automations/automation-store.js';
 import { AutomationScheduler } from './automations/automation-scheduler.js';
+import { UpdateService } from './updates/update-service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -89,6 +90,7 @@ let automationStore: AutomationStore | null = null;
 let automationScheduler: AutomationScheduler | null = null;
 let notifications: NotificationService | null = null;
 let providerLogins: ProviderLoginService | null = null;
+let updates: UpdateService | null = null;
 let sessionLogSync: SessionLogSyncService | null = null;
 
 function getSessionLogSync(): SessionLogSyncService {
@@ -159,6 +161,11 @@ function getProviderSettings(): ProviderSettingsStore {
     path.join(app.getPath('userData'), 'provider-settings.enc'),
   );
   return providerSettings;
+}
+
+function getUpdates(): UpdateService {
+  updates ??= new UpdateService();
+  return updates;
 }
 
 async function applyPersistedProviderKeys(agent: AgentRuntime): Promise<void> {
@@ -778,6 +785,15 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
           },
         });
       }
+      case 'update.getStatus':
+        return okResult(getUpdates().getState());
+      case 'update.check':
+        return okResult(await getUpdates().check());
+      case 'update.download':
+        return okResult(await getUpdates().download());
+      case 'update.install':
+        getUpdates().install();
+        return okResult(getUpdates().getState());
       case 'project.open': {
         let project = await projects.open(cmd.params.path);
         // Settings → Projects & trust: "Trust new projects automatically".
@@ -1397,6 +1413,7 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       }
       case 'settings.setUiFlag': {
         getProviderSettings().setUiFlag(cmd.params.key, cmd.params.value);
+        if (cmd.params.key === 'autoUpdate') getUpdates().configure(cmd.params.value);
         return okResult(getProviderSettings().getUiFlags());
       }
       case 'diagnostics.export': {
@@ -1445,6 +1462,9 @@ app.whenReady().then(() => {
     })
     .catch((error) => console.error('[main] automation scheduler start failed', error));
 
+  const autoUpdate = getProviderSettings().getUiFlags().autoUpdate;
+  getUpdates().configure(autoUpdate);
+  if (autoUpdate) void getUpdates().check();
   applyDevDockIcon();
   createWindow();
 
@@ -1471,6 +1491,7 @@ app.on('before-quit', () => {
   providerSettings = null;
   persistedProviderKeysApplied = false;
   desktopLogger = null;
+  updates = null;
 });
 
 async function readAuthStatus(agent: AgentRuntime): Promise<ProviderAuthSummary[]> {

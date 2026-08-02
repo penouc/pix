@@ -19,6 +19,7 @@ export interface UiFlags {
   notifyPlaySound: boolean;
   notifyBadgeDock: boolean;
   notifyOnlyWhenBackground: boolean;
+  autoUpdate: boolean;
   defaultProjectsFolder: string;
 }
 
@@ -32,6 +33,7 @@ const DEFAULT_UI_FLAGS: UiFlags = {
   notifyPlaySound: false,
   notifyBadgeDock: true,
   notifyOnlyWhenBackground: true,
+  autoUpdate: true,
   defaultProjectsFolder: '',
 };
 

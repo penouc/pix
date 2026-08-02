@@ -10,6 +10,7 @@ import type {
   RememberedRule,
   SetUiSettingInput,
   Settings,
+  UpdateState,
   UiFlags,
 } from '@pi-desktop/protocol';
 
@@ -30,6 +31,7 @@ type TabId =
   | 'appearance'
   | 'notifications'
   | 'usage'
+  | 'updates'
   | 'about';
 
 const TABS: Array<{ id: TabId; name: string; title: string; desc: string }> = [
@@ -74,6 +76,12 @@ const TABS: Array<{ id: TabId; name: string; title: string; desc: string }> = [
     name: 'Notifications',
     title: 'Notifications',
     desc: 'Long runs should be able to page you.',
+  },
+  {
+    id: 'updates',
+    name: 'Updates',
+    title: 'Updates',
+    desc: 'Keep PiX current from the official GitHub releases.',
   },
   {
     id: 'about',
@@ -144,6 +152,7 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
             {tab === 'permissions' ? <PermissionsTab /> : null}
             {tab === 'projects' ? <ProjectsTab /> : null}
             {tab === 'checkpoints' ? <CheckpointsTab /> : null}
+            {tab === 'updates' ? <UpdatesTab /> : null}
             {tab === 'about' ? <AboutTab /> : null}
           </div>
         )}
@@ -616,6 +625,86 @@ function CheckpointsTab() {
       </Group>
     </>
   );
+}
+
+function UpdatesTab() {
+  const queryClient = useQueryClient();
+  const updates = useQuery({
+    queryKey: ['update.status'],
+    queryFn: () => invoke<UpdateState>({ method: 'update.getStatus' }),
+  });
+  const action = useMutation({
+    mutationFn: (method: 'update.check' | 'update.download' | 'update.install') =>
+      invoke<UpdateState>({ method }),
+    onSuccess: (state) => queryClient.setQueryData(['update.status'], state),
+  });
+  const state = action.data ?? updates.data;
+  const { flags, loading, setFlag } = useUiFlags();
+  const busy = action.isPending || state?.status === 'checking' || state?.status === 'downloading';
+  const primaryAction =
+    state?.status === 'available'
+      ? { method: 'update.download' as const, label: 'Download update' }
+      : state?.status === 'downloaded'
+        ? { method: 'update.install' as const, label: 'Restart to install' }
+        : { method: 'update.check' as const, label: busy ? 'Checking…' : 'Check for updates' };
+
+  return (
+    <>
+      <Group label="Automatic updates">
+        <Row
+          name="Download updates automatically"
+          desc="Checks GitHub Releases when PiX starts and installs a downloaded update after you quit."
+        >
+          <Switch
+            label="Download updates automatically"
+            checked={flags?.autoUpdate ?? true}
+            disabled={loading || setFlag.isPending}
+            onChange={(value) => setFlag.mutate({ key: 'autoUpdate', value })}
+          />
+        </Row>
+      </Group>
+      <Group label="Release">
+        <Row
+          name={state?.version ? `PiX ${state.version} is ready` : `PiX ${state?.currentVersion ?? '—'}`}
+          desc={updateDescription(state)}
+        >
+          <Button
+            variant={state?.status === 'downloaded' ? 'default' : 'secondary'}
+            size="sm"
+            disabled={busy || state?.status === 'unsupported'}
+            onClick={() => action.mutate(primaryAction.method)}
+          >
+            {state?.status === 'unsupported' ? 'Packaged app only' : primaryAction.label}
+          </Button>
+        </Row>
+        {state?.progress !== undefined && state.status === 'downloading' ? (
+          <div className="text-[12px] text-muted">Downloading… {state.progress}%</div>
+        ) : null}
+        {state?.error ? <div className="text-[12px] text-destructive">{state.error}</div> : null}
+      </Group>
+    </>
+  );
+}
+
+function updateDescription(state: UpdateState | undefined): string {
+  switch (state?.status) {
+    case 'checking':
+      return 'Looking for a newer PiX release.';
+    case 'available':
+      return 'A newer release is available. Download it now, or let PiX download it in the background.';
+    case 'downloading':
+      return 'The update is downloading securely from GitHub Releases.';
+    case 'downloaded':
+      return 'Ready to install. PiX will restart and then reopen your workbench.';
+    case 'not-available':
+      return 'You are up to date.';
+    case 'unsupported':
+      return 'Updates are available in packaged PiX builds, not while running from source.';
+    case 'error':
+      return 'Could not check for updates. Check your connection and try again.';
+    default:
+      return 'Check GitHub Releases for a newer PiX build.';
+  }
 }
 
 function AboutTab() {

@@ -344,6 +344,7 @@ export const SetUiSettingInputSchema = z.object({
     'notifyPlaySound',
     'notifyBadgeDock',
     'notifyOnlyWhenBackground',
+    'autoUpdate',
   ]),
   value: z.boolean(),
 });
@@ -405,6 +406,10 @@ export type SetUiSettingInput = z.infer<typeof SetUiSettingInputSchema>;
 /** Discriminated command envelope for typed invoke. */
 export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('app.getInfo'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('update.getStatus'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('update.check'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('update.download'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('update.install'), params: z.object({}).optional() }),
   z.object({ method: z.literal('project.open'), params: OpenProjectInputSchema }),
   z.object({ method: z.literal('project.pickFolder'), params: z.object({}).optional() }),
   z.object({ method: z.literal('project.listRecent'), params: z.object({}).optional() }),

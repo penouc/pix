@@ -25,6 +25,7 @@ export default defineConfig({
               // Keep Pi SDK + native deps out of the bundle (plan §7.2 packaging).
               external: [
                 'electron',
+                'electron-updater',
                 'node:sqlite',
                 'node:fs',
                 'node:path',

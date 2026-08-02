@@ -60,6 +60,26 @@ export const AppInfoSchema = z.object({
 });
 export type AppInfo = z.infer<typeof AppInfoSchema>;
 
+export const UpdateStateSchema = z.object({
+  status: z.enum([
+    'idle',
+    'checking',
+    'available',
+    'downloading',
+    'downloaded',
+    'not-available',
+    'error',
+    'unsupported',
+  ]),
+  currentVersion: z.string(),
+  version: z.string().optional(),
+  progress: z.number().int().min(0).max(100).optional(),
+  releaseDate: z.string().optional(),
+  releaseNotes: z.string().optional(),
+  error: z.string().optional(),
+});
+export type UpdateState = z.infer<typeof UpdateStateSchema>;
+
 export const ProjectSummarySchema = z.object({
   id: z.string(),
   path: z.string(),
@@ -240,6 +260,8 @@ export const UiFlagsSchema = z.object({
   notifyPlaySound: z.boolean(),
   notifyBadgeDock: z.boolean(),
   notifyOnlyWhenBackground: z.boolean(),
+  /** Check GitHub Releases and download compatible updates in the background. */
+  autoUpdate: z.boolean(),
   /** Starting directory for the folder picker. Empty = the OS default. */
   defaultProjectsFolder: z.string(),
 });
