@@ -1,14 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  ChevronRight,
-  FolderOpen,
-  Plus,
-  Search,
-  Settings,
-  Sparkles,
-  X,
-  Zap,
-} from 'lucide-react';
+import { ChevronRight, FolderOpen, Plus, Search, Settings, Sparkles, X, Zap } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import type { ProjectSummary, SessionSummary } from '@pi-desktop/protocol';
@@ -24,6 +15,8 @@ interface ProjectSidebarProps {
   onNewTask: (previousSession: SessionSummary | null) => void;
   onSelectSession: (session: SessionSummary, project?: ProjectSummary) => void;
   onOpenSearch: () => void;
+  onOpenAutomations: () => void;
+  onOpenSkills: () => void;
   /** Open the OS folder picker directly — no intermediate dialog. */
   onBrowseForProject: () => void;
   /** Error from a project opened elsewhere (⌘O), shown with the local ones. */
@@ -41,6 +34,8 @@ export function ProjectSidebar({
   onNewTask,
   onSelectSession,
   onOpenSearch,
+  onOpenAutomations,
+  onOpenSkills,
   onBrowseForProject,
   externalError,
   onProjectSwitched,
@@ -197,14 +192,14 @@ export function ProjectSidebar({
         <NavItem
           icon={<Zap className="h-[15px] w-[15px]" />}
           label="Automations"
-          title="Coming soon"
-          disabled
+          active={activeNav === 'automations'}
+          onClick={onOpenAutomations}
         />
         <NavItem
           icon={<Sparkles className="h-[15px] w-[15px]" />}
           label="Skills"
-          title="Coming soon"
-          disabled
+          active={activeNav === 'skills'}
+          onClick={onOpenSkills}
         />
       </nav>
 

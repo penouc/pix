@@ -402,6 +402,8 @@ export function App() {
           onNewTask={newTask}
           onSelectSession={selectSession}
           onOpenSearch={() => setSearchOpen(true)}
+          onOpenAutomations={() => setView('automations')}
+          onOpenSkills={() => setView('skills')}
           onBrowseForProject={() => void browseForProject()}
           externalError={projectError}
           onProjectSwitched={() => {
