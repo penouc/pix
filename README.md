@@ -27,6 +27,14 @@
 
 ---
 
+<p align="center">
+  <a href="./docs/assets/pix-workbench.png">
+    <img src="./docs/assets/pix-workbench.png" alt="PiX desktop workbench showing projects, task history, Automations, Skills and the task composer" />
+  </a>
+</p>
+
+<p align="center"><sub>本地项目、任务历史、权限模式、模型选择与上下文输入集中在一个工作台中。</sub></p>
+
 ## PiX 是什么？
 
 PiX 是一个运行在本机的 Coding Agent 工作台。它使用 Pi 处理多 Provider、多模型、工具调用与 Agent 循环；PiX 则负责桌面交互、Workspace Trust、权限审批、Git Diff、检查点恢复和本地持久化。
@@ -52,6 +60,22 @@ PiX 是一个运行在本机的 Coding Agent 工作台。它使用 Pi 处理多 
 | **Automations** | 保存 Prompt，通过手动、间隔、每日或任务完成事件触发；每个 Automation 都有独立审批模式。 |
 | **Skills** | 发现 Pi 标准的全局与项目 Skill，支持搜索、作用域筛选、Composer 调用和可安装示例。 |
 | **本地终端与搜索** | 工作区受限终端、项目文件树、跨项目搜索、Session 搜索和诊断导出。 |
+
+### 界面预览
+
+<p align="center">
+  <a href="./docs/assets/pix-agent-run.png">
+    <img src="./docs/assets/pix-agent-run.png" alt="PiX agent task showing tool calls, reasoning, completion summary and the Changes review panel" />
+  </a>
+</p>
+<p align="center"><sub>Agent 执行过程、工具调用、完成总结与 Changes 审查面板。</sub></p>
+
+<p align="center">
+  <a href="./docs/assets/pix-usage.png">
+    <img src="./docs/assets/pix-usage.png" alt="PiX Usage and Cost dashboard showing runs, tokens, spend and model breakdown" />
+  </a>
+</p>
+<p align="center"><sub>本地 Usage & Cost：运行次数、Token、费用趋势与模型分布。</sub></p>
 
 ### 一次任务的完整路径
 
