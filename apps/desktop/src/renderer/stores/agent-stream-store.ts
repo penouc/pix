@@ -38,6 +38,58 @@ export interface RunUsage {
   costUsd?: number;
 }
 
+/** One usage.updated delta, timestamped so a sliding window can estimate live rate. */
+export interface TokenRateSample {
+  timestamp: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/** How far back the live token-rate window looks. */
+export const TOKEN_RATE_WINDOW_MS = 10_000;
+
+/**
+ * Tokens per second over the trailing window. Returns null once every sample
+ * has aged out, so the UI can stop showing a number while a run sits idle.
+ */
+export function computeTokenRate(
+  samples: readonly TokenRateSample[],
+  now = Date.now(),
+): { inputPerSec: number; outputPerSec: number; totalPerSec: number } | null {
+  const cutoff = now - TOKEN_RATE_WINDOW_MS;
+  let input = 0;
+  let output = 0;
+  let oldest = Number.POSITIVE_INFINITY;
+  let newest = 0;
+  for (const sample of samples) {
+    if (sample.timestamp < cutoff) continue;
+    input += sample.inputTokens;
+    output += sample.outputTokens;
+    if (sample.timestamp < oldest) oldest = sample.timestamp;
+    if (sample.timestamp > newest) newest = sample.timestamp;
+  }
+  if (newest === 0 || (input === 0 && output === 0)) return null;
+  // Measure the window from the oldest sample to *now*: as samples age out
+  // without fresh usage, the rate decays smoothly toward zero instead of
+  // freezing on the last burst.
+  const elapsedSeconds = Math.max(now - oldest, 1_000) / 1_000;
+  return {
+    inputPerSec: input / elapsedSeconds,
+    outputPerSec: output / elapsedSeconds,
+    totalPerSec: (input + output) / elapsedSeconds,
+  };
+}
+
+/** Keep the sample ring small: a minute of history is plenty for a 10s window. */
+function pruneTokenRateSamples(
+  samples: TokenRateSample[],
+  now: number,
+): TokenRateSample[] {
+  const cutoff = now - 60_000;
+  const pruned = samples.filter((sample) => sample.timestamp >= cutoff);
+  return pruned.length > 200 ? pruned.slice(-200) : pruned;
+}
+
 export interface ApprovalRequest {
   requestId: string;
   toolName: string;
@@ -74,6 +126,8 @@ interface AgentStreamState {
   tools: ToolCallCard[];
   thinkings: ThinkingCard[];
   usage: RunUsage | null;
+  /** Timestamped usage deltas for the live token-rate readout (event-driven). */
+  tokenRateSamples: TokenRateSample[];
   /** Last reported context occupancy per task, persisted across restarts. */
   contextTokensBySession: Record<string, number>;
   model: { providerId: string; modelId: string } | null;
@@ -286,6 +340,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
   tools: [],
   thinkings: [],
   usage: null,
+  tokenRateSamples: [],
   contextTokensBySession: readPersistedContextUsage(),
   model: null,
   startedAt: null,
@@ -475,6 +530,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       usage: get().activeSessionId
         ? { contextTokens: get().contextTokensBySession[get().activeSessionId!] }
         : null,
+      tokenRateSamples: [],
       error: null,
       errorRetryable: false,
       queuedMessages: [],
@@ -490,6 +546,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       tools: [],
       thinkings: [],
       usage: null,
+      tokenRateSamples: [],
       model: null,
       startedAt: null,
       lastUserText: null,
@@ -508,6 +565,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       activeProjectId: projectId,
       activeSessionId: sessionId,
       usage: remembered == null ? null : { contextTokens: remembered },
+      tokenRateSamples: [],
       queuedMessages: [],
     });
   },
@@ -545,6 +603,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
             state.contextTokensBySession[event.sessionId] == null
               ? null
               : { contextTokens: state.contextTokensBySession[event.sessionId] },
+          tokenRateSamples: [],
           model: event.model ?? null,
           startedAt: event.timestamp,
           approval: null,
@@ -737,6 +796,23 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       case 'usage.updated':
         set((state) => {
           const prev = state.usage;
+          // Feed the live token-rate window with this delta. Coalescing happens
+          // on the same 10s window the readout shows, so the number stays
+          // smooth rather than spiking per chunk.
+          const tokenRateSamples =
+            event.inputTokens != null || event.outputTokens != null
+              ? pruneTokenRateSamples(
+                  [
+                    ...state.tokenRateSamples,
+                    {
+                      timestamp: event.timestamp,
+                      inputTokens: event.inputTokens ?? 0,
+                      outputTokens: event.outputTokens ?? 0,
+                    },
+                  ],
+                  event.timestamp,
+                )
+              : state.tokenRateSamples;
           const inputTokens =
             event.inputTokens != null
               ? (prev?.inputTokens ?? 0) + event.inputTokens
@@ -770,6 +846,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
           return {
             lastSequenceByRun,
             contextTokensBySession,
+            tokenRateSamples,
             usage: {
               inputTokens,
               outputTokens,

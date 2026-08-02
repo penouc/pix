@@ -1,7 +1,7 @@
 import type { DesktopAgentEvent, StoredMessage } from '@pi-desktop/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { useAgentStreamStore } from './agent-stream-store';
+import { computeTokenRate, useAgentStreamStore } from './agent-stream-store';
 
 function approvalEvent(overrides: Partial<DesktopAgentEvent> = {}): DesktopAgentEvent {
   return {
@@ -245,5 +245,71 @@ describe('thinking / message id namespace', () => {
     const state = useAgentStreamStore.getState();
     expect(state.messages.map((m) => m.id)).toEqual([sharedId]);
     expect(state.thinkings.map((t) => t.id)).toEqual([`think-${sharedId}`]);
+  });
+});
+
+describe('token rate sampling', () => {
+  beforeEach(() => {
+    useAgentStreamStore.getState().resetSessionView();
+    useAgentStreamStore.getState().setScope('p1', 'agent-session');
+    useAgentStreamStore.setState({ activeRunId: 'agent-run-1' });
+  });
+
+  it('computes tokens per second over the trailing window', () => {
+    const t0 = Date.now();
+    const samples = [
+      { timestamp: t0, inputTokens: 1_000, outputTokens: 500 },
+      { timestamp: t0 + 5_000, inputTokens: 2_000, outputTokens: 1_000 },
+    ];
+    const rate = computeTokenRate(samples, t0 + 10_000);
+    expect(rate).not.toBeNull();
+    expect(rate!.inputPerSec).toBeCloseTo(300, 0); // 3000 / 10s
+    expect(rate!.outputPerSec).toBeCloseTo(150, 0); // 1500 / 10s
+    expect(rate!.totalPerSec).toBeCloseTo(450, 0);
+  });
+
+  it('returns null once every sample ages out of the window', () => {
+    const t0 = Date.now();
+    const samples = [{ timestamp: t0, inputTokens: 100, outputTokens: 50 }];
+    expect(computeTokenRate(samples, t0 + 11_000)).toBeNull();
+  });
+
+  it('records usage.updated deltas as samples and resets them on a new run', () => {
+    useAgentStreamStore.getState().applyEvent({
+      type: 'usage.updated',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      runId: 'agent-run-1',
+      sequence: 2,
+      timestamp: 1_000,
+      inputTokens: 400,
+      outputTokens: 100,
+    } as DesktopAgentEvent);
+    useAgentStreamStore.getState().applyEvent({
+      type: 'usage.updated',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      runId: 'agent-run-1',
+      sequence: 3,
+      timestamp: 2_000,
+      inputTokens: 600,
+      outputTokens: 200,
+    } as DesktopAgentEvent);
+
+    expect(useAgentStreamStore.getState().tokenRateSamples).toEqual([
+      { timestamp: 1_000, inputTokens: 400, outputTokens: 100 },
+      { timestamp: 2_000, inputTokens: 600, outputTokens: 200 },
+    ]);
+
+    // A fresh run must not inherit the previous run's rate samples.
+    useAgentStreamStore.getState().applyEvent({
+      type: 'run.started',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      runId: 'agent-run-2',
+      sequence: 4,
+      timestamp: 3_000,
+    } as DesktopAgentEvent);
+    expect(useAgentStreamStore.getState().tokenRateSamples).toEqual([]);
   });
 });

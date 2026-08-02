@@ -22,6 +22,8 @@ interface UiPrefs {
   dockWidth: number;
   sidebarWidth: number;
   sidebarCollapsed: boolean;
+  /** Live tokens/second next to the Working status while a run streams. */
+  showTokenRate: boolean;
 }
 
 interface UiPrefsState extends UiPrefs {
@@ -42,6 +44,7 @@ const DEFAULTS: UiPrefs = {
   dockWidth: 440,
   sidebarWidth: 210,
   sidebarCollapsed: false,
+  showTokenRate: true,
 };
 
 /**
@@ -61,6 +64,7 @@ function load(): UiPrefs {
       diffStyle: parsed.diffStyle ?? DEFAULTS.diffStyle,
       collapseContext: parsed.collapseContext ?? DEFAULTS.collapseContext,
       dockTab: parsed.dockTab ?? DEFAULTS.dockTab,
+      showTokenRate: parsed.showTokenRate ?? DEFAULTS.showTokenRate,
       // Clamp on read: a stored width from a wider display would otherwise
       // squeeze the thread to nothing on this one.
       dockWidth: clampDockWidth(parsed.dockWidth ?? DEFAULTS.dockWidth),
@@ -129,6 +133,7 @@ export const useUiPrefsStore = create<UiPrefsState>((set, get) => ({
       dockWidth: next.dockWidth,
       sidebarWidth: next.sidebarWidth,
       sidebarCollapsed: next.sidebarCollapsed,
+      showTokenRate: next.showTokenRate,
     };
     const resolved = resolve(prefs.theme);
     set({ resolvedTheme: resolved });
@@ -161,6 +166,7 @@ export function initUiPrefs() {
         dockWidth: state.dockWidth,
         sidebarWidth: state.sidebarWidth,
         sidebarCollapsed: state.sidebarCollapsed,
+        showTokenRate: state.showTokenRate,
       },
       resolved,
     );

@@ -70,11 +70,13 @@ import {
 } from '@/lib/status';
 import { cn } from '@/lib/utils';
 import {
+  computeTokenRate,
   useAgentStreamStore,
   type QueuedMessage,
   type ToolCallCard,
 } from '@/stores/agent-stream-store';
 import { composerDraftScope, useComposerDraftStore } from '@/stores/composer-draft-store';
+import { useUiPrefsStore } from '@/stores/ui-prefs-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 
 const LAST_TASK_PROJECT_KEY = 'pi-desktop.last-task-project-id';
@@ -144,6 +146,8 @@ export function ChatPanel({
   const tools = useAgentStreamStore((s) => s.tools);
   const thinkings = useAgentStreamStore((s) => s.thinkings);
   const status = useAgentStreamStore((s) => s.status);
+  const tokenRateSamples = useAgentStreamStore((s) => s.tokenRateSamples);
+  const showTokenRate = useUiPrefsStore((s) => s.showTokenRate);
   const activeRunId = useAgentStreamStore((s) => s.activeRunId);
   const usage = useAgentStreamStore((s) => s.usage);
   const model = useAgentStreamStore((s) => s.model);
@@ -503,6 +507,19 @@ export function ChatPanel({
     !hasRunningTools &&
     !approval;
 
+  // Live token-rate readout next to the Working badge. Re-computed once a
+  // second so the number decays to zero (and then away) while the model is
+  // between responses — tool calls and thinking produce no usage deltas.
+  const [rateNow, setRateNow] = useState(Date.now());
+  useEffect(() => {
+    if (!showTokenRate || !running) return;
+    const timer = window.setInterval(() => setRateNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [showTokenRate, running]);
+  const tokenRate =
+    showTokenRate && running ? computeTokenRate(tokenRateSamples, rateNow) : null;
+
+
   /** Messages, reasoning, and tool calls share an arrival counter. */
   const timeline = useMemo(
     () =>
@@ -724,6 +741,11 @@ export function ChatPanel({
           <Badge tone={toneBadge[tone]} className="gap-1.5">
             <span style={dotStyle(tone, 6)} />
             {statusLabel(status)}
+            {tokenRate ? (
+              <span className="font-mono text-[10px] font-normal opacity-75">
+                {formatTokens(Math.round(tokenRate.totalPerSec))} tok/s
+              </span>
+            ) : null}
           </Badge>
         ) : null}
         {!blank && running ? (

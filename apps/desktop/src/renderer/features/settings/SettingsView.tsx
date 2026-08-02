@@ -187,6 +187,16 @@ function AppearanceTab() {
             onChange={(value) => prefs.set('reduceMotion', value)}
           />
         </Row>
+        <Row
+          name="Live token rate"
+          desc="Shows tokens/second next to the Working status while a run streams."
+        >
+          <Switch
+            label="Live token rate"
+            checked={prefs.showTokenRate}
+            onChange={(value) => prefs.set('showTokenRate', value)}
+          />
+        </Row>
       </Group>
       <Group label="Code & diffs">
         <Row name="Default diff view" desc="Used by the review rail and the full diff.">
