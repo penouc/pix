@@ -13,11 +13,65 @@ export const CreateSessionInputSchema = z.object({
 });
 export type CreateSessionInput = z.infer<typeof CreateSessionInputSchema>;
 
-export const SendMessageInputSchema = z.object({
-  sessionId: z.string().min(1),
-  text: z.string().min(1),
-  model: ModelRefSchema.optional(),
+export const InputImageSchema = z.object({
+  /** Raw base64 only (no data-URL prefix). */
+  data: z
+    .string()
+    .min(1)
+    .max(14_000_000)
+    .refine(
+      (value) => value.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(value),
+      'Image data must be valid base64',
+    ),
+  mimeType: z.enum(['image/png', 'image/jpeg', 'image/webp', 'image/gif']),
+  name: z.string().min(1).max(255),
+  size: z
+    .number()
+    .int()
+    .positive()
+    .max(10 * 1024 * 1024),
 });
+export type InputImage = z.infer<typeof InputImageSchema>;
+
+const MessageContentShape = {
+  text: z.string().max(100_000),
+  images: z.array(InputImageSchema).max(4).optional(),
+};
+
+function decodedBase64Bytes(data: string): number {
+  return Math.floor((data.length * 3) / 4) - (data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0);
+}
+
+function validateMessageContent(
+  value: { text: string; images?: InputImage[] },
+  ctx: z.RefinementCtx,
+): void {
+  if (!value.text.trim() && !value.images?.length) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'A message needs text or an image' });
+  }
+  for (const [index, image] of (value.images ?? []).entries()) {
+    if (decodedBase64Bytes(image.data) > 10 * 1024 * 1024) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['images', index, 'data'],
+        message: 'Each image may be at most 10 MB',
+      });
+    }
+  }
+  const totalBytes =
+    value.images?.reduce((sum, image) => sum + decodedBase64Bytes(image.data), 0) ?? 0;
+  if (totalBytes > 20 * 1024 * 1024) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Images may total at most 20 MB' });
+  }
+}
+
+export const SendMessageInputSchema = z
+  .object({
+    ...MessageContentShape,
+    sessionId: z.string().min(1),
+    model: ModelRefSchema.optional(),
+  })
+  .superRefine(validateMessageContent);
 export type SendMessageInput = z.infer<typeof SendMessageInputSchema>;
 
 export const AbortRunInputSchema = z.object({
@@ -25,17 +79,18 @@ export const AbortRunInputSchema = z.object({
 });
 export type AbortRunInput = z.infer<typeof AbortRunInputSchema>;
 
-export const SteerRunInputSchema = z.object({
-  runId: z.string().min(1),
-  text: z.string().min(1),
-});
+export const SteerRunInputSchema = z
+  .object({ ...MessageContentShape, runId: z.string().min(1) })
+  .superRefine(validateMessageContent);
 export type SteerRunInput = z.infer<typeof SteerRunInputSchema>;
 
-export const FollowUpInputSchema = z.object({
-  sessionId: z.string().min(1),
-  text: z.string().min(1),
-  model: ModelRefSchema.optional(),
-});
+export const FollowUpInputSchema = z
+  .object({
+    ...MessageContentShape,
+    sessionId: z.string().min(1),
+    model: ModelRefSchema.optional(),
+  })
+  .superRefine(validateMessageContent);
 export type FollowUpInput = z.infer<typeof FollowUpInputSchema>;
 
 export const OpenProjectInputSchema = z.object({

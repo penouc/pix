@@ -1,10 +1,11 @@
-import type { DesktopAgentEvent, RiskLevel, StoredMessage } from '@pi-desktop/protocol';
+import type { DesktopAgentEvent, InputImage, RiskLevel, StoredMessage } from '@pi-desktop/protocol';
 import { create } from 'zustand';
 
 export interface ChatMessage {
   id: string;
   role: 'assistant' | 'user' | 'system';
   content: string;
+  images?: Array<{ name: string; mimeType: string; size: number; data?: string }>;
   streaming: boolean;
   /** Arrival order, shared with tool cards so the thread can interleave them. */
   order: number;
@@ -51,6 +52,7 @@ export interface ApprovalRequest {
 export interface QueuedMessage {
   id: string;
   text: string;
+  images?: InputImage[];
   mode: 'queue' | 'steer';
   createdAt: number;
 }
@@ -77,17 +79,22 @@ interface AgentStreamState {
   model: { providerId: string; modelId: string } | null;
   startedAt: number | null;
   lastUserText: string | null;
+  lastUserImages: InputImage[];
   errorRetryable: boolean;
   approval: ApprovalRequest | null;
   error: string | null;
   lastSequenceByRun: Record<string, number>;
   queuedMessages: QueuedMessage[];
-  addQueuedMessage: (text: string, mode?: 'queue' | 'steer') => QueuedMessage;
+  addQueuedMessage: (
+    text: string,
+    mode?: 'queue' | 'steer',
+    images?: InputImage[],
+  ) => QueuedMessage;
   removeQueuedMessage: (id: string) => void;
   updateQueuedMessage: (id: string, text: string) => void;
   clearQueue: () => void;
   popNextQueuedMessage: () => QueuedMessage | undefined;
-  appendUserMessage: (text: string) => void;
+  appendUserMessage: (text: string, images?: InputImage[]) => void;
   resetSessionView: () => void;
   /** Replace the thread with a stored transcript (oldest first). */
   loadHistory: (messages: StoredMessage[]) => void;
@@ -181,7 +188,9 @@ let lastSequenceByRunBuffer: Record<string, number> = {};
 
 function scheduleDeltaFlush(
   get: () => AgentStreamState,
-  set: (partial: Partial<AgentStreamState> | ((state: AgentStreamState) => Partial<AgentStreamState>)) => void,
+  set: (
+    partial: Partial<AgentStreamState> | ((state: AgentStreamState) => Partial<AgentStreamState>),
+  ) => void,
 ) {
   if (deltaFlushHandle != null) return;
   const raf =
@@ -281,16 +290,18 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
   model: null,
   startedAt: null,
   lastUserText: null,
+  lastUserImages: [],
   errorRetryable: false,
   approval: null,
   error: null,
   lastSequenceByRun: {},
   queuedMessages: [],
 
-  addQueuedMessage: (text, mode = 'queue') => {
+  addQueuedMessage: (text, mode = 'queue', images) => {
     const msg: QueuedMessage = {
       id: `queue-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       text: text.trim(),
+      ...(images?.length ? { images } : {}),
       mode,
       createdAt: Date.now(),
     };
@@ -304,7 +315,9 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
 
   updateQueuedMessage: (id, text) => {
     set((state) => ({
-      queuedMessages: state.queuedMessages.map((m) => (m.id === id ? { ...m, text: text.trim() } : m)),
+      queuedMessages: state.queuedMessages.map((m) =>
+        m.id === id ? { ...m, text: text.trim() } : m,
+      ),
     }));
   },
 
@@ -318,15 +331,17 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
     return next;
   },
 
-  appendUserMessage: (text) => {
+  appendUserMessage: (text, images) => {
     set((state) => ({
       lastUserText: text,
+      lastUserImages: images ?? [],
       messages: [
         ...state.messages,
         {
           id: `user-${Date.now()}`,
           role: 'user',
           content: text,
+          ...(images?.length ? { images } : {}),
           streaming: false,
           order: nextOrder(),
         },
@@ -443,6 +458,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
           id: `history-${index}`,
           role,
           content: entry.text,
+          ...(entry.images?.length ? { images: entry.images } : {}),
           streaming: false,
           order: orderSeq++,
         });
@@ -477,6 +493,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       model: null,
       startedAt: null,
       lastUserText: null,
+      lastUserImages: [],
       errorRetryable: false,
       approval: null,
       error: null,
@@ -733,7 +750,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
           const totalTokens =
             inputTokens != null && outputTokens != null
               ? inputTokens + outputTokens
-              : event.totalTokens ?? prev?.totalTokens;
+              : (event.totalTokens ?? prev?.totalTokens);
           // Billing totals accumulate across tool/model turns, but context
           // occupancy is the latest call only. Summing every turn can report
           // more than 100% even though each individual prompt fits.

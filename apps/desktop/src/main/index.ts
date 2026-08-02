@@ -355,10 +355,15 @@ function persistSessionMessage(
   role: 'user' | 'assistant' | 'system',
   text: string,
   messageId?: string,
+  images?: Array<{ name: string; mimeType: string; size: number }>,
 ): void {
   const trimmed = text.trim();
-  if (!trimmed) return;
-  persistTranscriptEntry(sessionId, { kind: 'message', role, text: trimmed }, messageId);
+  if (!trimmed && !images?.length) return;
+  persistTranscriptEntry(
+    sessionId,
+    { kind: 'message', role, text: trimmed, ...(images?.length ? { images } : {}) },
+    messageId,
+  );
 }
 
 function broadcastEvent(event: unknown): void {
@@ -971,13 +976,20 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         try {
           ref = await agent.sendMessage(cmd.params.sessionId, {
             text: cmd.params.text,
+            images: cmd.params.images,
             model: cmd.params.model,
           });
         } catch (error) {
           await db.checkpoints.discard(checkpoint.id);
           throw error;
         }
-        persistSessionMessage(cmd.params.sessionId, 'user', cmd.params.text);
+        persistSessionMessage(
+          cmd.params.sessionId,
+          'user',
+          cmd.params.text,
+          undefined,
+          cmd.params.images?.map(({ name, mimeType, size }) => ({ name, mimeType, size })),
+        );
         // Queue an auto-name if this task is still called "New task". The model
         // title is requested after the first completed turn; this string is only
         // the offline fallback.
@@ -999,7 +1011,10 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         return okResult(ref);
       }
       case 'agent.steer': {
-        await agent.steer(cmd.params.runId, { text: cmd.params.text });
+        await agent.steer(cmd.params.runId, {
+          text: cmd.params.text,
+          images: cmd.params.images,
+        });
         return okResult({ ok: true });
       }
       case 'agent.followUp': {
@@ -1017,9 +1032,16 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         await ensurePersistedRuntimeSession(agent, meta, project.path);
         await agent.followUp(cmd.params.sessionId, {
           text: cmd.params.text,
+          images: cmd.params.images,
           model: cmd.params.model,
         });
-        persistSessionMessage(cmd.params.sessionId, 'user', cmd.params.text);
+        persistSessionMessage(
+          cmd.params.sessionId,
+          'user',
+          cmd.params.text,
+          undefined,
+          cmd.params.images?.map(({ name, mimeType, size }) => ({ name, mimeType, size })),
+        );
         await sessions.touch(cmd.params.sessionId);
         return okResult({ ok: true });
       }

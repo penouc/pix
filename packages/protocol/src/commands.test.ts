@@ -22,6 +22,49 @@ describe('git.getWorkingTreeDiff IPC command', () => {
   });
 });
 
+describe('Multimodal message IPC commands', () => {
+  const image = {
+    data: 'aGVsbG8=',
+    mimeType: 'image/png',
+    name: 'screenshot.png',
+    size: 5,
+  };
+
+  it('accepts image-only messages and image steering', () => {
+    expect(
+      parseIpcCommand({
+        method: 'agent.sendMessage',
+        params: { sessionId: 'session-1', text: '', images: [image] },
+      }).success,
+    ).toBe(true);
+    expect(
+      parseIpcCommand({
+        method: 'agent.steer',
+        params: { runId: 'run-1', text: 'look here', images: [image] },
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects empty messages and unsupported image formats', () => {
+    expect(
+      parseIpcCommand({
+        method: 'agent.sendMessage',
+        params: { sessionId: 'session-1', text: '', images: [] },
+      }).success,
+    ).toBe(false);
+    expect(
+      parseIpcCommand({
+        method: 'agent.sendMessage',
+        params: {
+          sessionId: 'session-1',
+          text: 'inspect',
+          images: [{ ...image, mimeType: 'image/svg+xml' }],
+        },
+      }).success,
+    ).toBe(false);
+  });
+});
+
 describe('Provider settings IPC commands', () => {
   it('accepts a provider key save and a default model selection', () => {
     expect(

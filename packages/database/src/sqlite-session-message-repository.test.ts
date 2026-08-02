@@ -58,6 +58,28 @@ describe('SqliteSessionMessageRepository', () => {
     ]);
   });
 
+  it('persists image attachment metadata without image bytes', async () => {
+    const repo = await setup();
+    await repo.append({
+      id: 'm-image',
+      sessionId: 's1',
+      entry: {
+        kind: 'message',
+        role: 'user',
+        text: '',
+        images: [{ name: 'screen.png', mimeType: 'image/png', size: 1234 }],
+      },
+    });
+    expect(repo.list('s1')).toEqual([
+      {
+        kind: 'message',
+        role: 'user',
+        text: '',
+        images: [{ name: 'screen.png', mimeType: 'image/png', size: 1234 }],
+      },
+    ]);
+  });
+
   it('updates assistant text on duplicate message id', async () => {
     const repo = await setup();
     await repo.append({
@@ -70,9 +92,7 @@ describe('SqliteSessionMessageRepository', () => {
       sessionId: 's1',
       entry: { kind: 'message', role: 'assistant', text: 'full reply' },
     });
-    expect(repo.list('s1')).toEqual([
-      { kind: 'message', role: 'assistant', text: 'full reply' },
-    ]);
+    expect(repo.list('s1')).toEqual([{ kind: 'message', role: 'assistant', text: 'full reply' }]);
   });
 
   it('persists thinking and tool cards and merges tool completion', async () => {
@@ -141,9 +161,7 @@ describe('SqliteSessionMessageRepository', () => {
     ]);
     expect(count).toBe(2);
     expect(repo.list('s1').length).toBe(2);
-    const again = await repo.backfill('s1', [
-      { kind: 'message', role: 'user', text: 'ignored' },
-    ]);
+    const again = await repo.backfill('s1', [{ kind: 'message', role: 'user', text: 'ignored' }]);
     expect(again).toBe(0);
   });
 });

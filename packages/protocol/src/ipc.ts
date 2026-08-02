@@ -107,6 +107,16 @@ export const StoredMessageSchema = z.discriminatedUnion('kind', [
     kind: z.literal('message'),
     role: z.enum(['user', 'assistant', 'system']),
     text: z.string(),
+    /** Attachment metadata only; image bytes remain in Pi's session store. */
+    images: z
+      .array(
+        z.object({
+          name: z.string(),
+          mimeType: z.string(),
+          size: z.number().int().nonnegative(),
+        }),
+      )
+      .optional(),
   }),
   z.object({
     kind: z.literal('thinking'),
@@ -154,6 +164,7 @@ export const ModelInfoSchema = z.object({
   contextWindow: z.number().int().positive().optional(),
   maxOutputTokens: z.number().int().positive().optional(),
   reasoning: z.boolean().optional(),
+  supportsImages: z.boolean().optional(),
   /** USD per million input tokens. */
   inputCostPerMTok: z.number().nonnegative().optional(),
   /** USD per million output tokens. */

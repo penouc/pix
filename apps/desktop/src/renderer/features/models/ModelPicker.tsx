@@ -60,11 +60,16 @@ export function ModelPicker() {
       : '';
     const fromSaved = savedKey ? models.find((model) => modelKey(model) === savedKey) : undefined;
     const preferred =
-      fromSaved ??
-      models.find((model) => favorites.has(modelKey(model))) ??
-      models[0]!;
+      fromSaved ?? models.find((model) => favorites.has(modelKey(model))) ?? models[0]!;
     setSelectedModel(modelKey(preferred));
-  }, [models, favorites, selectedModel, saved.data?.defaultModel, saved.isLoading, setSelectedModel]);
+  }, [
+    models,
+    favorites,
+    selectedModel,
+    saved.data?.defaultModel,
+    saved.isLoading,
+    setSelectedModel,
+  ]);
 
   const menuRef = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
@@ -299,6 +304,7 @@ function Row({
             showProvider ? model.providerId : null,
             model.modelId,
             model.contextWindow ? `${formatTokens(model.contextWindow)} ctx` : null,
+            model.supportsImages ? 'vision' : null,
             model.inputCostPerMTok != null && model.outputCostPerMTok != null
               ? `$${model.inputCostPerMTok}/$${model.outputCostPerMTok}`
               : null,
@@ -315,6 +321,7 @@ function Row({
           onStar();
         }}
         title={starred ? 'Unpin' : 'Pin to the top'}
+        aria-label={starred ? `Unpin ${model.displayName}` : `Pin ${model.displayName}`}
         className="flex-none cursor-pointer rounded-md border-0 bg-transparent p-1 hover:bg-foreground/[0.08]"
       >
         <Star className={cn('h-3.5 w-3.5', starred ? 'fill-accent text-accent' : 'text-muted')} />

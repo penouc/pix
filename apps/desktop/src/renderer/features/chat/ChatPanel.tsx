@@ -11,6 +11,7 @@ import {
   FolderOpen,
   FolderSearch,
   GitBranch,
+  ImagePlus,
   ListOrdered,
   ListPlus,
   Lock,
@@ -39,6 +40,7 @@ import type {
   ApprovalDecision,
   ApprovalMode,
   IndexSearchResult,
+  InputImage,
   ModelInfo,
   ProjectSummary,
   RunRef,
@@ -76,6 +78,29 @@ import { composerDraftScope, useComposerDraftStore } from '@/stores/composer-dra
 import { useWorkspaceStore } from '@/stores/workspace-store';
 
 const LAST_TASK_PROJECT_KEY = 'pi-desktop.last-task-project-id';
+const ACCEPTED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+const MAX_IMAGE_COUNT = 4;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024;
+
+function readImageFile(file: File): Promise<InputImage> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      const comma = result.indexOf(',');
+      if (comma < 0) return reject(new Error(`Could not read ${file.name}`));
+      resolve({
+        data: result.slice(comma + 1),
+        mimeType: file.type as InputImage['mimeType'],
+        name: file.name || 'Pasted image',
+        size: file.size,
+      });
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 const toolIcons: Record<string, ReactNode> = {
   read: <BookOpen className="h-3 w-3" />,
@@ -127,6 +152,7 @@ export function ChatPanel({
   const error = useAgentStreamStore((s) => s.error);
   const errorRetryable = useAgentStreamStore((s) => s.errorRetryable);
   const lastUserText = useAgentStreamStore((s) => s.lastUserText);
+  const lastUserImages = useAgentStreamStore((s) => s.lastUserImages);
   const appendUserMessage = useAgentStreamStore((s) => s.appendUserMessage);
   const setStopping = useAgentStreamStore((s) => s.setStopping);
   const queuedMessages = useAgentStreamStore((s) => s.queuedMessages);
@@ -154,9 +180,14 @@ export function ChatPanel({
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   const [projectSwitching, setProjectSwitching] = useState(false);
   const [projectSwitchError, setProjectSwitchError] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<InputImage[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [draggingImages, setDraggingImages] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const composerDockRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const dragDepthRef = useRef(0);
   const nearBottomRef = useRef(true);
   /** Room reserved under the floating composer so the last message stays visible. */
   const [composerPad, setComposerPad] = useState(140);
@@ -245,6 +276,8 @@ export function ChatPanel({
     setSending(false);
     setExpanded({});
     setSkillMenuOpen(false);
+    setAttachments([]);
+    setAttachmentError(null);
   }, [session?.id]);
 
   // New task should always arrive ready for typing. Project selection is
@@ -272,10 +305,51 @@ export function ChatPanel({
     queryFn: () => invoke<ModelInfo[]>({ method: 'agent.listModels' }),
   });
   const activeModelKey = model ? `${model.providerId}/${model.modelId}` : selectedModel;
-  const contextWindow = normalizeContextCapacity(
-    models.data?.find((entry) => `${entry.providerId}/${entry.modelId}` === activeModelKey)
-      ?.contextWindow,
+  const activeModel = models.data?.find(
+    (entry) => `${entry.providerId}/${entry.modelId}` === activeModelKey,
   );
+  const contextWindow = normalizeContextCapacity(activeModel?.contextWindow);
+  const imageInputUnavailable = activeModel?.supportsImages === false;
+
+  async function addImageFiles(files: File[]) {
+    setAttachmentError(null);
+    if (imageInputUnavailable) {
+      setAttachmentError(`${activeModel?.displayName ?? 'The selected model'} cannot read images.`);
+      return;
+    }
+    const candidates = files.filter((file) => ACCEPTED_IMAGE_TYPES.has(file.type));
+    if (!candidates.length) {
+      setAttachmentError('Choose a PNG, JPEG, WebP, or GIF image.');
+      return;
+    }
+    if (attachments.length + candidates.length > MAX_IMAGE_COUNT) {
+      setAttachmentError(`You can attach up to ${MAX_IMAGE_COUNT} images.`);
+      return;
+    }
+    const tooLarge = candidates.find((file) => file.size > MAX_IMAGE_BYTES);
+    if (tooLarge) {
+      setAttachmentError(`${tooLarge.name} is larger than 10 MB.`);
+      return;
+    }
+    const total =
+      attachments.reduce((sum, image) => sum + image.size, 0) +
+      candidates.reduce((sum, file) => sum + file.size, 0);
+    if (total > MAX_TOTAL_IMAGE_BYTES) {
+      setAttachmentError('Attached images may total at most 20 MB.');
+      return;
+    }
+    try {
+      const added = await Promise.all(candidates.map(readImageFile));
+      setAttachments((current) => [...current, ...added]);
+    } catch (error) {
+      setAttachmentError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  function removeAttachment(index: number) {
+    setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    setAttachmentError(null);
+  }
 
   const branch = useQuery({
     queryKey: ['git.getBranch', project?.id],
@@ -444,8 +518,8 @@ export function ChatPanel({
     [messages, thinkings, tools],
   );
 
-  async function sendDirect(text: string) {
-    if (!text) return;
+  async function sendDirect(text: string, images: InputImage[] = []) {
+    if (!text && !images.length) return;
     setSending(true);
     let targetSessionId: string | null = null;
     try {
@@ -465,11 +539,11 @@ export function ChatPanel({
       targetSessionId = active.id;
       // Creating a session resets the timeline, so append only after the final
       // destination exists. Otherwise the first message is immediately erased.
-      appendUserMessage(text);
+      appendUserMessage(text, images);
       useAgentStreamStore.setState({ status: 'starting', error: null, errorRetryable: false });
       await invoke<RunRef>({
         method: 'agent.sendMessage',
-        params: { sessionId: active.id, text },
+        params: { sessionId: active.id, text, ...(images.length ? { images } : {}) },
       });
     } catch (err) {
       console.error(err);
@@ -492,30 +566,43 @@ export function ChatPanel({
     const isFinished = status === 'completed' || status === 'idle';
     if (isFinished && queuedMessages.length > 0 && !sending && session && !approval) {
       const next = popNextQueuedMessage();
-      if (next && next.text.trim()) {
-        void sendDirect(next.text.trim());
+      if (next && (next.text.trim() || next.images?.length)) {
+        void sendDirect(next.text.trim(), next.images);
       }
     }
+    // sendDirect intentionally follows the current render; depending on its
+    // function identity would retrigger this queue-draining effect every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, queuedMessages.length, sending, session, approval]);
 
   async function send() {
-    if (!draft.trim()) return;
+    if (!draft.trim() && !attachments.length) return;
+    if (attachments.length && imageInputUnavailable) {
+      setAttachmentError(`${activeModel?.displayName ?? 'The selected model'} cannot read images.`);
+      return;
+    }
     const text = draft.trim();
+    const images = attachments;
     setDraft('');
+    setAttachments([]);
+    setAttachmentError(null);
 
     if (running) {
       if (queueMode === 'queue') {
-        addQueuedMessage(text, 'queue');
+        addQueuedMessage(text, 'queue', images);
         return;
       }
       // Steer mode interrupts the active turn. This used to call followUp,
       // which deliberately waits until the turn settles and therefore behaved
       // exactly like a second queue.
-      appendUserMessage(text);
+      appendUserMessage(text, images);
       setSending(true);
       try {
         if (session && activeRunId) {
-          await invoke({ method: 'agent.steer', params: { runId: activeRunId, text } });
+          await invoke({
+            method: 'agent.steer',
+            params: { runId: activeRunId, text, ...(images.length ? { images } : {}) },
+          });
         }
       } catch (err) {
         console.error(err);
@@ -525,40 +612,52 @@ export function ChatPanel({
       return;
     }
 
-    await sendDirect(text);
+    await sendDirect(text, images);
   }
 
   async function handleSendNow(item: QueuedMessage) {
     removeQueuedMessage(item.id);
     if (running && session && activeRunId) {
-      appendUserMessage(item.text);
+      appendUserMessage(item.text, item.images);
       setSending(true);
       try {
-        await invoke({ method: 'agent.steer', params: { runId: activeRunId, text: item.text } });
+        await invoke({
+          method: 'agent.steer',
+          params: {
+            runId: activeRunId,
+            text: item.text,
+            ...(item.images?.length ? { images: item.images } : {}),
+          },
+        });
       } catch (err) {
         console.error(err);
       } finally {
         setSending(false);
       }
     } else {
-      await sendDirect(item.text);
+      await sendDirect(item.text, item.images);
     }
   }
 
   function handleEditQueued(item: QueuedMessage) {
     removeQueuedMessage(item.id);
     setDraft(item.text);
+    setAttachments(item.images ?? []);
     composerRef.current?.focus();
   }
 
   async function retry() {
-    if (!session || !lastUserText || running) return;
+    if (!session || (!lastUserText && !lastUserImages.length) || running) return;
     setSending(true);
     useAgentStreamStore.setState({ status: 'starting', error: null, errorRetryable: false });
     try {
       await invoke<RunRef>({
         method: 'agent.sendMessage',
-        params: { sessionId: session.id, text: lastUserText },
+        params: {
+          sessionId: session.id,
+          text: lastUserText ?? '',
+          ...(lastUserImages.length ? { images: lastUserImages } : {}),
+        },
       });
     } catch (err) {
       useAgentStreamStore.setState({
@@ -661,7 +760,7 @@ export function ChatPanel({
                   </div>
                   <p className="max-w-[320px] text-[12.5px] leading-relaxed text-muted">
                     {project
-                      ? "Type below — @ for a file, $ for a skill, ⌘K for commands. It'll read the project, plan, then ask before running anything risky."
+                      ? "Type or attach a screenshot below — @ for a file, $ for a skill, ⌘K for commands. It'll read the project, plan, then ask before running anything risky."
                       : 'Choose a project above the composer. You can start typing while it loads.'}
                   </p>
                 </div>
@@ -674,10 +773,17 @@ export function ChatPanel({
                       key={`message:${entry.message.id}`}
                       className="group/message flex max-w-[78%] self-end flex-col items-end gap-1.5"
                     >
-                      <div className="rounded-[22px_22px_6px_22px] bg-surface px-4 py-2.5 text-[13.5px] leading-relaxed shadow-[var(--shadow-sm)] whitespace-pre-wrap">
-                        {entry.message.content}
-                      </div>
-                      <MessageCopyButton content={entry.message.content} />
+                      {entry.message.images?.length ? (
+                        <MessageImages images={entry.message.images} />
+                      ) : null}
+                      {entry.message.content ? (
+                        <div className="rounded-[22px_22px_6px_22px] bg-surface px-4 py-2.5 text-[13.5px] leading-relaxed shadow-[var(--shadow-sm)] whitespace-pre-wrap">
+                          {entry.message.content}
+                        </div>
+                      ) : null}
+                      {entry.message.content ? (
+                        <MessageCopyButton content={entry.message.content} />
+                      ) : null}
                     </div>
                   ) : (
                     <AssistantMessage
@@ -788,7 +894,7 @@ export function ChatPanel({
               {error ? (
                 <div className="flex items-center justify-between gap-3 rounded-[18px] border border-danger/30 bg-danger/10 px-4 py-2.5 text-[12.5px] text-danger">
                   <span className="min-w-0 flex-1">{error}</span>
-                  {errorRetryable && lastUserText ? (
+                  {errorRetryable && (lastUserText || lastUserImages.length) ? (
                     <Button
                       size="sm"
                       variant="secondary"
@@ -906,7 +1012,80 @@ export function ChatPanel({
             {projectSwitchError ? (
               <div className="mb-2 px-2 text-[11px] text-danger">{projectSwitchError}</div>
             ) : null}
-            <div className="density-composer overflow-hidden rounded-[26px] border border-border bg-surface shadow-[var(--shadow-sm)]">
+            <div
+              className={cn(
+                'density-composer overflow-hidden rounded-[26px] border bg-surface shadow-[var(--shadow-sm)]',
+                draggingImages ? 'border-accent bg-accent/5' : 'border-border',
+              )}
+              onDragEnter={(event) => {
+                if (
+                  !Array.from(event.dataTransfer.items).some((item) =>
+                    item.type.startsWith('image/'),
+                  )
+                )
+                  return;
+                event.preventDefault();
+                dragDepthRef.current += 1;
+                setDraggingImages(true);
+              }}
+              onDragOver={(event) => {
+                if (
+                  Array.from(event.dataTransfer.items).some((item) =>
+                    item.type.startsWith('image/'),
+                  )
+                ) {
+                  event.preventDefault();
+                }
+              }}
+              onDragLeave={() => {
+                dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+                if (dragDepthRef.current === 0) setDraggingImages(false);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                dragDepthRef.current = 0;
+                setDraggingImages(false);
+                void addImageFiles(Array.from(event.dataTransfer.files));
+              }}
+            >
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                multiple
+                className="sr-only"
+                onChange={(event) => {
+                  void addImageFiles(Array.from(event.target.files ?? []));
+                  event.target.value = '';
+                }}
+              />
+              {attachments.length ? (
+                <div className="flex flex-wrap gap-2 px-3.5 pt-3">
+                  {attachments.map((image, index) => (
+                    <div key={`${image.name}-${index}`} className="group/attachment relative">
+                      <img
+                        src={`data:${image.mimeType};base64,${image.data}`}
+                        alt={image.name}
+                        className="size-16 rounded-xl border border-border object-cover"
+                      />
+                      <button
+                        type="button"
+                        aria-label={`Remove ${image.name}`}
+                        title={`Remove ${image.name}`}
+                        onClick={() => removeAttachment(index)}
+                        className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full border border-border bg-background text-muted shadow-sm hover:text-danger"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {attachmentError ? (
+                <p className="px-4 pt-2 text-[11.5px] text-danger" role="alert">
+                  {attachmentError}
+                </p>
+              ) : null}
               <textarea
                 ref={composerRef}
                 rows={1}
@@ -926,6 +1105,13 @@ export function ChatPanel({
                 disabled={sending && !running}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
+                onPaste={(event) => {
+                  const files = Array.from(event.clipboardData.items)
+                    .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+                    .map((item) => item.getAsFile())
+                    .filter((file): file is File => file !== null);
+                  if (files.length) void addImageFiles(files);
+                }}
                 onCompositionStart={() => {
                   composingRef.current = true;
                 }}
@@ -965,6 +1151,24 @@ export function ChatPanel({
               />
 
               <div className="flex items-center gap-2 px-3 pb-2.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-[30px] flex-none text-muted"
+                  aria-label="Attach images"
+                  title={
+                    imageInputUnavailable
+                      ? `${activeModel?.displayName ?? 'Selected model'} cannot read images`
+                      : 'Attach images (PNG, JPEG, WebP, or GIF)'
+                  }
+                  disabled={
+                    !project || imageInputUnavailable || attachments.length >= MAX_IMAGE_COUNT
+                  }
+                  onClick={() => imageInputRef.current?.click()}
+                >
+                  <ImagePlus className="size-4" />
+                </Button>
                 <ApprovalModePicker
                   mode={approvalMode.data?.mode ?? 'auto-reads'}
                   onChange={(mode) => setApprovalMode.mutate(mode)}
@@ -1000,7 +1204,12 @@ export function ChatPanel({
                       ? 'h-[30px] px-3 gap-1.5 font-semibold text-[12px] bg-accent text-accent-foreground hover:bg-accent/90'
                       : 'h-[30px] w-[30px] flex-none',
                   )}
-                  disabled={!project || !draft.trim() || (sending && !running)}
+                  disabled={
+                    !project ||
+                    (!draft.trim() && !attachments.length) ||
+                    (imageInputUnavailable && attachments.length > 0) ||
+                    (sending && !running)
+                  }
                   onClick={() => void send()}
                   title={
                     running
@@ -1028,6 +1237,35 @@ export function ChatPanel({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function MessageImages({
+  images,
+}: {
+  images: Array<{ name: string; mimeType: string; size: number; data?: string }>;
+}) {
+  return (
+    <div className={cn('grid max-w-[360px] gap-1.5', images.length > 1 && 'grid-cols-2')}>
+      {images.map((image, index) =>
+        image.data ? (
+          <img
+            key={`${image.name}-${index}`}
+            src={`data:${image.mimeType};base64,${image.data}`}
+            alt={image.name}
+            className="max-h-64 min-h-20 w-full rounded-[18px] border border-border object-cover shadow-sm"
+          />
+        ) : (
+          <div
+            key={`${image.name}-${index}`}
+            className="flex min-w-40 items-center gap-2 rounded-[16px] border border-border bg-surface px-3 py-2 text-left"
+          >
+            <ImagePlus className="size-4 flex-none text-muted" />
+            <span className="min-w-0 truncate text-[12px]">{image.name}</span>
+          </div>
+        ),
+      )}
     </div>
   );
 }
@@ -1086,7 +1324,8 @@ function QueuePanel({
               {item.mode === 'steer' ? 'Steer' : 'Queued'}
             </span>
             <span className="min-w-0 flex-1 truncate text-[12.5px] text-foreground">
-              {item.text}
+              {item.text ||
+                `${item.images?.length ?? 0} attached image${item.images?.length === 1 ? '' : 's'}`}
             </span>
             <div className="flex items-center gap-1">
               <Button
@@ -1094,6 +1333,7 @@ function QueuePanel({
                 size="icon"
                 className="h-6 w-6 text-accent hover:bg-accent/10"
                 title="Send now"
+                aria-label="Send queued message now"
                 onClick={() => onSendNow(item)}
               >
                 <Zap className="h-3 w-3" />
@@ -1103,6 +1343,7 @@ function QueuePanel({
                 size="icon"
                 className="h-6 w-6 text-muted hover:text-foreground"
                 title="Edit in composer"
+                aria-label="Edit queued message in composer"
                 onClick={() => onEdit(item)}
               >
                 <Pencil className="h-3 w-3" />
@@ -1112,6 +1353,7 @@ function QueuePanel({
                 size="icon"
                 className="h-6 w-6 text-muted hover:text-danger"
                 title="Remove from queue"
+                aria-label="Remove queued message"
                 onClick={() => onRemove(item.id)}
               >
                 <X className="h-3 w-3" />

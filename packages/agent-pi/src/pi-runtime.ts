@@ -23,7 +23,15 @@ import type {
   ProviderLoginQuestion,
 } from '@pi-desktop/agent-domain';
 import { DomainError, agentError } from '@pi-desktop/agent-domain';
-import type { ApprovalDecision, DesktopAgentEvent, ModelRef, RunRef, StoredMessage, ThinkingLevel, ThinkingLevelState } from '@pi-desktop/protocol';
+import type {
+  ApprovalDecision,
+  DesktopAgentEvent,
+  ModelRef,
+  RunRef,
+  StoredMessage,
+  ThinkingLevel,
+  ThinkingLevelState,
+} from '@pi-desktop/protocol';
 import { PermissionPipeline, type ApprovalMode, type RememberedRule } from '@pi-desktop/security';
 
 import {
@@ -299,7 +307,12 @@ export class PiAgentRuntime implements AgentRuntime {
     this.assertAlive();
     const record = this.requireSession(sessionId);
     return expandPiMessagesToTranscript(
-      record.pi.messages as Array<{ role?: string; content?: unknown; toolCallId?: string; toolName?: string }>,
+      record.pi.messages as Array<{
+        role?: string;
+        content?: unknown;
+        toolCallId?: string;
+        toolName?: string;
+      }>,
     );
   }
 
@@ -312,8 +325,8 @@ export class PiAgentRuntime implements AgentRuntime {
   async sendMessage(sessionId: string, input: AgentInput): Promise<RunRef> {
     this.assertAlive();
     const record = this.requireSession(sessionId);
-    if (!input.text.trim()) {
-      throw new DomainError(agentError('EMPTY_INPUT', 'Message text must not be empty'));
+    if (!input.text.trim() && !input.images?.length) {
+      throw new DomainError(agentError('EMPTY_INPUT', 'A message needs text or an image'));
     }
     // Pi emits `agent_end` (which drives the renderer's completed state) just
     // before prompt() resolves and isStreaming flips to false. A queued message
@@ -348,6 +361,11 @@ export class PiAgentRuntime implements AgentRuntime {
         ),
       );
     }
+    if (input.images?.length && !record.pi.model.input.includes('image')) {
+      throw new DomainError(
+        agentError('MODEL_NO_IMAGE_INPUT', `${record.pi.model.name} does not accept image input`),
+      );
+    }
 
     const runId = randomUUID();
     record.activeRunId = runId;
@@ -370,7 +388,7 @@ export class PiAgentRuntime implements AgentRuntime {
       },
     });
 
-    const promptTask = this.runPrompt(record, runId, input.text.trim());
+    const promptTask = this.runPrompt(record, runId, input.text.trim(), input.images);
     record.promptTask = promptTask;
     void promptTask.then(() => {
       if (record.promptTask === promptTask) {
@@ -387,14 +405,30 @@ export class PiAgentRuntime implements AgentRuntime {
       throw new DomainError(agentError('RUN_NOT_FOUND', `Run ${runId} not found`));
     }
     const record = this.requireSession(sessionId);
-    await record.pi.steer(input.text);
+    if (input.images?.length && !record.pi.model?.input.includes('image')) {
+      throw new DomainError(
+        agentError('MODEL_NO_IMAGE_INPUT', 'The current model does not accept image input'),
+      );
+    }
+    await record.pi.steer(
+      input.text,
+      input.images?.map(({ data, mimeType }) => ({ type: 'image', data, mimeType })),
+    );
   }
 
   async followUp(sessionId: string, input: AgentInput): Promise<void> {
     this.assertAlive();
     const record = this.requireSession(sessionId);
+    if (input.images?.length && record.pi.model && !record.pi.model.input.includes('image')) {
+      throw new DomainError(
+        agentError('MODEL_NO_IMAGE_INPUT', 'The current model does not accept image input'),
+      );
+    }
     if (record.pi.isStreaming) {
-      await record.pi.followUp(input.text);
+      await record.pi.followUp(
+        input.text,
+        input.images?.map(({ data, mimeType }) => ({ type: 'image', data, mimeType })),
+      );
       return;
     }
     await this.sendMessage(sessionId, input);
@@ -530,6 +564,7 @@ export class PiAgentRuntime implements AgentRuntime {
         contextWindow?: number;
         maxTokens?: number;
         reasoning?: boolean;
+        input?: Array<'text' | 'image'>;
         cost?: { input?: number; output?: number };
       };
       /*
@@ -553,6 +588,7 @@ export class PiAgentRuntime implements AgentRuntime {
           ? { maxOutputTokens: record.maxTokens }
           : {}),
         ...(typeof record.reasoning === 'boolean' ? { reasoning: record.reasoning } : {}),
+        ...(Array.isArray(record.input) ? { supportsImages: record.input.includes('image') } : {}),
         ...(typeof record.cost?.input === 'number' ? { inputCostPerMTok: record.cost.input } : {}),
         ...(typeof record.cost?.output === 'number'
           ? { outputCostPerMTok: record.cost.output }
@@ -800,7 +836,12 @@ export class PiAgentRuntime implements AgentRuntime {
     this.disposed = true;
   }
 
-  private async runPrompt(record: SessionRecord, runId: string, text: string): Promise<void> {
+  private async runPrompt(
+    record: SessionRecord,
+    runId: string,
+    text: string,
+    images?: AgentInput['images'],
+  ): Promise<void> {
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutHandle = setTimeout(() => {
@@ -810,7 +851,12 @@ export class PiAgentRuntime implements AgentRuntime {
     });
 
     try {
-      await Promise.race([record.pi.prompt(text), timeoutPromise]);
+      await Promise.race([
+        record.pi.prompt(text, {
+          images: images?.map(({ data, mimeType }) => ({ type: 'image', data, mimeType })),
+        }),
+        timeoutPromise,
+      ]);
     } catch (error) {
       if (record.abortedRunIds.has(runId)) return;
       const message = error instanceof Error ? error.message : String(error);
@@ -1004,7 +1050,28 @@ export function expandPiMessagesToTranscript(
 
     if (message.role === 'user') {
       const text = flattenMessageText(message.content);
-      if (text) out.push({ kind: 'message', role: 'user', text });
+      const images = Array.isArray(message.content)
+        ? message.content
+            .filter((part): part is { type: 'image'; data: string; mimeType: string } =>
+              Boolean(
+                part &&
+                typeof part === 'object' &&
+                (part as { type?: unknown }).type === 'image' &&
+                typeof (part as { data?: unknown }).data === 'string' &&
+                typeof (part as { mimeType?: unknown }).mimeType === 'string',
+              ),
+            )
+            .map((image, index) => ({
+              name: `Image ${index + 1}`,
+              mimeType: image.mimeType,
+              size:
+                Math.floor((image.data.length * 3) / 4) -
+                (image.data.endsWith('==') ? 2 : image.data.endsWith('=') ? 1 : 0),
+            }))
+        : [];
+      if (text || images.length) {
+        out.push({ kind: 'message', role: 'user', text, ...(images.length ? { images } : {}) });
+      }
       continue;
     }
 
@@ -1082,10 +1149,10 @@ export function expandPiMessagesToTranscript(
   return out;
 }
 
-
-function collectTitleSnippets(
-  messages: Array<{ role?: string; content?: unknown }>,
-): { userText: string; assistantText?: string } {
+function collectTitleSnippets(messages: Array<{ role?: string; content?: unknown }>): {
+  userText: string;
+  assistantText?: string;
+} {
   let userText = '';
   let assistantText = '';
   for (const message of messages) {

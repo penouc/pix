@@ -1,6 +1,7 @@
 import type {
   ApprovalDecision,
   DesktopAgentEvent,
+  InputImage,
   ModelRef,
   RunRef,
   StoredMessage,
@@ -32,6 +33,7 @@ export interface AgentSession {
 
 export interface AgentInput {
   text: string;
+  images?: InputImage[];
   model?: ModelRef;
 }
 
@@ -68,6 +70,7 @@ export interface ModelCatalogEntry {
   contextWindow?: number;
   maxOutputTokens?: number;
   reasoning?: boolean;
+  supportsImages?: boolean;
   /** USD per million input tokens. */
   inputCostPerMTok?: number;
   /** USD per million output tokens. */

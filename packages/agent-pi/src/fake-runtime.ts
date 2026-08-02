@@ -8,7 +8,14 @@ import type {
   CreateSessionOptions,
 } from '@pi-desktop/agent-domain';
 import { DomainError, agentError } from '@pi-desktop/agent-domain';
-import type { ApprovalDecision, DesktopAgentEvent, ModelRef, RunRef, ThinkingLevel, ThinkingLevelState } from '@pi-desktop/protocol';
+import type {
+  ApprovalDecision,
+  DesktopAgentEvent,
+  ModelRef,
+  RunRef,
+  ThinkingLevel,
+  ThinkingLevelState,
+} from '@pi-desktop/protocol';
 
 import { deriveSessionTitle, sanitizeSessionTitle } from './session-title.js';
 
@@ -85,8 +92,8 @@ export class FakeAgentRuntime implements AgentRuntime {
     if (!session) {
       throw new DomainError(agentError('SESSION_NOT_FOUND', `Session ${sessionId} not found`));
     }
-    if (!input.text.trim()) {
-      throw new DomainError(agentError('EMPTY_INPUT', 'Message text must not be empty'));
+    if (!input.text.trim() && !input.images?.length) {
+      throw new DomainError(agentError('EMPTY_INPUT', 'A message needs text or an image'));
     }
 
     const runId = randomUUID();
@@ -209,12 +216,14 @@ export class FakeAgentRuntime implements AgentRuntime {
         modelId: 'fake-demo',
         displayName: 'Fake Demo Model',
         hasAuth: true,
+        supportsImages: true,
       },
       {
         providerId: 'fake',
         modelId: 'fake-fast',
         displayName: 'Fake Fast Model',
         hasAuth: true,
+        supportsImages: true,
       },
     ];
   }

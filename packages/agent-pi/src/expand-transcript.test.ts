@@ -3,6 +3,24 @@ import { describe, expect, it } from 'vitest';
 import { expandPiMessagesToTranscript } from './pi-runtime.js';
 
 describe('expandPiMessagesToTranscript', () => {
+  it('keeps image metadata for image-only user messages', () => {
+    const out = expandPiMessagesToTranscript([
+      {
+        role: 'user',
+        content: [{ type: 'image', data: 'aGVsbG8=', mimeType: 'image/png' }],
+      },
+    ]);
+
+    expect(out).toEqual([
+      {
+        kind: 'message',
+        role: 'user',
+        text: '',
+        images: [{ name: 'Image 1', mimeType: 'image/png', size: 5 }],
+      },
+    ]);
+  });
+
   it('emits thinking and tool cards from assistant content parts', () => {
     const out = expandPiMessagesToTranscript([
       { role: 'user', content: 'look at README' },

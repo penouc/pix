@@ -13,6 +13,13 @@ interface MessageRow {
   created_at: number;
 }
 
+const RICH_MESSAGE_PREFIX = '\u001ePIX_MESSAGE:';
+
+interface MessagePayload {
+  text: string;
+  images: Array<{ name: string; mimeType: string; size: number }>;
+}
+
 interface ToolPayload {
   toolName: string;
   inputSummary: string;
@@ -23,6 +30,14 @@ interface ToolPayload {
 
 function serializeEntry(entry: StoredMessage): { kind: string; role: string; text: string } {
   if (entry.kind === 'message') {
+    if (entry.images?.length) {
+      const payload: MessagePayload = { text: entry.text, images: entry.images };
+      return {
+        kind: 'message',
+        role: entry.role,
+        text: `${RICH_MESSAGE_PREFIX}${JSON.stringify(payload)}`,
+      };
+    }
     return { kind: 'message', role: entry.role, text: entry.text };
   }
   if (entry.kind === 'thinking') {
@@ -38,7 +53,9 @@ function serializeEntry(entry: StoredMessage): { kind: string; role: string; tex
   return { kind: 'tool', role: 'tool', text: JSON.stringify(payload) };
 }
 
-function deserializeRow(row: Pick<MessageRow, 'id' | 'kind' | 'role' | 'text'>): StoredMessage | null {
+function deserializeRow(
+  row: Pick<MessageRow, 'id' | 'kind' | 'role' | 'text'>,
+): StoredMessage | null {
   const kind = row.kind || 'message';
   if (kind === 'thinking' || row.role === 'thinking') {
     const content = row.text.trim();
@@ -69,6 +86,19 @@ function deserializeRow(row: Pick<MessageRow, 'id' | 'kind' | 'role' | 'text'>):
     }
   }
   if (row.role === 'user' || row.role === 'assistant' || row.role === 'system') {
+    if (row.text.startsWith(RICH_MESSAGE_PREFIX)) {
+      try {
+        const payload = JSON.parse(row.text.slice(RICH_MESSAGE_PREFIX.length)) as MessagePayload;
+        return {
+          kind: 'message',
+          role: row.role,
+          text: payload.text ?? '',
+          images: Array.isArray(payload.images) ? payload.images : [],
+        };
+      } catch {
+        return { kind: 'message', role: row.role, text: row.text };
+      }
+    }
     return { kind: 'message', role: row.role, text: row.text };
   }
   return null;
@@ -117,11 +147,13 @@ export class SqliteSessionMessageRepository implements SessionMessageRepository 
 
     const createdAt = input.createdAt ?? Date.now();
     const nextSequence =
-      (this.db
-        .prepare(
-          'SELECT COALESCE(MAX(sequence), -1) AS max_seq FROM session_messages WHERE session_id = ?',
-        )
-        .get(input.sessionId) as { max_seq: number }).max_seq + 1;
+      (
+        this.db
+          .prepare(
+            'SELECT COALESCE(MAX(sequence), -1) AS max_seq FROM session_messages WHERE session_id = ?',
+          )
+          .get(input.sessionId) as { max_seq: number }
+      ).max_seq + 1;
 
     this.db
       .prepare(
