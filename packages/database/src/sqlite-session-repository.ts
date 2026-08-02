@@ -68,6 +68,18 @@ export class SqliteSessionRepository implements SessionRepository {
     return rows.map(rowToSummary);
   }
 
+  listAll(): SessionSummary[] {
+    const rows = this.requireDb()
+      .prepare(
+        `SELECT id, project_id, title, created_at, updated_at, archived, deleted_at
+         FROM sessions
+         WHERE archived = 0 AND deleted_at IS NULL
+         ORDER BY updated_at DESC, created_at DESC`,
+      )
+      .all() as unknown as SessionRow[];
+    return rows.map(rowToSummary);
+  }
+
   get(sessionId: string): SessionSummary | undefined {
     const db = this.requireDb();
     const row = db

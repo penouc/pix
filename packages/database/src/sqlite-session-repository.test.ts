@@ -49,6 +49,32 @@ describe('SqliteSessionRepository', () => {
     repo = reloaded;
   });
 
+  it('lists visible sessions across projects by latest activity', async () => {
+    const r = await createRepo();
+    await r.put({
+      id: 'older',
+      projectId: 'p1',
+      title: 'Older',
+      createdAt: 10,
+      updatedAt: 20,
+      archived: false,
+    });
+    await r.put({
+      id: 'newer',
+      projectId: 'p2',
+      title: 'Newer',
+      createdAt: 30,
+      updatedAt: 40,
+      archived: false,
+    });
+    const archived = await r.create({ projectId: 'p3', title: 'Archived' });
+    const deleted = await r.create({ projectId: 'p4', title: 'Deleted' });
+    await r.archive(archived.id, true);
+    await r.setDeleted(deleted.id, true);
+
+    expect(r.listAll().map((session) => session.id)).toEqual(['newer', 'older']);
+  });
+
   it('imports legacy JSON sessions once', async () => {
     const r = await createRepo();
     const jsonPath = path.join(dir, 'sessions.json');

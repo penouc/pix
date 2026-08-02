@@ -6,7 +6,6 @@ import {
   Search,
   Settings,
   Sparkles,
-  SquareTerminal,
   X,
   Zap,
 } from 'lucide-react';
@@ -20,8 +19,6 @@ import { cn } from '@/lib/utils';
 import { useAgentStreamStore } from '@/stores/agent-stream-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 
-export type SidebarDestination = 'terminal' | 'automations' | 'skills';
-
 interface ProjectSidebarProps {
   onOpenSettings: () => void;
   onNewTask: (previousSession: SessionSummary | null) => void;
@@ -33,7 +30,6 @@ interface ProjectSidebarProps {
   externalError?: string | null;
   /** Switched to another project — land on the unstarted-task screen. */
   onProjectSwitched: () => void;
-  onNavigate: (destination: SidebarDestination) => void;
   /** Which nav entry reads as current. */
   activeNav: string;
   /** True while the run screen is showing an unstarted task. */
@@ -48,7 +44,6 @@ export function ProjectSidebar({
   onBrowseForProject,
   externalError,
   onProjectSwitched,
-  onNavigate,
   activeNav,
   isBlankRun,
 }: ProjectSidebarProps) {
@@ -198,12 +193,6 @@ export function ProjectSidebar({
           label="Search"
           shortcut="⌘K"
           onClick={onOpenSearch}
-        />
-        <NavItem
-          icon={<SquareTerminal className="h-[15px] w-[15px]" />}
-          label="Terminal"
-          active={activeNav === 'terminal'}
-          onClick={() => onNavigate('terminal')}
         />
         <NavItem
           icon={<Zap className="h-[15px] w-[15px]" />}

@@ -42,6 +42,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { ApprovalModePicker } from '@/features/chat/ApprovalModePicker';
+import { normalizeContextCapacity } from '@/features/chat/context-usage';
 import { ThinkingLevelPicker } from '@/features/chat/ThinkingLevelPicker';
 import { ThinkingPlaceholderRow, ThinkingStreamRow } from '@/features/chat/ThinkingStream';
 import { Markdown } from '@/features/chat/Markdown';
@@ -52,7 +53,6 @@ import {
   dotStyle,
   formatDuration,
   formatTokens,
-  NOT_REPORTED,
   statusLabel,
   statusTone,
   toneBadge,
@@ -254,9 +254,10 @@ export function ChatPanel({
     queryFn: () => invoke<ModelInfo[]>({ method: 'agent.listModels' }),
   });
   const activeModelKey = model ? `${model.providerId}/${model.modelId}` : selectedModel;
-  const contextWindow = models.data?.find(
-    (entry) => `${entry.providerId}/${entry.modelId}` === activeModelKey,
-  )?.contextWindow;
+  const contextWindow = normalizeContextCapacity(
+    models.data?.find((entry) => `${entry.providerId}/${entry.modelId}` === activeModelKey)
+      ?.contextWindow,
+  );
 
   const branch = useQuery({
     queryKey: ['git.getBranch', project?.id],
@@ -579,12 +580,12 @@ export function ChatPanel({
         .filter(Boolean)
         .join(' · ')
     : [
-        activeRunId ? `run ${activeRunId.slice(0, 8)}` : `run ${NOT_REPORTED}`,
-        formatDuration(startedAt),
-        usage?.totalTokens != null
-          ? `${formatTokens(usage.totalTokens)} tokens`
-          : 'usage not reported',
-      ].join(' · ');
+        activeRunId ? `run ${activeRunId.slice(0, 8)}` : null,
+        startedAt ? formatDuration(startedAt) : null,
+        usage?.totalTokens != null ? `${formatTokens(usage.totalTokens)} tokens` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ');
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -595,7 +596,9 @@ export function ChatPanel({
         </Button>
         <div className="min-w-0 flex-1">
           <div className="truncate text-[14px] leading-tight font-bold">{runTitle}</div>
-          <div className="font-mono text-[10.5px] leading-snug text-muted">{runMeta}</div>
+          {runMeta ? (
+            <div className="font-mono text-[10.5px] leading-snug text-muted">{runMeta}</div>
+          ) : null}
         </div>
         {blank ? <Badge tone="neutral">not started</Badge> : null}
         {!blank && status !== 'idle' ? (

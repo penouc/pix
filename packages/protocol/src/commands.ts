@@ -364,7 +364,8 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('session.create'), params: CreateSessionInputSchema }),
   z.object({
     method: z.literal('session.list'),
-    params: z.object({ projectId: z.string().min(1) }),
+    // Omit projectId for a global, recency-ordered list (used by ⌘K).
+    params: z.object({ projectId: z.string().min(1).optional() }),
   }),
   z.object({
     method: z.literal('session.messages'),

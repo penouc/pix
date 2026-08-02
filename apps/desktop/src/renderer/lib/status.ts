@@ -133,6 +133,13 @@ export function formatTokens(tokens: number | null | undefined): string {
   return `${(tokens / 1000).toFixed(1)}k`;
 }
 
+/** Usage analytics always use millions so totals and model rows share one unit. */
+export function formatTokenMillions(tokens: number | null | undefined): string {
+  if (tokens == null) return NOT_REPORTED;
+  const millions = tokens / 1_000_000;
+  return `${new Intl.NumberFormat('en-US', { maximumSignificantDigits: 3 }).format(millions)}M`;
+}
+
 export function formatCost(costUsd: number | null | undefined): string {
   if (costUsd == null) return NOT_REPORTED;
   return `$${costUsd.toFixed(costUsd < 1 ? 4 : 2)}`;

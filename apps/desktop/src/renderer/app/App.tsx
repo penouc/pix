@@ -17,7 +17,7 @@ import { ApprovalDialog } from '@/features/approvals/ApprovalDialog';
 import { AutomationsView } from '@/features/automations/AutomationsView';
 import { ChatPanel } from '@/features/chat/ChatPanel';
 import { DiffPanel } from '@/features/diff/DiffPanel';
-import { ProjectSidebar, type SidebarDestination } from '@/features/projects/ProjectSidebar';
+import { ProjectSidebar } from '@/features/projects/ProjectSidebar';
 import { SearchPalette, type PaletteCommand } from '@/features/search/SearchPalette';
 import { SettingsView } from '@/features/settings/SettingsView';
 import { SkillsView } from '@/features/skills/SkillsView';
@@ -409,7 +409,6 @@ export function App() {
             setBlankRun(true);
             setView('run');
           }}
-          onNavigate={(destination: SidebarDestination) => setView(destination)}
         />
       }
       main={main}

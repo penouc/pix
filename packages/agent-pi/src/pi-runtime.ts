@@ -83,6 +83,8 @@ interface SessionRecord {
   unsubscribePi: () => void;
   sequence: number;
   activeRunId: string | null;
+  /** The SDK prompt may still be unwinding just after it emits `agent_end`. */
+  promptTask: Promise<void> | null;
   abortedRunIds: Set<string>;
   currentMessageId: string | null;
 }
@@ -241,6 +243,7 @@ export class PiAgentRuntime implements AgentRuntime {
       unsubscribePi: () => undefined,
       sequence: 0,
       activeRunId: null,
+      promptTask: null,
       abortedRunIds: new Set(),
       currentMessageId: null,
     };
@@ -312,7 +315,16 @@ export class PiAgentRuntime implements AgentRuntime {
     if (!input.text.trim()) {
       throw new DomainError(agentError('EMPTY_INPUT', 'Message text must not be empty'));
     }
-    if (record.pi.isStreaming) {
+    // Pi emits `agent_end` (which drives the renderer's completed state) just
+    // before prompt() resolves and isStreaming flips to false. A queued message
+    // can arrive in that small hand-off window. Wait for that completed prompt
+    // to unwind instead of incorrectly rejecting the next queue item.
+    if (record.pi.isStreaming && !record.activeRunId && record.promptTask) {
+      await record.promptTask;
+    }
+    // Re-check after waiting: another caller may have started the next run while
+    // this one was suspended.
+    if (record.pi.isStreaming || record.activeRunId) {
       throw new DomainError(
         agentError('RUN_IN_PROGRESS', 'A run is already active; use follow-up or abort first'),
       );
@@ -358,7 +370,13 @@ export class PiAgentRuntime implements AgentRuntime {
       },
     });
 
-    void this.runPrompt(record, runId, input.text.trim());
+    const promptTask = this.runPrompt(record, runId, input.text.trim());
+    record.promptTask = promptTask;
+    void promptTask.then(() => {
+      if (record.promptTask === promptTask) {
+        record.promptTask = null;
+      }
+    });
     return { runId, sessionId };
   }
 

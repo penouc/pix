@@ -5,7 +5,7 @@ import type { UsageByModel, UsageSummary } from '@pi-desktop/protocol';
 
 import { Segmented } from '@/components/ui/segmented';
 import { invoke } from '@/lib/ipc';
-import { formatCost, formatDurationMs, formatTokens, NOT_REPORTED } from '@/lib/status';
+import { formatCost, formatDurationMs, formatTokenMillions, NOT_REPORTED } from '@/lib/status';
 import { cn } from '@/lib/utils';
 
 type Range = '30' | '90' | '365';
@@ -122,10 +122,14 @@ export function UsageTab() {
         </Stat>
         <Stat
           label="Tokens"
-          value={totals ? formatTokens(totals.inputTokens + totals.outputTokens) : NOT_REPORTED}
+          value={
+            totals
+              ? formatTokenMillions(totals.inputTokens + totals.outputTokens)
+              : NOT_REPORTED
+          }
         >
           {totals
-            ? `${formatTokens(totals.inputTokens)} in · ${formatTokens(totals.outputTokens)} out`
+            ? `${formatTokenMillions(totals.inputTokens)} in · ${formatTokenMillions(totals.outputTokens)} out`
             : '—'}
         </Stat>
         <Stat label="Finished" value={successRate == null ? NOT_REPORTED : `${successRate}%`}>
@@ -274,7 +278,7 @@ function ModelRow({ model, peak }: { model: UsageByModel; peak: number }) {
       </td>
       <td className="px-3.5 py-2.5 text-right font-mono">{model.runs.toLocaleString()}</td>
       <td className="px-3.5 py-2.5 text-right font-mono">
-        {formatTokens(model.inputTokens + model.outputTokens)}
+        {formatTokenMillions(model.inputTokens + model.outputTokens)}
       </td>
       <td className="px-3.5 py-2.5">
         <div className="flex items-center gap-2">

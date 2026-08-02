@@ -28,9 +28,8 @@ interface Hit {
 }
 
 /**
- * The ⌘K palette. Tasks come from the session list, commands from the app
- * itself, skills from the on-disk skill dirs, and files and code from the
- * workspace index — which spans every trusted project, not just the open one.
+ * The ⌘K palette. Tasks and indexed files span every project, commands come
+ * from the app itself, and skills come from the on-disk skill dirs.
  */
 export function SearchPalette({
   onClose,
@@ -51,10 +50,8 @@ export function SearchPalette({
   const listRef = useRef<HTMLDivElement>(null);
 
   const sessions = useQuery({
-    queryKey: ['session.list', project?.id],
-    enabled: Boolean(project?.id),
-    queryFn: () =>
-      invoke<SessionSummary[]>({ method: 'session.list', params: { projectId: project!.id } }),
+    queryKey: ['session.list', 'all'],
+    queryFn: () => invoke<SessionSummary[]>({ method: 'session.list', params: {} }),
   });
 
   const skills = useQuery({
@@ -86,8 +83,12 @@ export function SearchPalette({
     const match = (text: string) => !needle || text.toLowerCase().includes(needle);
     const out: Hit[] = [];
 
-    for (const session of sessions.data ?? []) {
-      if (!match(session.title)) continue;
+    // The empty palette recommends the seven most recently active sessions.
+    // Once the user types, do not keep that recommendation cap: every matching
+    // conversation should remain discoverable.
+    const matchingSessions = (sessions.data ?? []).filter((session) => match(session.title));
+    const visibleSessions = needle ? matchingSessions : matchingSessions.slice(0, 7);
+    for (const session of visibleSessions) {
       out.push({
         key: `task:${session.id}`,
         group: 'Tasks',
@@ -96,7 +97,6 @@ export function SearchPalette({
         hint: `session ${session.id.slice(0, 8)}`,
         run: () => onOpenSession(session),
       });
-      if (out.length > 6) break;
     }
 
     for (const hit of indexed.data?.paths ?? []) {

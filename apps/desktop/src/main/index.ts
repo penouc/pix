@@ -913,7 +913,9 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         return okResult(summary satisfies SessionSummary);
       }
       case 'session.list': {
-        return okResult(sessions.listByProject(cmd.params.projectId));
+        return okResult(
+          cmd.params.projectId ? sessions.listByProject(cmd.params.projectId) : sessions.listAll(),
+        );
       }
       case 'session.messages': {
         const session = sessions.get(cmd.params.sessionId);

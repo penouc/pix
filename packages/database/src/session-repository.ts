@@ -7,6 +7,8 @@ import type { SessionSummary } from '@pi-desktop/protocol';
 export interface SessionRepository {
   init(): Promise<void>;
   listByProject(projectId: string, includeArchived?: boolean): SessionSummary[];
+  /** All visible sessions, newest activity first. */
+  listAll(): SessionSummary[];
   get(sessionId: string): SessionSummary | undefined;
   create(input: { id?: string; projectId: string; title: string }): Promise<SessionSummary>;
   put(session: SessionSummary): Promise<SessionSummary>;
