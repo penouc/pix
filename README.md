@@ -113,6 +113,30 @@ pnpm --filter @pi-desktop/desktop package:dmg
 
 > 当前构建未签名、未公证。macOS 首次打开时可能需要在“隐私与安全性”中手动允许。
 
+## 自动发布
+
+仓库通过 [Release workflow](./.github/workflows/release.yml) 自动生成 GitHub Release。推送符合语义化版本格式的 `v*` Tag 后，GitHub Actions 会依次：
+
+1. 安装锁定依赖并运行 TypeScript 与测试检查。
+2. 构建 workspace packages 与 Desktop。
+3. 生成 Apple Silicon DMG，并把 Tag 版本写入应用 metadata。
+4. 验证 app bundle、asar 和 native modules。
+5. 创建 GitHub Release、自动生成 Release Notes 并上传 DMG。
+
+发布新版本：
+
+```bash
+git switch main
+git pull --ff-only
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+版本 Tag 必须类似 `v0.2.0` 或 `v0.2.0-beta.1`。Release 仅由 Tag 触发，普通的 `main` 提交不会产生安装包。
+
+> [!NOTE]
+> 自动发布目前生成的是未签名、未公证构建。正式分发前仍需配置 Apple Developer ID、Hardened Runtime 和 Apple Notarization secrets。
+
 ## 安全模型
 
 PiX 不把 Renderer 当作可信执行环境：
@@ -226,7 +250,3 @@ Pi SDK 类型只允许出现在 `packages/agent-pi`，Renderer 不直接依赖 P
 ## 致谢
 
 PiX 由开源的 [Pi coding agent](https://github.com/earendil-works/pi) 驱动。感谢 Pi 团队和社区提供 Agent Runtime、多 Provider / Model 支持以及持续演进的 SDK。
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=penouc/pix&type=Date)](https://www.star-history.com/#penouc/pix&Date)

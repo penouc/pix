@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish macOS release
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Resolve version
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Tag must be a semantic version such as v0.2.0" >&2
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Check
+        run: |
+          pnpm typecheck
+          pnpm test
+
+      - name: Build desktop
+        run: pnpm build
+
+      - name: Package Apple Silicon DMG
+        run: >-
+          pnpm --filter @pi-desktop/desktop exec electron-builder
+          --mac dmg
+          --arm64
+          --config electron-builder.yml
+          --publish never
+          --config.extraMetadata.version="$VERSION"
+
+      - name: Verify package
+        run: pnpm verify:packaged
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            apps/desktop/release/*.dmg \
+            --verify-tag \
+            --title "PiX $GITHUB_REF_NAME" \
+            --generate-notes
