@@ -8,8 +8,8 @@ import { PiAgentRuntime } from './pi-runtime.js';
 import { PI_SDK_PACKAGES } from './versions.js';
 
 describe('Pi SDK lock', () => {
-  it('pins coding-agent 0.82.0', () => {
-    expect(PI_SDK_PACKAGES.version).toBe('0.82.0');
+  it('pins coding-agent 0.83.0', () => {
+    expect(PI_SDK_PACKAGES.version).toBe('0.83.0');
     expect(PI_SDK_PACKAGES.codingAgent).toBe('@earendil-works/pi-coding-agent');
   });
 });

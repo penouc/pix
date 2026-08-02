@@ -1,7 +1,11 @@
 import { app } from 'electron';
-import { autoUpdater, type UpdateInfo } from 'electron-updater';
+import electronUpdater from 'electron-updater';
+import type { UpdateInfo } from 'electron-updater';
 
 import type { UpdateState } from '@pi-desktop/protocol';
+
+// electron-updater is CJS with a lazy getter for autoUpdater; ESM named imports fail at runtime.
+const { autoUpdater } = electronUpdater;
 
 /** Main-process boundary for release updates. */
 export class UpdateService {

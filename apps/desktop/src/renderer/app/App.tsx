@@ -1,10 +1,8 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type {
   ApprovalDecision,
-  CheckpointRecoverySummary,
   IndexHit,
   ProjectSummary,
   SessionSummary,
@@ -13,7 +11,6 @@ import type {
 } from '@pi-desktop/protocol';
 
 import { AppShell } from '@/components/layout/AppShell';
-import { Button } from '@/components/ui/button';
 import { ApprovalDialog } from '@/features/approvals/ApprovalDialog';
 import { AutomationsView } from '@/features/automations/AutomationsView';
 import { ChatPanel } from '@/features/chat/ChatPanel';
@@ -33,13 +30,12 @@ import { useWorkspaceStore } from '@/stores/workspace-store';
  * shows an unstarted task (`blankRun`) until something is running, and the
  * sidebar's Tasks list is the switcher.
  */
-type View = 'run' | 'diff' | 'settings' | 'recovery' | 'terminal' | 'automations' | 'skills';
+type View = 'run' | 'diff' | 'settings' | 'terminal' | 'automations' | 'skills';
 
 export function App() {
   const [view, setView] = useState<View>('run');
   const [blankRun, setBlankRun] = useState(true);
   const [projectError, setProjectError] = useState<string | null>(null);
-  const [recoveryRunId, setRecoveryRunId] = useState<string | undefined>();
   const [diffFocusPath, setDiffFocusPath] = useState<string | undefined>();
   const [panelOpen, setPanelOpen] = useState(false);
   const [dismissedApproval, setDismissedApproval] = useState<string | null>(null);
@@ -92,11 +88,6 @@ export function App() {
       }
     });
   }, [applyEvent, queryClient]);
-
-  const recoverable = useQuery({
-    queryKey: ['checkpoint.listRecoverable'],
-    queryFn: () => invoke<CheckpointRecoverySummary[]>({ method: 'checkpoint.listRecoverable' }),
-  });
 
   const newTask = useCallback(
     (previous?: SessionSummary | null) => {
@@ -320,11 +311,6 @@ export function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [newTask, browseForProject]);
 
-  function reviewRecovery(runId: string) {
-    setRecoveryRunId(runId);
-    setView('recovery');
-  }
-
   async function decideApproval(decision: ApprovalDecision) {
     if (!approval) return;
     try {
@@ -337,41 +323,12 @@ export function App() {
     }
   }
 
-  const unresolved = recoverable.data ?? [];
-  /** The design carries the banner on the task screen; a live run keeps its own chrome. */
-  /**
-   * The design carried this on the task screen, which v3 removed. Kept on every
-   * screen except the recovery view itself: an unresolved checkpoint is a safety
-   * affordance and dropping it with the page would lose the only entry point.
-   */
-  const showBanner = unresolved.length > 0 && view !== 'recovery';
-
   /** The thread carries its own approval card, so the modal is for every other screen. */
   const showApprovalDialog =
     approval !== null && view !== 'run' && dismissedApproval !== approval.requestId;
 
   const main = (
     <div className="flex h-full min-h-0 flex-col">
-      {showBanner ? (
-        <div className="flex flex-none items-center gap-2.5 border-b border-accent/25 bg-accent-100 px-4.5 py-2.5">
-          <AlertTriangle className="h-[15px] w-[15px] flex-none text-accent-700" />
-          <span className="flex-1 text-[12.5px] text-accent-900">
-            {unresolved.length} unresolved checkpoint{unresolved.length > 1 ? 's' : ''} need
-            {unresolved.length > 1 ? '' : 's'} review — run{' '}
-            <span className="font-mono">{unresolved[0]!.runId.slice(0, 8)}</span>
-            {unresolved.length > 1 ? ' and others were' : ' was'} interrupted.
-          </span>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="border-accent/35"
-            onClick={() => reviewRecovery(unresolved[0]!.runId)}
-          >
-            Review
-          </Button>
-        </div>
-      ) : null}
-
       <div className="flex min-h-0 min-w-0 flex-1">
         {view === 'settings' ? (
           <SettingsView onClose={() => setView('run')} />
@@ -381,17 +338,6 @@ export function App() {
           <AutomationsView onOpenSession={openSessionById} />
         ) : view === 'skills' ? (
           <SkillsView onRunSkill={useSkill} />
-        ) : view === 'recovery' ? (
-          <DiffPanel
-            onContinue={() => setView('run')}
-            onBack={() => setView('run')}
-            recoveryRunId={recoveryRunId}
-            onRecoveryResolved={() => {
-              setRecoveryRunId(undefined);
-              setView('run');
-              void recoverable.refetch();
-            }}
-          />
         ) : view === 'diff' ? (
           <DiffPanel
             onContinue={() => setView('run')}
