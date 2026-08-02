@@ -15,7 +15,7 @@
     "deploy:website": "pnpm --filter @pi-desktop/website run deploy",
     "build": "pnpm -r --filter './packages/*' build && pnpm --filter @pi-desktop/desktop build",
     "build:packages": "pnpm -r --filter './packages/*' build",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm run build:packages && pnpm -r typecheck",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
