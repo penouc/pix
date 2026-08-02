@@ -3,7 +3,12 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import type { Automation, AutomationDraft, AutomationTrigger } from '@pi-desktop/protocol';
+import {
+  AutomationSchema,
+  type Automation,
+  type AutomationDraft,
+  type AutomationTrigger,
+} from '@pi-desktop/protocol';
 
 /**
  * Automation definitions, persisted in the Main-private config dir.
@@ -32,16 +37,27 @@ export class AutomationStore {
   }
 
   async get(id: string): Promise<Automation | undefined> {
-    return (await this.load()).find((automation) => automation.id === id);
+    const found = (await this.load()).find((automation) => automation.id === id);
+    return found ? structuredClone(found) : undefined;
   }
 
   async save(draft: AutomationDraft): Promise<Automation> {
-    const all = await this.load();
+    const all = structuredClone(await this.load());
     const now = Date.now();
     if (draft.id) {
       const index = all.findIndex((automation) => automation.id === draft.id);
       if (index === -1) throw new Error(`Automation ${draft.id} not found`);
-      const updated: Automation = { ...all[index]!, ...draft, id: draft.id };
+      const previous = all[index]!;
+      const updated: Automation = {
+        ...previous,
+        ...draft,
+        id: draft.id,
+        enabledAt: draft.enabled
+          ? previous.enabled
+            ? (previous.enabledAt ?? now)
+            : now
+          : undefined,
+      };
       all[index] = updated;
       await this.persist(all);
       return { ...updated, nextRunAt: nextRunAt(updated) ?? undefined };
@@ -56,6 +72,7 @@ export class AutomationStore {
       note: draft.note,
       enabled: draft.enabled,
       createdAt: now,
+      enabledAt: draft.enabled ? now : undefined,
     };
     all.push(created);
     await this.persist(all);
@@ -63,21 +80,24 @@ export class AutomationStore {
   }
 
   async remove(id: string): Promise<void> {
-    const all = await this.load();
+    const all = structuredClone(await this.load());
     await this.persist(all.filter((automation) => automation.id !== id));
   }
 
   async setEnabled(id: string, enabled: boolean): Promise<Automation> {
-    const all = await this.load();
+    const all = structuredClone(await this.load());
     const found = all.find((automation) => automation.id === id);
     if (!found) throw new Error(`Automation ${id} not found`);
-    found.enabled = enabled;
+    if (found.enabled !== enabled) {
+      found.enabled = enabled;
+      found.enabledAt = enabled ? Date.now() : undefined;
+    }
     await this.persist(all);
     return { ...found, nextRunAt: nextRunAt(found) ?? undefined };
   }
 
   async recordRun(id: string, summary: string, at = Date.now()): Promise<void> {
-    const all = await this.load();
+    const all = structuredClone(await this.load());
     const found = all.find((automation) => automation.id === id);
     if (!found) return;
     found.lastRunAt = at;
@@ -90,7 +110,12 @@ export class AutomationStore {
     try {
       const raw = await fs.readFile(this.filePath, 'utf8');
       const parsed = JSON.parse(raw) as unknown;
-      this.cache = Array.isArray(parsed) ? (parsed as Automation[]) : [];
+      this.cache = Array.isArray(parsed)
+        ? parsed.flatMap((entry) => {
+            const result = AutomationSchema.safeParse(entry);
+            return result.success ? [result.data] : [];
+          })
+        : [];
     } catch {
       this.cache = [];
     }
@@ -98,16 +123,23 @@ export class AutomationStore {
   }
 
   private async persist(next: Automation[]): Promise<void> {
-    this.cache = next;
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    await fs.writeFile(this.filePath, JSON.stringify(next, null, 2), 'utf8');
+    const temporary = `${this.filePath}.${process.pid}.tmp`;
+    await fs.writeFile(temporary, JSON.stringify(next, null, 2), 'utf8');
+    await fs.rename(temporary, this.filePath);
+    // Publish the new in-memory state only after the durable write succeeds.
+    this.cache = next;
   }
 }
 
 /** When this automation is next due, or null if it only runs on demand. */
 export function nextRunAt(automation: Automation, now = Date.now()): number | null {
   if (!automation.enabled) return null;
-  return nextRunAtForTrigger(automation.trigger, automation.lastRunAt, now);
+  // Without a stable anchor, `now + interval` moves forward on every scheduler
+  // tick and a never-run interval can never become due. `enabledAt` also keeps
+  // re-enabling an old automation from immediately catching up stale work.
+  const anchor = automation.lastRunAt ?? automation.enabledAt ?? automation.createdAt;
+  return nextRunAtForTrigger(automation.trigger, anchor, now);
 }
 
 export function nextRunAtForTrigger(

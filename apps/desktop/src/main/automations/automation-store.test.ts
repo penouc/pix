@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Automation } from '@pi-desktop/protocol';
 
-import { isDue, nextRunAtForTrigger } from './automation-store.js';
+import { isDue, nextRunAt, nextRunAtForTrigger } from './automation-store.js';
 
 const BASE: Omit<Automation, 'trigger'> = {
   id: 'a1',
@@ -65,6 +65,18 @@ describe('automation scheduling', () => {
       trigger: { kind: 'interval', everyMinutes: 30 },
       lastRunAt: at(9),
     };
+    expect(isDue(automation, at(9, 29))).toBe(false);
+    expect(isDue(automation, at(9, 31))).toBe(true);
+  });
+
+  it('anchors a never-run interval to when it was enabled', () => {
+    const automation: Automation = {
+      ...BASE,
+      createdAt: at(8),
+      enabledAt: at(9),
+      trigger: { kind: 'interval', everyMinutes: 30 },
+    };
+    expect(nextRunAt(automation, at(9, 10))).toBe(at(9, 30));
     expect(isDue(automation, at(9, 29))).toBe(false);
     expect(isDue(automation, at(9, 31))).toBe(true);
   });

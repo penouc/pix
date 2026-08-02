@@ -336,14 +336,9 @@ export function isExternallyOpenable(url: string): boolean {
   }
 }
 
-function persistTranscriptEntry(
-  sessionId: string,
-  entry: StoredMessage,
-  id?: string,
-): void {
+function persistTranscriptEntry(sessionId: string, entry: StoredMessage, id?: string): void {
   const entryId =
-    id ??
-    (entry.kind === 'thinking' || entry.kind === 'tool' ? entry.id : randomUUID());
+    id ?? (entry.kind === 'thinking' || entry.kind === 'tool' ? entry.id : randomUUID());
   void getDb()
     .then((db) =>
       db.sessionMessages.append({
@@ -363,11 +358,7 @@ function persistSessionMessage(
 ): void {
   const trimmed = text.trim();
   if (!trimmed) return;
-  persistTranscriptEntry(
-    sessionId,
-    { kind: 'message', role, text: trimmed },
-    messageId,
-  );
+  persistTranscriptEntry(sessionId, { kind: 'message', role, text: trimmed }, messageId);
 }
 
 function broadcastEvent(event: unknown): void {
@@ -1206,7 +1197,14 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       case 'skills.list': {
         const projectId = cmd.params?.projectId;
         const project = projectId ? projects.get(projectId) : undefined;
-        return okResult(await getSkillsService().list({ projectId, projectPath: project?.path }));
+        // Project skills are executable instructions. Never read or advertise
+        // them before Workspace Trust; global skills remain available.
+        return okResult(
+          await getSkillsService().list({
+            projectId,
+            projectPath: project?.trusted ? project.path : undefined,
+          }),
+        );
       }
       case 'skills.setEnabled': {
         await getSkillsService().setEnabled(cmd.params);
@@ -1214,7 +1212,17 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         return okResult(
           await getSkillsService().list({
             projectId: cmd.params.projectId,
-            projectPath: project?.path,
+            projectPath: project?.trusted ? project.path : undefined,
+          }),
+        );
+      }
+      case 'skills.installExample': {
+        await getSkillsService().installExample(cmd.params.id);
+        const project = cmd.params.projectId ? projects.get(cmd.params.projectId) : undefined;
+        return okResult(
+          await getSkillsService().list({
+            projectId: cmd.params.projectId,
+            projectPath: project?.trusted ? project.path : undefined,
           }),
         );
       }

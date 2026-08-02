@@ -189,6 +189,12 @@ export const SetSkillEnabledInputSchema = z.object({
 });
 export type SetSkillEnabledInput = z.infer<typeof SetSkillEnabledInputSchema>;
 
+export const InstallSkillExampleInputSchema = z.object({
+  id: z.enum(['code-review', 'test-failure-triage']),
+  projectId: z.string().min(1).optional(),
+});
+export type InstallSkillExampleInput = z.infer<typeof InstallSkillExampleInputSchema>;
+
 export const RevealPathInputSchema = z.object({
   path: z.string().min(1).max(4096),
 });
@@ -410,6 +416,7 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   }),
   z.object({ method: z.literal('skills.list'), params: ListSkillsInputSchema.optional() }),
   z.object({ method: z.literal('skills.setEnabled'), params: SetSkillEnabledInputSchema }),
+  z.object({ method: z.literal('skills.installExample'), params: InstallSkillExampleInputSchema }),
   z.object({ method: z.literal('skills.reveal'), params: RevealPathInputSchema }),
   z.object({ method: z.literal('terminal.exec'), params: TerminalExecInputSchema }),
   z.object({

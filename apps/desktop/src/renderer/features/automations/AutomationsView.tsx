@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Clock, Plus } from 'lucide-react';
+import { AlertTriangle, Clock, Copy, Plus } from 'lucide-react';
 import { useState } from 'react';
 
 import type {
@@ -31,10 +31,33 @@ const STALLS_UNATTENDED: AutomationApprovalMode[] = ['ask', 'auto-reads'];
 /** Triggers that fire with nobody necessarily watching. */
 const UNSUPERVISED_TRIGGERS = ['interval', 'daily', 'event'];
 
+const AUTOMATION_EXAMPLES: Array<Omit<AutomationDraft, 'id' | 'projectId'>> = [
+  {
+    name: 'Morning codebase check',
+    prompt:
+      'Inspect the current repository state and recent changes. Report likely regressions, security concerns, and missing tests. Do not modify files.',
+    trigger: { kind: 'daily', atMinute: 9 * 60 },
+    approvalMode: 'read-only',
+    note: 'A read-only health check each morning at 09:00.',
+    enabled: false,
+  },
+  {
+    name: 'Review after each task',
+    prompt:
+      'Review the completed task and its working-tree diff. Flag correctness issues, risky changes, and missing verification. Do not modify files.',
+    trigger: { kind: 'event', on: 'run-completed' },
+    approvalMode: 'read-only',
+    note: 'Runs after a task you started finishes; automation runs do not trigger it.',
+    enabled: false,
+  },
+];
+
 export function AutomationsView({ onOpenSession }: { onOpenSession: (sessionId: string) => void }) {
   const project = useWorkspaceStore((s) => s.project);
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<AutomationDraft | null>(null);
+  const [scope, setScope] = useState<'project' | 'all'>('project');
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
 
   const automations = useQuery({
     queryKey: ['automation.list'],
@@ -50,6 +73,7 @@ export function AutomationsView({ onOpenSession }: { onOpenSession: (sessionId: 
       setEditing(null);
       void invalidate();
     },
+    onError: () => undefined,
   });
 
   const setEnabled = useMutation({
@@ -72,7 +96,14 @@ export function AutomationsView({ onOpenSession }: { onOpenSession: (sessionId: 
     },
   });
 
-  const list = automations.data ?? [];
+  const all = automations.data ?? [];
+  const list =
+    scope === 'project'
+      ? project
+        ? all.filter((item) => item.projectId === project.id)
+        : []
+      : all;
+  const operationError = save.error ?? setEnabled.error ?? remove.error ?? runNow.error;
 
   return (
     <div className="min-w-0 flex-1 overflow-y-auto">
@@ -103,10 +134,34 @@ export function AutomationsView({ onOpenSession }: { onOpenSession: (sessionId: 
             New automation
           </Button>
         </div>
-        <p className="mb-5 max-w-[520px] text-[13.5px] leading-relaxed text-muted">
+        <p className="mb-4 max-w-[560px] text-[13.5px] leading-relaxed text-muted">
           Each automation opens a normal task you can review, keep or revert — snapshots and Revert
           all work exactly as they do for a task you started yourself.
         </p>
+
+        <div className="mb-4 flex items-center gap-3">
+          <Segmented
+            aria-label="Automation scope"
+            options={[
+              {
+                value: 'project',
+                label: `This project ${project ? all.filter((item) => item.projectId === project.id).length : 0}`,
+              },
+              { value: 'all', label: `All ${all.length}` },
+            ]}
+            value={scope}
+            onChange={setScope}
+          />
+          <span className="ml-auto text-[11px] text-muted">
+            Times use {Intl.DateTimeFormat().resolvedOptions().timeZone}
+          </span>
+        </div>
+
+        {operationError ? (
+          <div className="mb-4 rounded-[16px] bg-danger/10 px-4 py-3 text-[12.5px] text-danger">
+            {operationError.message}
+          </div>
+        ) : null}
 
         {editing ? (
           <AutomationEditor
@@ -118,11 +173,59 @@ export function AutomationsView({ onOpenSession }: { onOpenSession: (sessionId: 
         ) : null}
 
         {!list.length && !editing ? (
-          <div className="rounded-[22px] border border-dashed border-foreground/20 px-5 py-8 text-center">
-            <div className="mb-1 text-[13px] font-bold">No automations yet</div>
-            <div className="mx-auto max-w-[440px] text-[12.5px] leading-relaxed text-muted">
-              An automation is a saved prompt plus a trigger. Nothing runs until you enable one.
+          <div className="mb-4 flex flex-col gap-3">
+            <div>
+              <div className="text-[13px] font-bold">
+                {project ? 'Start with a working recipe' : 'Open a project to create an automation'}
+              </div>
+              <div className="mt-1 text-[12px] leading-relaxed text-muted">
+                {project
+                  ? 'Both examples are read-only and start disabled. Review the prompt before enabling one.'
+                  : 'Automations belong to a workspace, so PiX needs a project first.'}
+              </div>
             </div>
+            {project ? (
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-3">
+                {AUTOMATION_EXAMPLES.map((example) => (
+                  <div
+                    key={example.name}
+                    className="flex min-h-[176px] flex-col gap-2.5 rounded-[22px] border border-border bg-background p-4 shadow-[var(--shadow-sm)]"
+                  >
+                    <div className="text-[14px] font-bold">{example.name}</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Badge tone="neutral" className="gap-1.5 text-[10.5px]">
+                        <Clock className="h-2.5 w-2.5" />
+                        {example.trigger.kind === 'daily'
+                          ? 'Daily · 09:00'
+                          : 'After a run finishes'}
+                      </Badge>
+                      <Badge tone="neutral" className="text-[10.5px]">
+                        Read-only
+                      </Badge>
+                    </div>
+                    <div className="line-clamp-3 flex-1 text-[12px] leading-relaxed text-muted">
+                      {example.prompt}
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        size="sm"
+                        onClick={() => setEditing({ ...example, projectId: project.id })}
+                      >
+                        Use recipe
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {all.length && scope === 'project' ? (
+              <button
+                className="self-start text-[12px] font-medium text-accent-800 hover:underline"
+                onClick={() => setScope('all')}
+              >
+                View {all.length} automation{all.length === 1 ? '' : 's'} from other projects
+              </button>
+            ) : null}
           </div>
         ) : null}
 
@@ -213,6 +316,25 @@ export function AutomationsView({ onOpenSession }: { onOpenSession: (sessionId: 
                   <Button
                     variant="ghost"
                     size="sm"
+                    title="Duplicate as a disabled automation"
+                    onClick={() =>
+                      setEditing({
+                        name: `${automation.name} copy`,
+                        projectId: automation.projectId,
+                        prompt: automation.prompt,
+                        trigger: automation.trigger,
+                        approvalMode: automation.approvalMode,
+                        note: automation.note,
+                        enabled: false,
+                      })
+                    }
+                  >
+                    <Copy className="h-3 w-3" />
+                    Duplicate
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() =>
                       setEditing({
                         id: automation.id,
@@ -228,14 +350,35 @@ export function AutomationsView({ onOpenSession }: { onOpenSession: (sessionId: 
                   >
                     Edit
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={remove.isPending}
-                    onClick={() => remove.mutate(automation.id)}
-                  >
-                    Delete
-                  </Button>
+                  {confirmingDelete === automation.id ? (
+                    <>
+                      <span className="text-[11px] text-danger">Delete permanently?</span>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        disabled={remove.isPending}
+                        onClick={() =>
+                          remove.mutate(automation.id, {
+                            onSuccess: () => setConfirmingDelete(null),
+                          })
+                        }
+                      >
+                        Confirm
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setConfirmingDelete(null)}>
+                        Cancel
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={remove.isPending}
+                      onClick={() => setConfirmingDelete(automation.id)}
+                    >
+                      Delete
+                    </Button>
+                  )}
                 </div>
               </div>
             );
@@ -312,18 +455,23 @@ function AutomationEditor({
           }
         />
         {value.trigger.kind === 'interval' ? (
-          <input
-            type="number"
-            min={5}
-            className="input mt-1 w-40 bg-background"
-            value={value.trigger.everyMinutes}
-            onChange={(event) =>
-              setValue({
-                ...value,
-                trigger: { kind: 'interval', everyMinutes: Number(event.target.value) || 60 },
-              })
-            }
-          />
+          <label className="mt-1 flex items-center gap-2 text-[12px] text-muted">
+            Every
+            <input
+              type="number"
+              min={5}
+              max={60 * 24 * 14}
+              className="input w-28 bg-background"
+              value={value.trigger.everyMinutes}
+              onChange={(event) =>
+                setValue({
+                  ...value,
+                  trigger: { kind: 'interval', everyMinutes: Number(event.target.value) || 60 },
+                })
+              }
+            />
+            minutes (minimum 5)
+          </label>
         ) : null}
         {value.trigger.kind === 'event' ? (
           <div className="mt-1 rounded-[14px] bg-neutral-200 px-3 py-2 text-[11.5px] leading-relaxed text-neutral-800">
@@ -332,17 +480,21 @@ function AutomationEditor({
           </div>
         ) : null}
         {value.trigger.kind === 'daily' ? (
-          <input
-            type="time"
-            className="input mt-1 w-40 bg-background"
-            value={minutesToTime(value.trigger.atMinute)}
-            onChange={(event) =>
-              setValue({
-                ...value,
-                trigger: { kind: 'daily', atMinute: timeToMinutes(event.target.value) },
-              })
-            }
-          />
+          <label className="mt-1 flex items-center gap-2 text-[12px] text-muted">
+            At
+            <input
+              type="time"
+              className="input w-40 bg-background"
+              value={minutesToTime(value.trigger.atMinute)}
+              onChange={(event) =>
+                setValue({
+                  ...value,
+                  trigger: { kind: 'daily', atMinute: timeToMinutes(event.target.value) },
+                })
+              }
+            />
+            local time
+          </label>
         ) : null}
       </div>
 
@@ -369,13 +521,24 @@ function AutomationEditor({
         ) : null}
       </div>
 
+      <label className="flex flex-col gap-1.5">
+        <span className="text-xs text-muted">Notes (optional)</span>
+        <input
+          className="input bg-background"
+          value={value.note ?? ''}
+          maxLength={1000}
+          onChange={(event) => setValue({ ...value, note: event.target.value || undefined })}
+          placeholder="Why this exists, or what to check after it runs"
+        />
+      </label>
+
       <label className="flex items-center gap-2.5">
         <Switch
           label="Enabled"
           checked={value.enabled}
           onChange={(next) => setValue({ ...value, enabled: next })}
         />
-        <span className="text-[12.5px]">Enabled</span>
+        <span className="text-[12.5px]">Enable immediately after saving</span>
       </label>
 
       <div className="flex items-center gap-2">

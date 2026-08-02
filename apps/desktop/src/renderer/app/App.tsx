@@ -191,11 +191,11 @@ export function App() {
    */
   const openSessionById = useCallback(
     async (sessionId: string) => {
-      const project = useWorkspaceStore.getState().project;
-      if (!project) return;
+      // Automations can be launched from the All view for another project.
+      // Resolve globally; selectSession will switch to the owning workspace.
       const list = await invoke<SessionSummary[]>({
         method: 'session.list',
-        params: { projectId: project.id },
+        params: {},
       });
       const found = list.find((item) => item.id === sessionId);
       if (found) selectSession(found);

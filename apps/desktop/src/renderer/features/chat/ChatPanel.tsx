@@ -72,10 +72,7 @@ import {
   type QueuedMessage,
   type ToolCallCard,
 } from '@/stores/agent-stream-store';
-import {
-  composerDraftScope,
-  useComposerDraftStore,
-} from '@/stores/composer-draft-store';
+import { composerDraftScope, useComposerDraftStore } from '@/stores/composer-draft-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 
 const LAST_TASK_PROJECT_KEY = 'pi-desktop.last-task-project-id';
@@ -356,13 +353,15 @@ export function ChatPanel({
     composerRef.current?.focus();
   }
 
-  /** `$` at the start of a word opens the skill list (the design's `$` affordance). */
+  /** `$` is a compact picker; the inserted value is Pi's `/skill:name` command. */
   const skillQuery = /(?:^|\s)\$([a-z0-9-]*)$/i.exec(draft)?.[1];
-  const skillMatches = (skills.data ?? []).filter(
-    (skill) =>
+  const skillMatches = (skills.data ?? []).filter((skill) => {
+    const commandName = skill.command.replace(/^\/skill:/, '');
+    return (
       skill.enabled &&
-      (skillQuery === undefined || skill.command.slice(1).startsWith(skillQuery.toLowerCase())),
-  );
+      (skillQuery === undefined || commandName.startsWith(skillQuery.toLowerCase()))
+    );
+  });
 
   useEffect(() => {
     setSkillMenuOpen(skillQuery !== undefined && skillMatches.length > 0);

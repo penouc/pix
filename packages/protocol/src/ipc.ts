@@ -347,7 +347,7 @@ export const RunMetricsSchema = z.object({
 });
 export type RunMetrics = z.infer<typeof RunMetricsSchema>;
 
-/** A skill discovered on disk — a prompt the composer can call with `$name`. */
+/** A skill discovered on disk — selected with `$`, sent to Pi as `/skill:name`. */
 export const SkillInfoSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -400,6 +400,8 @@ export const AutomationSchema = z.object({
   note: z.string().optional(),
   enabled: z.boolean(),
   createdAt: z.number().int().nonnegative(),
+  /** When the current enabled period began; anchors never-run schedules. */
+  enabledAt: z.number().int().nonnegative().optional(),
   lastRunAt: z.number().int().nonnegative().optional(),
   lastRunSummary: z.string().optional(),
   nextRunAt: z.number().int().nonnegative().optional(),
