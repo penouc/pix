@@ -19,6 +19,10 @@ const en: Messages = {
   'hero.ctaPrimary': 'View on GitHub',
   'hero.ctaSecondary': 'About Pi Agent',
   'hero.mascotAlt': 'PiX mascot',
+  'download.title': 'Download PiX for macOS',
+  'download.lede': 'Apple Silicon build. Grab the latest release from GitHub.',
+  'download.cta': 'Download for macOS · Apple Silicon',
+  'download.note': 'Not notarized yet — on first open, right-click the app and choose Open, or allow it in System Settings → Privacy & Security.',
   'pi.title': 'Built on Pi Agent',
   'pi.lede':
     'The agent runtime comes from Pi — multi-provider models, tools, and the coding loop — so PiX can focus on the desktop workbench around it.',
@@ -79,6 +83,10 @@ const zh: Messages = {
   'hero.ctaPrimary': '在 GitHub 查看',
   'hero.ctaSecondary': '了解 Pi Agent',
   'hero.mascotAlt': 'PiX 吉祥物',
+  'download.title': '下载 PiX for macOS',
+  'download.lede': 'Apple Silicon 版本。从 GitHub Releases 获取最新构建。',
+  'download.cta': '下载 macOS 版 · Apple Silicon',
+  'download.note': '暂未签名公证:首次打开请右键应用并选择“打开”,或在“系统设置 → 隐私与安全性”中允许。',
   'pi.title': '基于 Pi Agent 实现',
   'pi.lede':
     'Agent 运行时来自 Pi——多 Provider、多模型、工具调用与编程循环都由它承担，PiX 专注桌面工作台这一层。',

@@ -463,6 +463,35 @@ a:hover {
   text-wrap: pretty;
 }
 
+/* —— Download —— */
+
+.download {
+  padding-block: var(--space-2xl);
+}
+
+.download-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  max-width: 36rem;
+}
+
+.download-inner h2 {
+  margin: 0;
+}
+
+.download-inner .section-lede {
+  margin: 0;
+}
+
+.download-note {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
 /* —— Footer —— */
 
 .site-footer {
