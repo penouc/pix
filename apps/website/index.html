@@ -52,7 +52,17 @@
         <div class="hero-atmosphere" aria-hidden="true"></div>
         <div class="wrap hero-grid">
           <div class="hero-copy">
-            <p class="brand-mark">PiX</p>
+            <div class="hero-brand">
+              <img
+                class="hero-mascot"
+                src="/pix-mascot.png"
+                data-i18n-alt="hero.mascotAlt"
+                alt="PiX mascot"
+                width="512"
+                height="512"
+              />
+              <p class="brand-mark">PiX</p>
+            </div>
             <h1 data-i18n="hero.title">A desktop shell on Pi Agent — fork it into yours</h1>
             <p class="lede" data-i18n="hero.lede">
               PiX is a local coding workbench built on the open-source Pi Agent SDK. Use it as-is,
@@ -80,41 +90,21 @@
             </div>
           </div>
           <div class="hero-visual">
-            <img
-              class="mascot"
-              src="/pix-mascot.png"
-              data-i18n-alt="hero.mascotAlt"
-              alt="PiX mascot"
-              width="512"
-              height="512"
-            />
-          </div>
-        </div>
-      </section>
-
-      <section id="download" class="section download">
-        <div class="wrap download-inner">
-          <h2 data-i18n="download.title">Download PiX for macOS</h2>
-          <p class="section-lede" data-i18n="download.lede">
-            Apple Silicon build. Grab the latest release from GitHub.
-          </p>
-          <div class="cta-row">
             <a
-              class="btn btn-primary btn-lg"
-              data-download
-              href="https://github.com/penouc/pix/releases/latest"
+              class="hero-screen"
+              href="/screens/pix-workbench.png"
               target="_blank"
               rel="noopener noreferrer"
             >
-              <span data-i18n="download.cta">Download for macOS · Apple Silicon</span>
-              <span class="download-version" data-download-version hidden></span>
+              <img
+                src="/screens/pix-workbench.png"
+                data-i18n-alt="preview.w1"
+                alt="PiX workbench interface"
+                width="1280"
+                height="800"
+              />
             </a>
           </div>
-          <p class="download-latest" data-download-latest hidden></p>
-          <p class="download-note" data-i18n="download.note">
-            Not notarized yet — on first open, right-click the app and choose Open, or allow it in
-            System Settings → Privacy &amp; Security.
-          </p>
         </div>
       </section>
 
@@ -281,8 +271,8 @@
         <div class="wrap">
           <h2 data-i18n="pi.title">Built on Pi Agent</h2>
           <p class="section-lede" data-i18n="pi.lede">
-            The agent runtime comes from Pi — multi-provider models, tools, and the coding loop —
-            so PiX can focus on the desktop workbench around it.
+            The agent runtime comes from Pi — multi-provider models, tools, and the coding loop — so
+            PiX can focus on the desktop workbench around it.
           </p>
           <ul class="points">
             <li>
@@ -375,26 +365,17 @@
         <div class="contact">
           <h2 data-i18n="contact.title">Connect</h2>
           <p class="contact-links">
-            <a
-              href="https://x.com/aisikream"
-              target="_blank"
-              rel="noopener noreferrer"
-              >X</a
-            >
+            <a href="https://x.com/aisikream" target="_blank" rel="noopener noreferrer">X</a>
             <span aria-hidden="true">/</span>
             <a href="mailto:hi@penglei.dev">hi@penglei.dev</a>
             <span aria-hidden="true">/</span>
-            <a href="https://penglei.dev/" target="_blank" rel="noopener noreferrer"
-              >penglei.dev</a
-            >
+            <a href="https://penglei.dev/" target="_blank" rel="noopener noreferrer">penglei.dev</a>
           </p>
         </div>
         <div class="footer-inner">
           <p>
             <span class="footer-brand">PiX</span>
-            <span data-i18n="footer.line">
-              · Local desktop coding agent, built on
-            </span>
+            <span data-i18n="footer.line"> · Local desktop coding agent, built on </span>
             <a href="https://github.com/earendil-works/pi" target="_blank" rel="noopener noreferrer"
               >Pi Agent</a
             >

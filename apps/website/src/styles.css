@@ -46,7 +46,7 @@ html:not([data-ready]) body {
   }
 
   .hero-copy > *,
-  .mascot {
+  .hero-screen {
     animation: none !important;
   }
 }
@@ -173,7 +173,9 @@ a:hover {
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 160ms var(--ease-out), color 160ms var(--ease-out);
+  transition:
+    background-color 160ms var(--ease-out),
+    color 160ms var(--ease-out);
 }
 
 .lang-switch button:hover {
@@ -223,13 +225,26 @@ a:hover {
 
 .hero-grid {
   display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
-  gap: clamp(2rem, 5vw, 4rem);
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  gap: clamp(2rem, 5vw, 4.5rem);
   align-items: center;
 }
 
+.hero-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.hero-mascot {
+  width: clamp(3.5rem, 7vw, 4.75rem);
+  border-radius: 24%;
+  box-shadow: 0 8px 20px oklch(0.35 0.04 150 / 0.1);
+}
+
 .brand-mark {
-  margin: 0 0 var(--space-md);
+  margin: 0;
   font-family: var(--font-display);
   font-weight: 800;
   font-size: clamp(2.75rem, 7vw, 4.5rem);
@@ -273,8 +288,11 @@ a:hover {
   font-size: 1rem;
   font-weight: 600;
   text-decoration: none;
-  transition: transform 160ms var(--ease-out), background-color 160ms var(--ease-out),
-    color 160ms var(--ease-out), border-color 160ms var(--ease-out);
+  transition:
+    transform 160ms var(--ease-out),
+    background-color 160ms var(--ease-out),
+    color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out);
 }
 
 .btn:focus-visible {
@@ -307,16 +325,33 @@ a:hover {
 }
 
 .hero-visual {
-  display: grid;
-  place-items: center;
+  min-width: 0;
 }
 
-.mascot {
-  width: min(100%, 360px);
-  border-radius: 28%;
-  box-shadow:
-    0 1px 0 oklch(1 0 0 / 0.5) inset,
-    0 24px 48px oklch(0.35 0.04 150 / 0.18);
+.hero-screen {
+  display: block;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklch, var(--olive) 28%, var(--line));
+  border-radius: clamp(0.65rem, 1.4vw, 1rem);
+  background: var(--surface);
+  box-shadow: 0 24px 48px oklch(0.35 0.04 150 / 0.14);
+  transition:
+    transform 160ms var(--ease-out),
+    box-shadow 160ms var(--ease-out);
+}
+
+.hero-screen:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 28px 56px oklch(0.35 0.04 150 / 0.18);
+}
+
+.hero-screen:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.hero-screen img {
+  width: 100%;
 }
 
 .hero-copy > * {
@@ -336,7 +371,7 @@ a:hover {
   animation-delay: 220ms;
 }
 
-.mascot {
+.hero-screen {
   animation: rise 800ms var(--ease-out) 120ms both;
 }
 
@@ -463,36 +498,6 @@ a:hover {
   text-wrap: pretty;
 }
 
-/* —— Download —— */
-
-.download {
-  padding-block: var(--space-2xl);
-  background: var(--surface);
-  border-block: 1px solid var(--line);
-}
-
-.download-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-md);
-  max-width: 36rem;
-}
-
-.download-inner h2 {
-  margin: 0;
-}
-
-.download-inner .section-lede {
-  margin: 0;
-}
-
-.btn-lg {
-  min-height: 3.25rem;
-  padding-inline: 1.75rem;
-  font-size: 1.05rem;
-}
-
 .download-version {
   margin-left: 0.5rem;
   padding-left: 0.65rem;
@@ -503,22 +508,8 @@ a:hover {
   opacity: 0.85;
 }
 
-.download-latest {
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--olive-deep);
-}
-
 [hidden] {
   display: none !important;
-}
-
-.download-note {
-  margin: 0;
-  font-size: 0.875rem;
-  color: var(--ink-soft);
-  text-wrap: pretty;
 }
 
 /* —— Core features —— */
@@ -673,11 +664,7 @@ a:hover {
   }
 
   .hero-visual {
-    order: -1;
-  }
-
-  .mascot {
-    width: min(56vw, 220px);
+    max-width: 42rem;
   }
 
   .brand-mark {
