@@ -19,6 +19,13 @@ const electron = vi.hoisted(() => {
     app: {
       whenReady: () => Promise.resolve(),
       getPath: () => userData,
+      getAppPath: () => userData,
+      isPackaged: true,
+      setPath: (_name: string, value: string) => {
+        userData = value;
+      },
+      setName: vi.fn(),
+      setAppUserModelId: vi.fn(),
       getVersion: () => 'test',
       on: (event: string, callback: () => void) => callbacks.set(event, callback),
     },
@@ -40,7 +47,8 @@ const electron = vi.hoisted(() => {
     },
     dialog: { showOpenDialog: vi.fn() },
     ipcMain: { handle: vi.fn() },
-    shell: { openExternal: vi.fn() },
+    nativeImage: { createFromPath: vi.fn(() => ({ isEmpty: () => true })) },
+    shell: { openExternal: vi.fn(), showItemInFolder: vi.fn() },
   };
 });
 
@@ -87,7 +95,10 @@ describe('Main IPC with real Pi runtime (offline)', () => {
         method: 'session.list',
         params: { projectId: project.id },
       });
-      expect(listed).toMatchObject({ ok: true, data: [expect.objectContaining({ id: expect.any(String) })] });
+      expect(listed).toMatchObject({
+        ok: true,
+        data: [expect.objectContaining({ id: expect.any(String) })],
+      });
     } finally {
       await rm(projectPath, { recursive: true, force: true });
     }

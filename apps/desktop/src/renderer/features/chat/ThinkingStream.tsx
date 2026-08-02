@@ -4,7 +4,7 @@ import { Markdown } from '@/features/chat/Markdown';
 import { cn } from '@/lib/utils';
 
 /** Collapse reasoning to one line and keep the tail visible as tokens stream in. */
-export function thinkingPreview(text: string, maxLen = 148): string {
+function thinkingPreview(text: string, maxLen = 148): string {
   const oneLine = text.replace(/\s+/g, ' ').trim();
   if (!oneLine) return '';
   if (oneLine.length <= maxLen) return oneLine;

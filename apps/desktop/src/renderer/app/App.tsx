@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type {
@@ -113,31 +114,31 @@ export function App() {
 
   const setActiveProject = useWorkspaceStore((s) => s.setActiveProject);
 
-  async function ensureProjectForSession(
-    projectId: string,
-    hint?: ProjectSummary,
-  ): Promise<ProjectSummary | null> {
-    const current = useWorkspaceStore.getState().project;
-    if (current?.id === projectId) return current;
+  const ensureProjectForSession = useCallback(
+    async (projectId: string, hint?: ProjectSummary): Promise<ProjectSummary | null> => {
+      const current = useWorkspaceStore.getState().project;
+      if (current?.id === projectId) return current;
 
-    let target = hint?.id === projectId ? hint : undefined;
-    if (!target) {
-      const cached = queryClient.getQueryData<ProjectSummary[]>(['project.listRecent']);
-      target = cached?.find((item) => item.id === projectId);
-    }
-    if (!target) {
-      const recent = await invoke<ProjectSummary[]>({ method: 'project.listRecent' });
-      target = recent.find((item) => item.id === projectId);
-    }
-    if (!target) return null;
+      let target = hint?.id === projectId ? hint : undefined;
+      if (!target) {
+        const cached = queryClient.getQueryData<ProjectSummary[]>(['project.listRecent']);
+        target = cached?.find((item) => item.id === projectId);
+      }
+      if (!target) {
+        const recent = await invoke<ProjectSummary[]>({ method: 'project.listRecent' });
+        target = recent.find((item) => item.id === projectId);
+      }
+      if (!target) return null;
 
-    const opened = await invoke<ProjectSummary>({
-      method: 'project.open',
-      params: { path: target.path },
-    });
-    setActiveProject(opened);
-    return opened;
-  }
+      const opened = await invoke<ProjectSummary>({
+        method: 'project.open',
+        params: { path: target.path },
+      });
+      setActiveProject(opened);
+      return opened;
+    },
+    [queryClient, setActiveProject],
+  );
 
   const selectSession = useCallback(
     (session: SessionSummary, projectHint?: ProjectSummary) => {
@@ -166,7 +167,7 @@ export function App() {
         }
       })();
     },
-    [queryClient, setActiveProject, setSession, resetSessionView, setScope, loadHistory],
+    [ensureProjectForSession, setSession, resetSessionView, setScope, loadHistory],
   );
 
   const goBackFromRun = useCallback(() => {
@@ -351,6 +352,26 @@ export function App() {
 
   const main = (
     <div className="flex h-full min-h-0 flex-col">
+      {showBanner ? (
+        <div className="flex flex-none items-center gap-2.5 border-b border-accent/25 bg-accent-100 px-4.5 py-2.5">
+          <AlertTriangle className="h-[15px] w-[15px] flex-none text-accent-700" />
+          <span className="flex-1 text-[12.5px] text-accent-900">
+            {unresolved.length} unresolved checkpoint{unresolved.length > 1 ? 's' : ''} need
+            {unresolved.length > 1 ? '' : 's'} review — run{' '}
+            <span className="font-mono">{unresolved[0]!.runId.slice(0, 8)}</span>
+            {unresolved.length > 1 ? ' and others were' : ' was'} interrupted.
+          </span>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="border-accent/35"
+            onClick={() => reviewRecovery(unresolved[0]!.runId)}
+          >
+            Review
+          </Button>
+        </div>
+      ) : null}
+
       <div className="flex min-h-0 min-w-0 flex-1">
         {view === 'settings' ? (
           <SettingsView onClose={() => setView('run')} />

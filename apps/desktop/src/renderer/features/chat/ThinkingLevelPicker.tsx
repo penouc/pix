@@ -64,14 +64,10 @@ export function ThinkingLevelPicker({ disabled }: { disabled?: boolean }) {
     ? (live.data?.supportsThinking ?? false)
     : Boolean(activeModel?.reasoning);
   const level = session ? (live.data?.level ?? 'medium') : selectedThinkingLevel;
-  const available = session
-    ? (live.data?.available ?? [])
-    : ALL_LEVELS;
-
-  const options = useMemo(
-    () => available.filter((entry) => ALL_LEVELS.includes(entry)),
-    [available],
-  );
+  const options = useMemo(() => {
+    const available = session ? (live.data?.available ?? []) : ALL_LEVELS;
+    return available.filter((entry) => ALL_LEVELS.includes(entry));
+  }, [session, live.data?.available]);
 
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -133,7 +129,9 @@ export function ThinkingLevelPicker({ disabled }: { disabled?: boolean }) {
                   >
                     <span className="min-w-0 flex-1">
                       <span className="block text-[12.5px] font-semibold">{meta.word}</span>
-                      <span className="block text-[11px] leading-snug text-muted">{meta.detail}</span>
+                      <span className="block text-[11px] leading-snug text-muted">
+                        {meta.detail}
+                      </span>
                     </span>
                     {entry === level ? (
                       <Check className="mt-[2px] h-3.5 w-3.5 flex-none text-accent" />

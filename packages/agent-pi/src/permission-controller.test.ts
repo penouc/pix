@@ -24,7 +24,7 @@ const scope = {
 
 describe('PermissionController', () => {
   it('blocks execution until a destructive tool is approved', async () => {
-    const pipeline = new PermissionPipeline();
+    const pipeline = new PermissionPipeline({ defaultMode: 'ask' });
     const events: unknown[] = [];
     const controller = new PermissionController({
       pipeline,

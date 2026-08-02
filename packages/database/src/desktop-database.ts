@@ -2,7 +2,6 @@ import path from 'node:path';
 
 import type { ProjectRepository } from './project-repository.js';
 import type { SessionRepository } from './session-repository.js';
-import type { SessionMessageRepository } from './session-message-repository.js';
 import type { CheckpointRepository } from './checkpoint-repository.js';
 import { openDatabase, type SqliteDatabase } from './sqlite-connection.js';
 import { SqliteCheckpointRepository } from './sqlite-checkpoint-repository.js';
