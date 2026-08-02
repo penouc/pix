@@ -27,19 +27,21 @@
           <span>PiX</span>
         </a>
         <nav class="nav" data-i18n-aria="a11y.nav">
-          <a href="#pi" data-i18n="nav.pi">Pi Agent</a>
-          <a href="#own" data-i18n="nav.own">Your agent</a>
+          <a href="#features" data-i18n="nav.features">Features</a>
           <a href="#how" data-i18n="nav.how">How it works</a>
+          <a href="#pi" data-i18n="nav.pi">Pi Agent</a>
           <div class="lang-switch" role="group" data-i18n-aria="a11y.lang">
             <button type="button" data-locale="zh" aria-pressed="false">中文</button>
             <button type="button" data-locale="en" aria-pressed="false">EN</button>
           </div>
           <a
             class="nav-cta"
-            href="https://github.com/penouc/pix"
+            data-download
+            href="https://github.com/penouc/pix/releases/latest"
             target="_blank"
             rel="noopener noreferrer"
-            >GitHub</a
+            data-i18n="nav.download"
+            >Download</a
           >
         </nav>
       </div>
@@ -59,19 +61,21 @@
             <div class="cta-row">
               <a
                 class="btn btn-primary"
+                data-download
+                href="https://github.com/penouc/pix/releases/latest"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span data-i18n="download.cta">Download for macOS · Apple Silicon</span>
+                <span class="download-version" data-download-version hidden></span>
+              </a>
+              <a
+                class="btn btn-ghost"
                 href="https://github.com/penouc/pix"
                 target="_blank"
                 rel="noopener noreferrer"
                 data-i18n="hero.ctaPrimary"
                 >View on GitHub</a
-              >
-              <a
-                class="btn btn-ghost"
-                href="https://github.com/earendil-works/pi"
-                target="_blank"
-                rel="noopener noreferrer"
-                data-i18n="hero.ctaSecondary"
-                >About Pi Agent</a
               >
             </div>
           </div>
@@ -96,14 +100,17 @@
           </p>
           <div class="cta-row">
             <a
-              class="btn btn-primary"
+              class="btn btn-primary btn-lg"
+              data-download
               href="https://github.com/penouc/pix/releases/latest"
               target="_blank"
               rel="noopener noreferrer"
-              data-i18n="download.cta"
-              >Download for macOS · Apple Silicon</a
             >
+              <span data-i18n="download.cta">Download for macOS · Apple Silicon</span>
+              <span class="download-version" data-download-version hidden></span>
+            </a>
           </div>
+          <p class="download-latest" data-download-latest hidden></p>
           <p class="download-note" data-i18n="download.note">
             Not notarized yet — on first open, right-click the app and choose Open, or allow it in
             System Settings → Privacy &amp; Security.
@@ -111,7 +118,166 @@
         </div>
       </section>
 
-      <section id="pi" class="section how">
+      <section id="features" class="section features">
+        <div class="wrap">
+          <h2 data-i18n="features.title">Core capabilities</h2>
+          <p class="section-lede" data-i18n="features.lede">
+            Real coding work stays visible, controllable, reviewable, and restorable — all on your
+            machine.
+          </p>
+          <ul class="feature-grid">
+            <li class="feature-card">
+              <h3 data-i18n="features.f1.title">Local project workbench</h3>
+              <p data-i18n="features.f1.body">
+                Open a Git project, confirm Workspace Trust, manage projects and task history; files
+                and commands run locally by default.
+              </p>
+            </li>
+            <li class="feature-card">
+              <h3 data-i18n="features.f2.title">Real agent runtime</h3>
+              <p data-i18n="features.f2.body">
+                Built on the Pi Agent SDK — provider login, model switching, thinking levels,
+                streaming replies, tool calls, stop, and follow-up.
+              </p>
+            </li>
+            <li class="feature-card">
+              <h3 data-i18n="features.f3.title">Rich context input</h3>
+              <p data-i18n="features.f3.body">
+                Reference project files with @, attach images, and pick standard /skill:name skills
+                with $.
+              </p>
+            </li>
+            <li class="feature-card">
+              <h3 data-i18n="features.f4.title">Permissions &amp; audit</h3>
+              <p data-i18n="features.f4.body">
+                The main process classifies tool risk; Ask, auto-reads, and read-only modes, with
+                approvals and auto-decisions logged.
+              </p>
+            </li>
+            <li class="feature-card">
+              <h3 data-i18n="features.f5.title">Diff &amp; precise restore</h3>
+              <p data-i18n="features.f5.body">
+                Multi-file diffs, pre-task snapshots, pre-write backups, concurrent-edit detection,
+                and safe per-file or whole-round revert.
+              </p>
+            </li>
+            <li class="feature-card">
+              <h3 data-i18n="features.f6.title">Automations</h3>
+              <p data-i18n="features.f6.body">
+                Save prompts and trigger them manually, on an interval, daily, or when a task
+                finishes; each automation has its own approval mode.
+              </p>
+            </li>
+            <li class="feature-card">
+              <h3 data-i18n="features.f7.title">Skills</h3>
+              <p data-i18n="features.f7.body">
+                Discover Pi-standard global and project skills with search, scope filters, composer
+                invocation, and installable examples.
+              </p>
+            </li>
+            <li class="feature-card">
+              <h3 data-i18n="features.f8.title">Local terminal &amp; search</h3>
+              <p data-i18n="features.f8.body">
+                Workspace-scoped terminal, project file tree, cross-project search, session search,
+                and diagnostics export.
+              </p>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="how" class="section how">
+        <div class="wrap">
+          <h2 data-i18n="how.title">The coding loop</h2>
+          <p class="section-lede" data-i18n="how.lede">
+            Understand the task → edit code → verify → review the diff → keep or revert.
+          </p>
+          <ol class="steps">
+            <li>
+              <span class="step-num">1</span>
+              <div>
+                <h3 data-i18n="how.s1.title">Open a local project</h3>
+                <p data-i18n="how.s1.body">Pick a Git repo on your machine and start a task.</p>
+              </div>
+            </li>
+            <li>
+              <span class="step-num">2</span>
+              <div>
+                <h3 data-i18n="how.s2.title">Let the agent work</h3>
+                <p data-i18n="how.s2.body">
+                  Watch reads, edits, and commands stream in — transparent, not a black box.
+                </p>
+              </div>
+            </li>
+            <li>
+              <span class="step-num">3</span>
+              <div>
+                <h3 data-i18n="how.s3.title">Review, then decide</h3>
+                <p data-i18n="how.s3.body">
+                  Inspect the multi-file diff. Keep the result or revert the whole round safely.
+                </p>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section id="preview" class="section preview">
+        <div class="wrap">
+          <h2 data-i18n="preview.title">Interface preview</h2>
+          <p class="section-lede" data-i18n="preview.lede">
+            A quick look at the workbench, an agent run, and the local usage dashboard.
+          </p>
+          <div class="screens">
+            <figure class="screen">
+              <a href="/screens/pix-workbench.png" target="_blank" rel="noopener noreferrer">
+                <img
+                  src="/screens/pix-workbench.png"
+                  alt=""
+                  data-i18n-alt="preview.w1"
+                  width="1280"
+                  height="800"
+                />
+              </a>
+              <figcaption data-i18n="preview.w1">
+                Local projects, task history, permission modes, model selection, and context input
+                in one workbench.
+              </figcaption>
+            </figure>
+            <figure class="screen">
+              <a href="/screens/pix-agent-run.png" target="_blank" rel="noopener noreferrer">
+                <img
+                  src="/screens/pix-agent-run.png"
+                  alt=""
+                  data-i18n-alt="preview.w2"
+                  width="1280"
+                  height="800"
+                />
+              </a>
+              <figcaption data-i18n="preview.w2">
+                Agent run with tool calls, reasoning, completion summary, and the Changes review
+                panel.
+              </figcaption>
+            </figure>
+            <figure class="screen">
+              <a href="/screens/pix-usage.png" target="_blank" rel="noopener noreferrer">
+                <img
+                  src="/screens/pix-usage.png"
+                  alt=""
+                  data-i18n-alt="preview.w3"
+                  width="1280"
+                  height="800"
+                />
+              </a>
+              <figcaption data-i18n="preview.w3">
+                Local Usage &amp; Cost: run counts, tokens, spend trends, and model breakdown.
+              </figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section id="pi" class="section pi">
         <div class="wrap">
           <h2 data-i18n="pi.title">Built on Pi Agent</h2>
           <p class="section-lede" data-i18n="pi.lede">
@@ -143,7 +309,7 @@
         </div>
       </section>
 
-      <section id="own" class="section why">
+      <section id="own" class="section own">
         <div class="wrap">
           <h2 data-i18n="own.title">Make it your own agent</h2>
           <p class="section-lede" data-i18n="own.lede">
@@ -178,42 +344,6 @@
                 <p data-i18n="own.s3.body">
                   Rename, rebrand, add your workflows — turn PiX into the agent experience you want
                   to offer.
-                </p>
-              </div>
-            </li>
-          </ol>
-        </div>
-      </section>
-
-      <section id="how" class="section how">
-        <div class="wrap">
-          <h2 data-i18n="how.title">The coding loop</h2>
-          <p class="section-lede" data-i18n="how.lede">
-            Understand the task → edit code → verify → review the diff → keep or revert.
-          </p>
-          <ol class="steps">
-            <li>
-              <span class="step-num">1</span>
-              <div>
-                <h3 data-i18n="how.s1.title">Open a local project</h3>
-                <p data-i18n="how.s1.body">Pick a Git repo on your machine and start a task.</p>
-              </div>
-            </li>
-            <li>
-              <span class="step-num">2</span>
-              <div>
-                <h3 data-i18n="how.s2.title">Let the agent work</h3>
-                <p data-i18n="how.s2.body">
-                  Watch reads, edits, and commands stream in — transparent, not a black box.
-                </p>
-              </div>
-            </li>
-            <li>
-              <span class="step-num">3</span>
-              <div>
-                <h3 data-i18n="how.s3.title">Review, then decide</h3>
-                <p data-i18n="how.s3.body">
-                  Inspect the multi-file diff. Keep the result or revert the whole round safely.
                 </p>
               </div>
             </li>

@@ -13,6 +13,8 @@ const en: Messages = {
   'nav.pi': 'Pi Agent',
   'nav.own': 'Your agent',
   'nav.how': 'How it works',
+  'nav.features': 'Features',
+  'nav.download': 'Download',
   'hero.title': 'A desktop shell on Pi Agent — fork it into yours',
   'hero.lede':
     'PiX is a local coding workbench built on the open-source Pi Agent SDK. Use it as-is, or take the codebase and shape your own agent product.',
@@ -23,6 +25,43 @@ const en: Messages = {
   'download.lede': 'Apple Silicon build. Grab the latest release from GitHub.',
   'download.cta': 'Download for macOS · Apple Silicon',
   'download.note': 'Not notarized yet — on first open, right-click the app and choose Open, or allow it in System Settings → Privacy & Security.',
+  'download.latestPrefix': 'Latest release',
+  'features.title': 'Core capabilities',
+  'features.lede':
+    'Real coding work stays visible, controllable, reviewable, and restorable — all on your machine.',
+  'features.f1.title': 'Local project workbench',
+  'features.f1.body':
+    'Open a Git project, confirm Workspace Trust, manage projects and task history; files and commands run locally by default.',
+  'features.f2.title': 'Real agent runtime',
+  'features.f2.body':
+    'Built on the Pi Agent SDK — provider login, model switching, thinking levels, streaming replies, tool calls, stop, and follow-up.',
+  'features.f3.title': 'Rich context input',
+  'features.f3.body':
+    'Reference project files with @, attach images, and pick standard /skill:name skills with $.',
+  'features.f4.title': 'Permissions & audit',
+  'features.f4.body':
+    'The main process classifies tool risk; Ask, auto-reads, and read-only modes, with approvals and auto-decisions logged.',
+  'features.f5.title': 'Diff & precise restore',
+  'features.f5.body':
+    'Multi-file diffs, pre-task snapshots, pre-write backups, concurrent-edit detection, and safe per-file or whole-round revert.',
+  'features.f6.title': 'Automations',
+  'features.f6.body':
+    'Save prompts and trigger them manually, on an interval, daily, or when a task finishes; each automation has its own approval mode.',
+  'features.f7.title': 'Skills',
+  'features.f7.body':
+    'Discover Pi-standard global and project skills with search, scope filters, composer invocation, and installable examples.',
+  'features.f8.title': 'Local terminal & search',
+  'features.f8.body':
+    'Workspace-scoped terminal, project file tree, cross-project search, session search, and diagnostics export.',
+  'preview.title': 'Interface preview',
+  'preview.lede':
+    'A quick look at the workbench, an agent run, and the local usage dashboard.',
+  'preview.w1':
+    'Local projects, task history, permission modes, model selection, and context input in one workbench.',
+  'preview.w2':
+    'Agent run with tool calls, reasoning, completion summary, and the Changes review panel.',
+  'preview.w3':
+    'Local Usage & Cost: run counts, tokens, spend trends, and model breakdown.',
   'pi.title': 'Built on Pi Agent',
   'pi.lede':
     'The agent runtime comes from Pi — multi-provider models, tools, and the coding loop — so PiX can focus on the desktop workbench around it.',
@@ -77,6 +116,8 @@ const zh: Messages = {
   'nav.pi': 'Pi Agent',
   'nav.own': '做成自己的',
   'nav.how': '怎么用',
+  'nav.features': '核心能力',
+  'nav.download': '下载',
   'hero.title': '基于 Pi Agent 的桌面壳，也能改成你自己的 Agent',
   'hero.lede':
     'PiX 是建立在开源 Pi Agent SDK 上的本地编程工作台。可以直接用，也可以拿这份代码，改成面向你自己产品的 Agent。',
@@ -87,6 +128,42 @@ const zh: Messages = {
   'download.lede': 'Apple Silicon 版本。从 GitHub Releases 获取最新构建。',
   'download.cta': '下载 macOS 版 · Apple Silicon',
   'download.note': '暂未签名公证:首次打开请右键应用并选择“打开”,或在“系统设置 → 隐私与安全性”中允许。',
+  'download.latestPrefix': '最新版本',
+  'features.title': '核心能力',
+  'features.lede':
+    '让真实的编码任务保持可见、可控、可审查、可恢复——不需要离开你的电脑。',
+  'features.f1.title': '本地项目工作台',
+  'features.f1.body':
+    '打开 Git 项目、确认 Workspace Trust、管理项目与历史任务；文件和命令默认在本机执行。',
+  'features.f2.title': '真实 Agent 运行',
+  'features.f2.body':
+    '基于 Pi Agent SDK，支持 Provider 登录、模型切换、Thinking Level、流式回复、工具调用、停止和 Follow-up。',
+  'features.f3.title': '上下文输入',
+  'features.f3.body':
+    '使用 @ 引用项目文件、附加图片，使用 $ 快速选择标准 /skill:name Skill。',
+  'features.f4.title': '权限与审计',
+  'features.f4.body':
+    'Main Process 统一判断工具风险；支持 Ask、Auto reads、Read-only，并记录审批与自动决策。',
+  'features.f5.title': 'Diff 与精确恢复',
+  'features.f5.body':
+    '多文件 Diff、任务前快照、写入前内容备份、并发修改检测，以及按文件或整轮安全回退。',
+  'features.f6.title': 'Automations',
+  'features.f6.body':
+    '保存 Prompt，通过手动、间隔、每日或任务完成事件触发；每个 Automation 都有独立审批模式。',
+  'features.f7.title': 'Skills',
+  'features.f7.body':
+    '发现 Pi 标准的全局与项目 Skill，支持搜索、作用域筛选、Composer 调用和可安装示例。',
+  'features.f8.title': '本地终端与搜索',
+  'features.f8.body':
+    '工作区受限终端、项目文件树、跨项目搜索、Session 搜索和诊断导出。',
+  'preview.title': '界面预览',
+  'preview.lede': '快速看一下工作台、Agent 执行过程与本地用量面板。',
+  'preview.w1':
+    '本地项目、任务历史、权限模式、模型选择与上下文输入集中在一个工作台中。',
+  'preview.w2':
+    'Agent 执行过程、工具调用、完成总结与 Changes 审查面板。',
+  'preview.w3':
+    '本地 Usage & Cost：运行次数、Token、费用趋势与模型分布。',
   'pi.title': '基于 Pi Agent 实现',
   'pi.lede':
     'Agent 运行时来自 Pi——多 Provider、多模型、工具调用与编程循环都由它承担，PiX 专注桌面工作台这一层。',
@@ -126,6 +203,11 @@ const zh: Messages = {
 };
 
 const catalogs: Record<Locale, Messages> = { en, zh };
+
+/** Translate a key for the current (or given) locale. */
+export function translate(key: string, locale: Locale = getLocale()): string {
+  return catalogs[locale][key] ?? key;
+}
 
 const STORAGE_KEY = 'pix-locale';
 

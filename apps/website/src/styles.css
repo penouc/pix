@@ -467,13 +467,15 @@ a:hover {
 
 .download {
   padding-block: var(--space-2xl);
+  background: var(--surface);
+  border-block: 1px solid var(--line);
 }
 
 .download-inner {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-sm);
+  gap: var(--space-md);
   max-width: 36rem;
 }
 
@@ -485,9 +487,103 @@ a:hover {
   margin: 0;
 }
 
+.btn-lg {
+  min-height: 3.25rem;
+  padding-inline: 1.75rem;
+  font-size: 1.05rem;
+}
+
+.download-version {
+  margin-left: 0.5rem;
+  padding-left: 0.65rem;
+  border-left: 1px solid color-mix(in oklch, currentColor 45%, transparent);
+  font-size: 0.85em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+.download-latest {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--olive-deep);
+}
+
+[hidden] {
+  display: none !important;
+}
+
 .download-note {
   margin: 0;
   font-size: 0.875rem;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+/* —— Core features —— */
+
+.feature-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: clamp(1.25rem, 2.5vw, 1.75rem);
+}
+
+.feature-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-lg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 1px 2px oklch(0.35 0.04 150 / 0.04);
+}
+
+.feature-card h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--olive-deep);
+}
+
+.feature-card p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+/* —— Screenshots —— */
+
+.preview {
+  background: var(--surface);
+  border-block: 1px solid var(--line);
+}
+
+.screens {
+  display: grid;
+  gap: var(--space-2xl);
+  max-width: 56rem;
+}
+
+.screen {
+  margin: 0;
+}
+
+.screen img {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 40px oklch(0.35 0.04 150 / 0.12);
+}
+
+.screen figcaption {
+  margin-top: var(--space-sm);
+  font-size: 0.92rem;
   color: var(--ink-soft);
   text-wrap: pretty;
 }
@@ -564,6 +660,12 @@ a:hover {
 
 /* —— Responsive —— */
 
+@media (max-width: 1080px) {
+  .feature-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media (max-width: 820px) {
   .hero-grid {
     grid-template-columns: 1fr;
@@ -596,6 +698,12 @@ a:hover {
 
   .lang-switch {
     display: inline-flex;
+  }
+}
+
+@media (max-width: 560px) {
+  .feature-grid {
+    grid-template-columns: 1fr;
   }
 }
 
