@@ -46,7 +46,7 @@ PiX 是一个运行在本机的 Coding Agent 工作台。它使用 Pi 处理多 
 它不是一个完整 IDE，也不试图把执行过程藏在聊天框后面。PiX 的重点是让真实的编码任务保持**可见、可控、可审查、可恢复**。
 
 > [!IMPORTANT]
-> PiX 目前处于积极开发阶段，优先支持 **macOS Apple Silicon**。正式发布构建会签名并公证；本地开发打包仍为未签名。不建议把未签名构建当作无人监管的生产执行器。
+> PiX 目前处于积极开发阶段，优先支持 **macOS Apple Silicon**。请从 [Releases](https://github.com/penouc/pix/releases) 或 [官网](https://pix.penglei.dev) 下载已签名并公证的安装包；不建议把开发构建当作无人监管的生产执行器。
 
 ## 核心能力
 
@@ -118,26 +118,6 @@ pnpm dev
 ```bash
 PI_DESKTOP_FAKE_RUNTIME=1 pnpm dev
 ```
-
-### 构建 macOS 应用
-
-```bash
-pnpm package:dir
-```
-
-构建结果位于：
-
-```text
-apps/desktop/release/mac-arm64/PiX.app
-```
-
-生成 DMG：
-
-```bash
-pnpm --filter @pi-desktop/desktop package:dmg
-```
-
-> 本地 `package:dir` / `package:dmg` 仍是未签名构建，便于开发验证。正式分发由 Release workflow 签名并公证；证书与 secrets 配置见 [macOS Signing](./docs/macos-signing.md)。
 
 ## 自动发布
 
