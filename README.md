@@ -46,7 +46,7 @@ PiX 是一个运行在本机的 Coding Agent 工作台。它使用 Pi 处理多 
 它不是一个完整 IDE，也不试图把执行过程藏在聊天框后面。PiX 的重点是让真实的编码任务保持**可见、可控、可审查、可恢复**。
 
 > [!IMPORTANT]
-> PiX 目前处于积极开发阶段，优先支持 **macOS Apple Silicon**。本地构建尚未签名或公证，不建议把它当作无人监管的生产执行器。
+> PiX 目前处于积极开发阶段，优先支持 **macOS Apple Silicon**。正式发布构建会签名并公证；本地开发打包仍为未签名。不建议把未签名构建当作无人监管的生产执行器。
 
 ## 核心能力
 
@@ -137,7 +137,7 @@ apps/desktop/release/mac-arm64/PiX.app
 pnpm --filter @pi-desktop/desktop package:dmg
 ```
 
-> 当前构建未签名、未公证。macOS 首次打开时可能需要在“隐私与安全性”中手动允许。
+> 本地 `package:dir` / `package:dmg` 仍是未签名构建，便于开发验证。正式分发由 Release workflow 签名并公证；证书与 secrets 配置见 [macOS Signing](./docs/macos-signing.md)。
 
 ## 自动发布
 
@@ -145,9 +145,9 @@ pnpm --filter @pi-desktop/desktop package:dmg
 
 1. 安装锁定依赖并运行 TypeScript 与测试检查。
 2. 构建 workspace packages 与 Desktop。
-3. 生成 Apple Silicon DMG，并把 Tag 版本写入应用 metadata。
+3. 用 Developer ID 签名并公证 Apple Silicon DMG / ZIP，把 Tag 版本写入应用 metadata。
 4. 验证 app bundle、asar 和 native modules。
-5. 创建 GitHub Release、自动生成 Release Notes 并上传 DMG。
+5. 创建 GitHub Release、自动生成 Release Notes，并上传 DMG、ZIP、`latest-mac.yml`（供应用内自动更新）。
 
 发布新版本：
 
@@ -160,9 +160,8 @@ git push origin v0.2.0
 
 版本 Tag 必须类似 `v0.2.0` 或 `v0.2.0-beta.1`。Release 仅由 Tag 触发，普通的 `main` 提交不会产生安装包。
 
-> [!NOTE]
-> 自动发布目前生成的是未签名、未公证构建。正式分发前仍需配置 Apple Developer ID、Hardened Runtime 和 Apple Notarization secrets。
-
+> [!IMPORTANT]
+> Release 需要 GitHub Actions secrets：`CSC_LINK`、`CSC_KEY_PASSWORD`、`APPLE_API_KEY_BASE64`、`APPLE_API_KEY_ID`、`APPLE_API_ISSUER`。完整步骤见 [macOS Signing](./docs/macos-signing.md)。
 ## 安全模型
 
 PiX 不把 Renderer 当作可信执行环境：

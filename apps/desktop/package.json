@@ -12,8 +12,8 @@
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "vitest run --config ../../vitest.config.ts --dir src",
     "preview": "vite preview",
-    "package:dir": "pnpm build && electron-builder --mac dir --config electron-builder.yml --publish never",
-    "package:dmg": "pnpm build && electron-builder --mac dmg --config electron-builder.yml --publish never"
+    "package:dir": "pnpm build && electron-builder --mac dir --config electron-builder.yml --publish never --config.mac.identity=null --config.mac.hardenedRuntime=false --config.mac.notarize=false",
+    "package:dmg": "pnpm build && electron-builder --mac dmg --config electron-builder.yml --publish never --config.mac.identity=null --config.mac.hardenedRuntime=false --config.mac.notarize=false"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.83.0",

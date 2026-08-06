@@ -44,9 +44,16 @@ mac:
     - target: zip
       arch:
         - arm64
-  identity: null
-  hardenedRuntime: false
+  # Release CI signs with CSC_LINK (Developer ID Application). Local
+  # package:* scripts override identity=null for unsigned smoke builds.
+  hardenedRuntime: true
   gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.inherit.plist
+  # electron-builder notarizes automatically when APPLE_API_KEY* (or
+  # APPLE_ID + app-specific password) env vars are present. See
+  # docs/macos-signing.md.
+  notarize: true
   # Uninstall: remove the .app bundle from /Applications, then the user data.
   # userData is pinned in Main to Application Support/@pi-desktop/desktop so
   # Dock productName ("PiX") cannot orphan existing projects. Packaged builds
