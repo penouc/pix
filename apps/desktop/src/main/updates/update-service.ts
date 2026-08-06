@@ -1,11 +1,14 @@
 import { app } from 'electron';
 import electronUpdater from 'electron-updater';
-import type { UpdateInfo } from 'electron-updater';
+import type { AppUpdater, UpdateInfo } from 'electron-updater';
 
 import type { UpdateState } from '@pi-desktop/protocol';
 
-// electron-updater is CJS with a lazy getter for autoUpdater; ESM named imports fail at runtime.
-const { autoUpdater } = electronUpdater;
+/** Lazy: accessing `autoUpdater` constructs ElectronAppAdapter and needs a real Electron `app`. */
+function getAutoUpdater(): AppUpdater {
+  // electron-updater is CJS with a lazy getter; ESM named imports fail at runtime.
+  return electronUpdater.autoUpdater;
+}
 
 /** Main-process boundary for release updates. */
 export class UpdateService {
@@ -15,6 +18,7 @@ export class UpdateService {
   };
 
   constructor() {
+    const autoUpdater = getAutoUpdater();
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.on('checking-for-update', () => this.setState({ status: 'checking' }));
     autoUpdater.on('update-available', (info) => this.setState(this.availableState(info)));
@@ -32,6 +36,7 @@ export class UpdateService {
   }
 
   configure(autoDownload: boolean): void {
+    const autoUpdater = getAutoUpdater();
     autoUpdater.autoDownload = autoDownload;
     autoUpdater.autoInstallOnAppQuit = autoDownload;
   }
@@ -42,18 +47,18 @@ export class UpdateService {
 
   async check(): Promise<UpdateState> {
     if (!app.isPackaged) return this.setState({ status: 'unsupported' });
-    await autoUpdater.checkForUpdates();
+    await getAutoUpdater().checkForUpdates();
     return this.state;
   }
 
   async download(): Promise<UpdateState> {
     if (!app.isPackaged) return this.setState({ status: 'unsupported' });
-    await autoUpdater.downloadUpdate();
+    await getAutoUpdater().downloadUpdate();
     return this.state;
   }
 
   install(): void {
-    if (this.state.status === 'downloaded') autoUpdater.quitAndInstall(false, true);
+    if (this.state.status === 'downloaded') getAutoUpdater().quitAndInstall(false, true);
   }
 
   private availableState(info: UpdateInfo): UpdateState {

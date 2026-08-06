@@ -54,6 +54,20 @@ const electron = vi.hoisted(() => {
 
 vi.mock('electron', () => electron);
 
+// electron-updater's CJS require('electron') bypasses the Vitest mock and crashes
+// without a real Electron app; stub the updater for Main IPC integration tests.
+vi.mock('electron-updater', () => {
+  const autoUpdater = {
+    autoDownload: false,
+    autoInstallOnAppQuit: true,
+    on: vi.fn(),
+    checkForUpdates: vi.fn(async () => null),
+    downloadUpdate: vi.fn(async () => undefined),
+    quitAndInstall: vi.fn(),
+  };
+  return { default: { autoUpdater }, autoUpdater };
+});
+
 let userData = '';
 
 beforeAll(async () => {
