@@ -56,6 +56,37 @@ pass('app bundle exists');
 const binary = path.join(appRoot, 'Contents/MacOS/PiX');
 existsSync(binary) ? pass('main binary present') : fail('main binary missing');
 
+// Electron ships Camera/Mic/Bluetooth usage strings by default. after-pack.mjs
+// must strip them so Privacy settings do not advertise capabilities we never use.
+section('Privacy Info.plist keys');
+{
+  const privacyKeys = [
+    'NSCameraUsageDescription',
+    'NSMicrophoneUsageDescription',
+    'NSBluetoothAlwaysUsageDescription',
+    'NSBluetoothPeripheralUsageDescription',
+    'NSPhotoLibraryUsageDescription',
+    'NSDocumentsFolderUsageDescription',
+    'NSDesktopFolderUsageDescription',
+    'NSDownloadsFolderUsageDescription',
+  ];
+  const infoPlist = path.join(appRoot, 'Contents/Info.plist');
+  const listed = spawnSync('plutil', ['-p', infoPlist], { encoding: 'utf8' });
+  if (listed.status !== 0) {
+    fail(`could not read Info.plist: ${listed.stderr || listed.stdout}`);
+  } else {
+    const body = listed.stdout;
+    let dirty = 0;
+    for (const key of privacyKeys) {
+      if (body.includes(key)) {
+        fail(`Info.plist still declares ${key} (run after-pack strip)`);
+        dirty += 1;
+      }
+    }
+    if (dirty === 0) pass('no unused Camera/Mic/Bluetooth/folder privacy keys');
+  }
+}
+
 const asarPath = path.join(appRoot, 'Contents/Resources/app.asar');
 if (!existsSync(asarPath)) {
   fail('app.asar missing');

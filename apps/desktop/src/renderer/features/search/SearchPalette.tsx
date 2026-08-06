@@ -56,6 +56,8 @@ export function SearchPalette({
 
   const skills = useQuery({
     queryKey: ['skills.list', project?.id],
+    // Palette is opened on demand; still avoid walking skill roots with no project.
+    enabled: Boolean(project),
     queryFn: () =>
       invoke<SkillInfo[]>({ method: 'skills.list', params: { projectId: project?.id } }),
   });

@@ -49,6 +49,17 @@ const electron = vi.hoisted(() => {
     ipcMain: { handle: vi.fn() },
     nativeImage: { createFromPath: vi.fn(() => ({ isEmpty: () => true })) },
     shell: { openExternal: vi.fn(), showItemInFolder: vi.fn() },
+    session: {
+      defaultSession: {
+        setPermissionRequestHandler: vi.fn(),
+        setPermissionCheckHandler: vi.fn(),
+      },
+    },
+    safeStorage: {
+      isEncryptionAvailable: () => true,
+      encryptString: (value: string) => Buffer.from(value, 'utf8'),
+      decryptString: (buf: Buffer) => buf.toString('utf8'),
+    },
   };
 });
 

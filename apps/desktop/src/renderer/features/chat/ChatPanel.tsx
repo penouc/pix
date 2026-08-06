@@ -367,6 +367,10 @@ export function ChatPanel({
 
   const skills = useQuery({
     queryKey: ['skills.list', project?.id],
+    // Wait until a project is in scope. Listing walks disk (global + project
+    // skill roots); doing it on a blank cold start is work the user never asked
+    // for and is the kind of background touch that feels like a permission grab.
+    enabled: Boolean(project),
     queryFn: () =>
       invoke<SkillInfo[]>({ method: 'skills.list', params: { projectId: project?.id } }),
   });

@@ -13,6 +13,10 @@ directories:
   output: release
   buildResources: build
 
+# Strip Electron's default Camera/Mic/Bluetooth privacy strings from every
+# Info.plist before signing. See build/after-pack.mjs.
+afterPack: build/after-pack.mjs
+
 files:
   - dist/**/*
   - dist-electron/**/*

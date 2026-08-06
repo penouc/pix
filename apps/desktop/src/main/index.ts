@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, session, shell } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -1441,12 +1441,40 @@ function exportDiagnostics(): { logPath: string; recentMetrics: unknown[] } {
   };
 }
 
+/**
+ * Chromium permission surface. PiX is a coding workbench — it never needs the
+ * camera, mic, geolocation, or screen capture. Denying here means a framed page
+ * or a future renderer bug cannot pop an OS permission dialog on a cold start.
+ * Clipboard + notifications stay allowed (paste into the composer; run finished
+ * alerts). Fullscreen is harmless chrome.
+ */
+function installSessionPermissionGates(): void {
+  const allowed = new Set([
+    'clipboard-read',
+    'clipboard-sanitized-write',
+    'notifications',
+    'fullscreen',
+  ]);
+
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+    callback(allowed.has(permission));
+  });
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) => allowed.has(permission));
+}
+
 app.whenReady().then(() => {
   // M8-2: Install structured logger before any other log calls.
   desktopLogger = new DesktopLogger(app.getPath('logs'));
   desktopLogger.install();
+  installSessionPermissionGates();
 
   ipcMain.handle(IpcChannels.invoke, async (_event, raw: unknown) => handleInvoke(raw));
+
+  applyDevDockIcon();
+  // Window first. Everything else is background work that must not race the
+  // first paint or trigger Keychain / network before the user sees UI.
+  createWindow();
+
   void initializeCheckpointRecovery().catch((error) => {
     console.error('[main] checkpoint recovery initialization failed', error);
   });
@@ -1462,11 +1490,17 @@ app.whenReady().then(() => {
     })
     .catch((error) => console.error('[main] automation scheduler start failed', error));
 
-  const autoUpdate = getProviderSettings().getUiFlags().autoUpdate;
-  getUpdates().configure(autoUpdate);
-  if (autoUpdate) void getUpdates().check();
-  applyDevDockIcon();
-  createWindow();
+  // Preferences are plain JSON now, so this does not open safeStorage. Still
+  // defer the network check until after the window exists.
+  setImmediate(() => {
+    try {
+      const autoUpdate = getProviderSettings().getUiFlags().autoUpdate;
+      getUpdates().configure(autoUpdate);
+      if (autoUpdate) void getUpdates().check();
+    } catch (error) {
+      console.error('[main] auto-update setup failed', error);
+    }
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
