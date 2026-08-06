@@ -210,9 +210,10 @@ Local Workspace / Git / Child Processes
 ```text
 apps/
 ├─ desktop/                 Electron Main / Preload / React Renderer
+├─ companion/               Phone companion (LAN WebSocket client)
 └─ website/                 PiX 宣传站点
 packages/
-├─ protocol/                IPC commands、Zod schemas、DesktopAgentEvent
+├─ protocol/                IPC commands、Zod schemas、DesktopAgentEvent、companion wire
 ├─ agent-domain/            AgentRuntime 边界、状态机、领域错误
 ├─ agent-pi/                Pi Agent SDK adapter 与 Fake Runtime
 ├─ database/                SQLite repositories 与 migrations
@@ -237,6 +238,8 @@ Pi SDK 类型只允许出现在 `packages/agent-pi`，Renderer 不直接依赖 P
 | 命令 | 用途 |
 |---|---|
 | `pnpm dev` | 启动 Electron + Vite，默认使用真实 Pi Runtime |
+| `pnpm dev:companion` | 单独启动手机 Companion Vite 开发服 |
+| `pnpm build:companion` | 构建 Companion SPA（可被桌面 Host 静态托管） |
 | `pnpm typecheck` | 构建 workspace packages 并执行完整 TypeScript 检查 |
 | `pnpm lint` | 运行 ESLint |
 | `pnpm test` | 运行 Vitest 测试 |

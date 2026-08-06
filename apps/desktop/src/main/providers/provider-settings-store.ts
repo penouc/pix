@@ -54,6 +54,12 @@ interface StoredSettings {
    * model through provider drill-down and search regardless of this list.
    */
   favoriteModels?: string[];
+  /** Phase-1 phone companion host. */
+  companion?: {
+    enabled: boolean;
+    port: number;
+    pairingCode: string;
+  };
 }
 
 export interface ProviderSettingSummary {
@@ -133,6 +139,21 @@ export class ProviderSettingsStore {
     this.write(settings);
   }
 
+  getCompanionSettings(): { enabled: boolean; port: number; pairingCode: string } {
+    const stored = this.read().companion;
+    return {
+      enabled: stored?.enabled ?? false,
+      port: stored?.port ?? 7847,
+      pairingCode: stored?.pairingCode ?? '',
+    };
+  }
+
+  setCompanionSettings(next: { enabled: boolean; port: number; pairingCode: string }): void {
+    const settings = this.read();
+    settings.companion = next;
+    this.write(settings);
+  }
+
   private read(): StoredSettings {
     if (!existsSync(this.filePath)) return { providers: [] };
     try {
@@ -160,6 +181,21 @@ export class ProviderSettingsStore {
           : Array.isArray((parsed as { visibleModels?: string[] }).visibleModels)
             ? { favoriteModels: (parsed as { visibleModels?: string[] }).visibleModels }
             : {}),
+        ...(parsed.companion
+          ? {
+              companion: {
+                enabled: Boolean(parsed.companion.enabled),
+                port:
+                  typeof parsed.companion.port === 'number' && parsed.companion.port > 0
+                    ? parsed.companion.port
+                    : 7847,
+                pairingCode:
+                  typeof parsed.companion.pairingCode === 'string'
+                    ? parsed.companion.pairingCode
+                    : '',
+              },
+            }
+          : {}),
       };
     } catch {
       return { providers: [] };

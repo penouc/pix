@@ -11,9 +11,11 @@
   "scripts": {
     "dev": "pnpm --filter @pi-desktop/desktop dev",
     "dev:website": "pnpm --filter @pi-desktop/website dev",
+    "dev:companion": "pnpm --filter @pi-desktop/companion dev",
     "build:website": "pnpm --filter @pi-desktop/website build",
+    "build:companion": "pnpm --filter @pi-desktop/companion build",
     "deploy:website": "pnpm --filter @pi-desktop/website run deploy",
-    "build": "pnpm -r --filter './packages/*' build && pnpm --filter @pi-desktop/desktop build",
+    "build": "pnpm -r --filter './packages/*' build && pnpm --filter @pi-desktop/desktop build && pnpm --filter @pi-desktop/companion build",
     "build:packages": "pnpm -r --filter './packages/*' build",
     "typecheck": "pnpm run build:packages && pnpm -r typecheck",
     "lint": "eslint . --max-warnings 0",

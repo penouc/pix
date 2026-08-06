@@ -403,6 +403,11 @@ export const SetDefaultProjectsFolderInputSchema = z.object({
 });
 export type SetUiSettingInput = z.infer<typeof SetUiSettingInputSchema>;
 
+export const CompanionSetEnabledInputSchema = z.object({
+  enabled: z.boolean(),
+});
+export type CompanionSetEnabledInput = z.infer<typeof CompanionSetEnabledInputSchema>;
+
 /** Discriminated command envelope for typed invoke. */
 export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('app.getInfo'), params: z.object({}).optional() }),
@@ -515,6 +520,9 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
     params: ClearRememberedInputSchema.optional(),
   }),
   z.object({ method: z.literal('system.revealPath'), params: RevealPathInputSchema }),
+  z.object({ method: z.literal('companion.getStatus'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('companion.setEnabled'), params: CompanionSetEnabledInputSchema }),
+  z.object({ method: z.literal('companion.regenerateCode'), params: z.object({}).optional() }),
 ]);
 export type IpcCommand = z.infer<typeof IpcCommandSchema>;
 export type IpcMethod = IpcCommand['method'];

@@ -6,6 +6,7 @@ import type {
   AppInfo,
   ApprovalMode,
   AuditSummary,
+  CompanionStatus,
   IndexProjectStatus,
   RememberedRule,
   SetUiSettingInput,
@@ -30,6 +31,7 @@ type TabId =
   | 'checkpoints'
   | 'appearance'
   | 'notifications'
+  | 'companion'
   | 'usage'
   | 'updates'
   | 'about';
@@ -76,6 +78,12 @@ const TABS: Array<{ id: TabId; name: string; title: string; desc: string }> = [
     name: 'Notifications',
     title: 'Notifications',
     desc: 'Long runs should be able to page you.',
+  },
+  {
+    id: 'companion',
+    name: 'Companion',
+    title: 'Phone companion',
+    desc: 'Stream chat and approve tools from a phone on the same network.',
   },
   {
     id: 'updates',
@@ -148,6 +156,7 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
 
             {tab === 'appearance' ? <AppearanceTab /> : null}
             {tab === 'notifications' ? <NotificationsTab /> : null}
+            {tab === 'companion' ? <CompanionTab /> : null}
             {tab === 'usage' ? <UsageTab /> : null}
             {tab === 'permissions' ? <PermissionsTab /> : null}
             {tab === 'projects' ? <ProjectsTab /> : null}
@@ -846,6 +855,103 @@ function NotificationsTab() {
       <p className="text-[12px] leading-relaxed text-muted">
         Notification bodies carry only the task title and a status word — never prompt text, file
         contents or commands, because the OS may keep them in a tray.
+      </p>
+    </>
+  );
+}
+
+function CompanionTab() {
+  const queryClient = useQueryClient();
+  const status = useQuery({
+    queryKey: ['companion.getStatus'],
+    queryFn: () => invoke<CompanionStatus>({ method: 'companion.getStatus' }),
+    refetchInterval: 2_000,
+  });
+  const setEnabled = useMutation({
+    mutationFn: (enabled: boolean) =>
+      invoke<CompanionStatus>({ method: 'companion.setEnabled', params: { enabled } }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['companion.getStatus'], data);
+    },
+  });
+  const regenerate = useMutation({
+    mutationFn: () => invoke<CompanionStatus>({ method: 'companion.regenerateCode' }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['companion.getStatus'], data);
+    },
+  });
+
+  const data = status.data;
+  const enabled = data?.enabled ?? false;
+
+  return (
+    <>
+      <Group label="Host">
+        <Row
+          name="Enable companion host"
+          desc="Opens a local server on your LAN. Only phones with the pairing code can connect."
+        >
+          <Switch
+            label="Enable companion host"
+            checked={enabled}
+            disabled={status.isLoading || setEnabled.isPending}
+            onChange={(next) => setEnabled.mutate(next)}
+          />
+        </Row>
+        <Row name="Status" desc={enabled ? 'Listening for phones on the local network.' : 'Off.'}>
+          <Mono>{data?.running ? 'Running' : 'Stopped'}</Mono>
+        </Row>
+        <Row name="Port" desc="Default Phase-1 port.">
+          <Mono>{data?.port ?? '—'}</Mono>
+        </Row>
+        <Row name="Connected phones" desc="">
+          <Mono>{data?.clients ?? 0}</Mono>
+        </Row>
+      </Group>
+
+      <Group label="Pairing">
+        <Row
+          name="Pairing code"
+          desc="Enter this on your phone after opening the companion URL."
+          stacked
+        >
+          <div className="flex items-center gap-2">
+            <span className="rounded-[12px] bg-neutral-200 px-3 py-2 font-mono text-[22px] tracking-[0.28em] text-neutral-900">
+              {data?.pairingCode || '——————'}
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!data || regenerate.isPending}
+              onClick={() => regenerate.mutate()}
+            >
+              New code
+            </Button>
+          </div>
+        </Row>
+        {data?.urls?.length ? (
+          <Row name="Open on phone" desc="Same Wi-Fi as this Mac." stacked>
+            <div className="flex flex-col gap-1.5">
+              {data.urls.map((url) => (
+                <button
+                  key={url}
+                  type="button"
+                  className="cursor-pointer rounded-[10px] bg-neutral-200 px-2.5 py-1.5 text-left font-mono text-[12px] text-neutral-800 hover:bg-neutral-300"
+                  onClick={() => void navigator.clipboard.writeText(url)}
+                  title="Copy URL"
+                >
+                  {url}
+                </button>
+              ))}
+            </div>
+          </Row>
+        ) : null}
+      </Group>
+
+      <p className="text-[12px] leading-relaxed text-muted">
+        Phase 1 covers session list, streaming chat, tool cards, and approval prompts. Diff review,
+        terminal, and automations stay on the desktop. The host binds to all interfaces — keep the
+        pairing code private on shared networks.
       </p>
     </>
   );

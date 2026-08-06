@@ -21,6 +21,7 @@ import {
   okResult,
   parseDesktopAgentEvent,
   parseIpcCommand,
+  type CompanionStatus,
   type IpcResult,
   type CheckpointRecoverySummary,
   type ModelInfo,
@@ -31,6 +32,12 @@ import {
 } from '@pi-desktop/protocol';
 
 import { describeProtectedPaths } from '@pi-desktop/security';
+
+import {
+  AgentHostServer,
+  generatePairingCode,
+  resolveCompanionStaticRoot,
+} from './companion/agent-host-server.js';
 
 // Dock / taskbar should say PiX, but userData must stay on the historical folder.
 // `productName` / `app.setName` alone would move Application Support to "PiX" and
@@ -92,6 +99,7 @@ let notifications: NotificationService | null = null;
 let providerLogins: ProviderLoginService | null = null;
 let updates: UpdateService | null = null;
 let sessionLogSync: SessionLogSyncService | null = null;
+let companionHost: AgentHostServer | null = null;
 
 function getSessionLogSync(): SessionLogSyncService {
   sessionLogSync ??= new SessionLogSyncService(
@@ -148,12 +156,17 @@ function flushDeltaBuffer(): void {
   if (deltaBuffer.length === 0) return;
   const events = deltaBuffer;
   deltaBuffer = [];
-  const windows = BrowserWindow.getAllWindows();
-  for (const win of windows) {
-    for (const ev of events) {
-      win.webContents.send(IpcChannels.event, ev);
-    }
+  for (const ev of events) {
+    sendEventToClients(ev);
   }
+}
+
+/** Renderer windows + paired companion phones. */
+function sendEventToClients(event: unknown): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send(IpcChannels.event, event);
+  }
+  companionHost?.broadcastEvent(event);
 }
 
 function getProviderSettings(): ProviderSettingsStore {
@@ -161,6 +174,63 @@ function getProviderSettings(): ProviderSettingsStore {
     path.join(app.getPath('userData'), 'provider-settings.enc'),
   );
   return providerSettings;
+}
+
+function ensureCompanionPairingCode(): string {
+  const stored = getProviderSettings().getCompanionSettings();
+  if (stored.pairingCode) return stored.pairingCode;
+  const code = generatePairingCode();
+  getProviderSettings().setCompanionSettings({ ...stored, pairingCode: code });
+  return code;
+}
+
+function getCompanionHost(): AgentHostServer {
+  if (companionHost) return companionHost;
+  const stored = getProviderSettings().getCompanionSettings();
+  companionHost = new AgentHostServer({
+    port: stored.port,
+    pairingCode: ensureCompanionPairingCode(),
+    invoke: (raw) => handleInvoke(raw),
+    staticRoot: resolveCompanionStaticRoot(),
+  });
+  return companionHost;
+}
+
+function companionStatus(): CompanionStatus {
+  const stored = getProviderSettings().getCompanionSettings();
+  const host = getCompanionHost();
+  return host.getStatus(stored.enabled);
+}
+
+async function startCompanionIfEnabled(): Promise<void> {
+  const stored = getProviderSettings().getCompanionSettings();
+  if (!stored.enabled) return;
+  const host = getCompanionHost();
+  host.setPairingCode(ensureCompanionPairingCode());
+  try {
+    await host.start(stored.port);
+    console.warn(`[companion] listening on ${host.getStatus(true).urls.join(', ')}`);
+  } catch (error) {
+    console.error('[companion] failed to start', error);
+  }
+}
+
+async function setCompanionEnabled(enabled: boolean): Promise<CompanionStatus> {
+  const stored = getProviderSettings().getCompanionSettings();
+  const pairingCode = stored.pairingCode || generatePairingCode();
+  getProviderSettings().setCompanionSettings({
+    enabled,
+    port: stored.port,
+    pairingCode,
+  });
+  const host = getCompanionHost();
+  host.setPairingCode(pairingCode);
+  if (enabled) {
+    await host.start(stored.port);
+  } else {
+    await host.stop();
+  }
+  return host.getStatus(enabled);
 }
 
 function getUpdates(): UpdateService {
@@ -465,15 +535,11 @@ function broadcastEvent(event: unknown): void {
       })
       .then((handled) => {
         if (handled) return;
-        for (const win of BrowserWindow.getAllWindows()) {
-          win.webContents.send(IpcChannels.event, data);
-        }
+        sendEventToClients(data);
       })
       .catch((error) => {
         console.error('[main] automation approval handling failed', error);
-        for (const win of BrowserWindow.getAllWindows()) {
-          win.webContents.send(IpcChannels.event, data);
-        }
+        sendEventToClients(data);
       });
     return;
   }
@@ -499,9 +565,7 @@ function broadcastEvent(event: unknown): void {
       .catch((error) => console.error('[main] automation run-finished handling failed', error));
   }
 
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send(IpcChannels.event, data);
-  }
+  sendEventToClients(data);
 }
 
 let indexService: IndexService | null = null;
@@ -1419,6 +1483,24 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       case 'diagnostics.export': {
         return okResult(exportDiagnostics());
       }
+      case 'companion.getStatus': {
+        return okResult(companionStatus());
+      }
+      case 'companion.setEnabled': {
+        return okResult(await setCompanionEnabled(cmd.params.enabled));
+      }
+      case 'companion.regenerateCode': {
+        const stored = getProviderSettings().getCompanionSettings();
+        const pairingCode = generatePairingCode();
+        getProviderSettings().setCompanionSettings({ ...stored, pairingCode });
+        getCompanionHost().setPairingCode(pairingCode);
+        // Drop existing clients — they must re-pair with the new code.
+        if (stored.enabled && companionHost) {
+          await companionHost.stop();
+          await companionHost.start(stored.port);
+        }
+        return okResult(companionStatus());
+      }
       default: {
         const _exhaustive: never = cmd;
         return errResult('UNHANDLED', `Unhandled command ${JSON.stringify(_exhaustive)}`);
@@ -1467,6 +1549,7 @@ app.whenReady().then(() => {
   if (autoUpdate) void getUpdates().check();
   applyDevDockIcon();
   createWindow();
+  void startCompanionIfEnabled();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -1483,6 +1566,8 @@ app.on('before-quit', () => {
     deltaFlushTimer = null;
   }
   deltaBuffer = [];
+  void companionHost?.stop();
+  companionHost = null;
   void runtime?.dispose();
   runtime = null;
   desktopDb?.close();

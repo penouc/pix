@@ -45,17 +45,48 @@ importers:
         specifier: ^3.2.1
         version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
 
+  apps/companion:
+    dependencies:
+      '@pi-desktop/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      react:
+        specifier: ^19.1.0
+        version: 19.2.8
+      react-dom:
+        specifier: ^19.1.0
+        version: 19.2.8(react@19.2.8)
+      zustand:
+        specifier: ^5.0.5
+        version: 5.0.14(@types/react@19.2.17)(react@19.2.8)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.1.6
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: ^19.1.5
+        version: 19.2.3(@types/react@19.2.17)
+      '@vitejs/plugin-react':
+        specifier: ^4.5.1
+        version: 4.7.0(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vite:
+        specifier: ^6.3.5
+        version: 6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
+
   apps/desktop:
     dependencies:
       '@earendil-works/pi-agent-core':
         specifier: 0.83.0
-        version: 0.83.0(ws@8.21.1)(zod@3.25.56)
+        version: 0.83.0(ws@8.21.2)(zod@3.25.56)
       '@earendil-works/pi-ai':
         specifier: 0.83.0
-        version: 0.83.0(ws@8.21.1)(zod@3.25.56)
+        version: 0.83.0(ws@8.21.2)(zod@3.25.56)
       '@earendil-works/pi-coding-agent':
         specifier: 0.83.0
-        version: 0.83.0(ws@8.21.1)(zod@3.25.56)
+        version: 0.83.0(ws@8.21.2)(zod@3.25.56)
       '@pi-desktop/agent-domain':
         specifier: workspace:*
         version: link:../../packages/agent-domain
@@ -104,6 +135,9 @@ importers:
       tailwind-merge:
         specifier: ^3.3.0
         version: 3.6.0
+      ws:
+        specifier: ^8.21.2
+        version: 8.21.2
       zod:
         specifier: 3.25.56
         version: 3.25.56
@@ -120,6 +154,9 @@ importers:
       '@types/react-dom':
         specifier: ^19.1.5
         version: 19.2.3(@types/react@19.2.17)
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       '@vitejs/plugin-react':
         specifier: ^4.5.1
         version: 4.7.0(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
@@ -171,13 +208,13 @@ importers:
     dependencies:
       '@earendil-works/pi-agent-core':
         specifier: 0.83.0
-        version: 0.83.0(ws@8.21.1)(zod@3.25.56)
+        version: 0.83.0(ws@8.21.2)(zod@3.25.56)
       '@earendil-works/pi-ai':
         specifier: 0.83.0
-        version: 0.83.0(ws@8.21.1)(zod@3.25.56)
+        version: 0.83.0(ws@8.21.2)(zod@3.25.56)
       '@earendil-works/pi-coding-agent':
         specifier: 0.83.0
-        version: 0.83.0(ws@8.21.1)(zod@3.25.56)
+        version: 0.83.0(ws@8.21.2)(zod@3.25.56)
       '@pi-desktop/agent-domain':
         specifier: workspace:*
         version: link:../agent-domain
@@ -1815,6 +1852,9 @@ packages:
 
   '@types/verror@1.10.11':
     resolution: {integrity: sha512-RlDm9K7+o5stv0Co8i8ZRGxDbrTxhJtgjqjFyVh/tXQyl/rYtTKlnTvZ88oSTeYREWurwx20Js4kTuKCsFkUtg==}
+
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@types/yauzl@2.10.3':
     resolution: {integrity: sha512-oJoftv0LSuaDZE3Le4DbKX+KS9G36NzOeSap90UIK0yMA/NhKJhqlSGtNDORNRaIbQfzjXDrQa0ytJ6mNRGz/Q==}
@@ -4478,8 +4518,8 @@ packages:
       utf-8-validate:
         optional: true
 
-  ws@8.21.1:
-    resolution: {integrity: sha512-+0NTnW77fFN/DjQi6k/Sq/Yvk4Sgajw7urW8V+asjXnRgDs9gyGkdb7EzgfhA4goXsRIZKE28fzIXBHEzhuiWw==}
+  ws@8.21.2:
+    resolution: {integrity: sha512-54dMVAo4WIe6SKy3vBgN+9bJZqqQ8IMRevAkOLQALhi49qkkQDQfWdAZ8KQlXiEabw88ARXXdUrlvtbKQX+aKw==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -4938,9 +4978,9 @@ snapshots:
       ajv: 6.15.0
       ajv-keywords: 3.5.2(ajv@6.15.0)
 
-  '@earendil-works/pi-agent-core@0.83.0(ws@8.21.1)(zod@3.25.56)':
+  '@earendil-works/pi-agent-core@0.83.0(ws@8.21.2)(zod@3.25.56)':
     dependencies:
-      '@earendil-works/pi-ai': 0.83.0(ws@8.21.1)(zod@3.25.56)
+      '@earendil-works/pi-ai': 0.83.0(ws@8.21.2)(zod@3.25.56)
       diff: 8.0.4
       ignore: 7.0.5
       typebox: 1.3.7
@@ -4953,7 +4993,7 @@ snapshots:
       - ws
       - zod
 
-  '@earendil-works/pi-ai@0.83.0(ws@8.21.1)(zod@3.25.56)':
+  '@earendil-works/pi-ai@0.83.0(ws@8.21.2)(zod@3.25.56)':
     dependencies:
       '@anthropic-ai/sdk': 0.91.1(zod@3.25.56)
       '@aws-sdk/client-bedrock-runtime': 3.1048.0
@@ -4963,7 +5003,7 @@ snapshots:
       '@smithy/node-http-handler': 4.7.3
       http-proxy-agent: 7.0.2
       https-proxy-agent: 7.0.6
-      openai: 6.26.0(ws@8.21.1)(zod@3.25.56)
+      openai: 6.26.0(ws@8.21.2)(zod@3.25.56)
       partial-json: 0.1.7
       typebox: 1.3.7
     transitivePeerDependencies:
@@ -4974,10 +5014,10 @@ snapshots:
       - ws
       - zod
 
-  '@earendil-works/pi-coding-agent@0.83.0(ws@8.21.1)(zod@3.25.56)':
+  '@earendil-works/pi-coding-agent@0.83.0(ws@8.21.2)(zod@3.25.56)':
     dependencies:
-      '@earendil-works/pi-agent-core': 0.83.0(ws@8.21.1)(zod@3.25.56)
-      '@earendil-works/pi-ai': 0.83.0(ws@8.21.1)(zod@3.25.56)
+      '@earendil-works/pi-agent-core': 0.83.0(ws@8.21.2)(zod@3.25.56)
+      '@earendil-works/pi-ai': 0.83.0(ws@8.21.2)(zod@3.25.56)
       '@earendil-works/pi-tui': 0.83.0
       '@silvia-odwyer/photon-node': 0.3.4
       chalk: 5.6.2
@@ -5333,7 +5373,7 @@ snapshots:
       google-auth-library: 10.9.1
       p-retry: 4.6.2
       protobufjs: 7.6.5
-      ws: 8.21.1
+      ws: 8.21.2
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -5566,7 +5606,7 @@ snapshots:
   '@mistralai/mistralai@2.2.6(@opentelemetry/api@1.9.0)':
     dependencies:
       '@opentelemetry/semantic-conventions': 1.43.0
-      ws: 8.21.1
+      ws: 8.21.2
       zod: 3.25.56
       zod-to-json-schema: 3.25.2(zod@3.25.56)
     optionalDependencies:
@@ -6171,6 +6211,10 @@ snapshots:
 
   '@types/verror@1.10.11':
     optional: true
+
+  '@types/ws@8.18.1':
+    dependencies:
+      '@types/node': 22.20.1
 
   '@types/yauzl@2.10.3':
     dependencies:
@@ -8518,9 +8562,9 @@ snapshots:
       regex: 6.1.0
       regex-recursion: 6.0.2
 
-  openai@6.26.0(ws@8.21.1)(zod@3.25.56):
+  openai@6.26.0(ws@8.21.2)(zod@3.25.56):
     optionalDependencies:
-      ws: 8.21.1
+      ws: 8.21.2
       zod: 3.25.56
 
   optionator@0.9.4:
@@ -9425,7 +9469,7 @@ snapshots:
 
   ws@8.21.0: {}
 
-  ws@8.21.1: {}
+  ws@8.21.2: {}
 
   xmlbuilder@15.1.1: {}
 
