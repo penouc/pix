@@ -187,7 +187,11 @@ function shouldAccept(
   >,
   event: Exclude<
     DesktopAgentEvent,
-    { type: 'session.updated' } | { type: 'context.updated' } | { type: 'compaction.started' } | { type: 'compaction.completed' }
+    | { type: 'session.updated' }
+    | { type: 'context.updated' }
+    | { type: 'compaction.started' }
+    | { type: 'compaction.completed' }
+    | { type: 'update.status' }
   >,
 ): boolean {
   if (state.activeProjectId && event.projectId !== state.activeProjectId) return false;
@@ -631,6 +635,8 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
   applyEvent: (event) => {
     // Metadata / session-scoped events — not run-sequence gated.
     if (event.type === 'session.updated') return;
+    // App update progress shares the IPC bus but is not an agent stream event.
+    if (event.type === 'update.status') return;
 
     if (event.type === 'context.updated') {
       const state = get();

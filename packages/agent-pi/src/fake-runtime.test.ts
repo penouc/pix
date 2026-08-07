@@ -28,6 +28,8 @@ describe('FakeAgentRuntime', () => {
     expect(types).toContain('run.completed');
 
     for (const event of events) {
+      // App-level update.status is on the same IPC bus but is not run-scoped.
+      if (event.type === 'update.status') continue;
       expect(event.projectId).toBe('proj-1');
       expect(event.sessionId).toBe(session.id);
       if (
