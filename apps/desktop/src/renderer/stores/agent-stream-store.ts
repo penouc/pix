@@ -614,6 +614,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
   resetSessionView: () => {
     clearDeltaBatch();
     timelineSeq = 0;
+    const pendingAsk = get().pendingAsk;
     set({
       activeRunId: null,
       status: 'idle',
@@ -635,13 +636,15 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       isCompacting: false,
       retry: null,
       todos: [],
-      pendingAsk: null,
+      // Keep asks across view resets — App cancels orphans on navigation (#12).
+      pendingAsk,
     });
   },
 
   setScope: (projectId, sessionId) => {
     const remembered = sessionId ? get().contextTokensBySession[sessionId] : undefined;
     const rememberedWindow = sessionId ? get().contextWindowBySession[sessionId] : undefined;
+    const pendingAsk = get().pendingAsk;
     set({
       activeProjectId: projectId,
       activeSessionId: sessionId,
@@ -656,7 +659,8 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       queuedMessages: [],
       isCompacting: false,
       todos: [],
-      pendingAsk: null,
+      pendingAsk:
+        pendingAsk && sessionId && pendingAsk.sessionId === sessionId ? pendingAsk : null,
     });
   },
 
@@ -720,11 +724,9 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       return;
     }
 
-    // #12: an ask blocks the run until answered. Session-scoped so the prompt
-    // can surface over any screen, and cleared by ask.resolved.
+    // #12: an ask blocks the run until answered. Keep it even if the user is on
+    // another screen so returning to the session can still show the dialog.
     if (event.type === 'ask.pending') {
-      const state = get();
-      if (state.activeSessionId && event.sessionId !== state.activeSessionId) return;
       set({
         pendingAsk: {
           askId: event.askId,
@@ -740,7 +742,6 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
     if (event.type === 'ask.resolved') {
       const state = get();
       if (state.pendingAsk?.askId !== event.askId) return;
-      if (state.activeSessionId && event.sessionId !== state.activeSessionId) return;
       set({ pendingAsk: null });
       return;
     }

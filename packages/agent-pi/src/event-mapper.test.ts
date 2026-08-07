@@ -135,6 +135,13 @@ describe('mapPiSessionEvent', () => {
     expect(events[0]?.type).toBe('run.completed');
   });
 
+  it('suppresses run.completed when agent_end willRetry is true (#8)', () => {
+    const ctx = makeCtx();
+    expect(
+      mapPiSessionEvent({ type: 'agent_end', messages: [], willRetry: true }, ctx),
+    ).toEqual([]);
+  });
+
   it('ignores unknown events', () => {
     const ctx = makeCtx();
     expect(mapPiSessionEvent({ type: 'queue_update' }, ctx)).toEqual([]);

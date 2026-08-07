@@ -1469,7 +1469,18 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         // A session that has not been hydrated yet has no runtime record; fall
         // back to the persisted checklist so the sidebar is never empty-wrong.
         if (!agent.listTodos) return okResult({ items: db.todos.load(cmd.params.sessionId) });
-        return okResult({ items: await agent.listTodos(cmd.params.sessionId) });
+        try {
+          return okResult({ items: await agent.listTodos(cmd.params.sessionId) });
+        } catch (error) {
+          const code =
+            error && typeof error === 'object' && 'code' in error
+              ? String((error as { code: unknown }).code)
+              : '';
+          if (code === 'SESSION_NOT_FOUND') {
+            return okResult({ items: db.todos.load(cmd.params.sessionId) });
+          }
+          throw error;
+        }
       }
       case 'agent.answerAsk': {
         if (!agent.answerAsk) {

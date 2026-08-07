@@ -55,6 +55,7 @@ export function App() {
   const setScope = useAgentStreamStore((s) => s.setScope);
   const approval = useAgentStreamStore((s) => s.approval);
   const pendingAsk = useAgentStreamStore((s) => s.pendingAsk);
+  const activeSessionId = useAgentStreamStore((s) => s.activeSessionId);
   const setTodos = useAgentStreamStore((s) => s.setTodos);
   const applyEvent = useAgentStreamStore((s) => s.applyEvent);
   const loadHistory = useAgentStreamStore((s) => s.loadHistory);
@@ -110,6 +111,19 @@ export function App() {
       const workspace = useWorkspaceStore.getState();
       const current = previous === undefined ? workspace.session : previous;
       if (current) setPriorSession(current);
+      // #12: leaving a task with a pending ask would otherwise leave the run
+      // blocked forever with no dialog — cancel it by answering.
+      const orphan = useAgentStreamStore.getState().pendingAsk;
+      if (orphan) {
+        void invoke({
+          method: 'agent.answerAsk',
+          params: {
+            askId: orphan.askId,
+            answer: '(cancelled — left this task)',
+          },
+        }).catch(console.error);
+        useAgentStreamStore.setState({ pendingAsk: null });
+      }
       setSession(null);
       resetSessionView();
       if (workspace.project) setScope(workspace.project.id, null);
@@ -151,6 +165,24 @@ export function App() {
     (session: SessionSummary, projectHint?: ProjectSummary) => {
       setPriorSession(null);
       void (async () => {
+        // #12: switching away from a session that owns a pending ask would
+        // orphan the blocked tool call — cancel it before changing scope.
+        const orphan = useAgentStreamStore.getState().pendingAsk;
+        if (orphan && orphan.sessionId !== session.id) {
+          try {
+            await invoke({
+              method: 'agent.answerAsk',
+              params: {
+                askId: orphan.askId,
+                answer: '(cancelled — switched to another task)',
+              },
+            });
+          } catch (error) {
+            console.error('[app] cancelling orphaned ask failed', error);
+          }
+          useAgentStreamStore.setState({ pendingAsk: null });
+        }
+
         const project = await ensureProjectForSession(session.projectId, projectHint);
         if (!project) {
           console.error('[app] could not resolve project for session', session.id);
@@ -459,7 +491,7 @@ export function App() {
               onDismiss={() => setDismissedApproval(approval.requestId)}
             />
           ) : null}
-          {pendingAsk ? (
+          {pendingAsk && pendingAsk.sessionId === activeSessionId ? (
             <AskDialog
               ask={pendingAsk}
               onSubmit={(answer) => void answerAsk(answer)}

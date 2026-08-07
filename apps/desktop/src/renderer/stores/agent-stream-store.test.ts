@@ -539,7 +539,7 @@ describe('#12 ask flow in the stream', () => {
     expect(useAgentStreamStore.getState().pendingAsk).toBeNull();
   });
 
-  it('ignores ask events from another session', () => {
+  it('keeps ask.pending from another session so returning can show the dialog (#12)', () => {
     useAgentStreamStore.getState().applyEvent({
       type: 'ask.pending',
       projectId: 'p1',
@@ -548,6 +548,22 @@ describe('#12 ask flow in the stream', () => {
       askId: 'ask-x',
       question: 'Q',
     });
+    expect(useAgentStreamStore.getState().pendingAsk?.askId).toBe('ask-x');
+    expect(useAgentStreamStore.getState().pendingAsk?.sessionId).toBe('other-session');
+  });
+
+  it('preserves a pending ask for the session when setScope re-enters it', () => {
+    useAgentStreamStore.getState().applyEvent({
+      type: 'ask.pending',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      timestamp: Date.now(),
+      askId: 'ask-keep',
+      question: 'Stay?',
+    });
+    useAgentStreamStore.getState().setScope('p1', 'agent-session');
+    expect(useAgentStreamStore.getState().pendingAsk?.askId).toBe('ask-keep');
+    useAgentStreamStore.getState().setScope('p1', 'other-session');
     expect(useAgentStreamStore.getState().pendingAsk).toBeNull();
   });
 

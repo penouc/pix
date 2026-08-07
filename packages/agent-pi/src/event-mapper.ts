@@ -168,6 +168,10 @@ export function mapPiSessionEvent(
     }
 
     case 'agent_end':
+      // Pi sets willRetry when auto-retry will continue the same turn. Emitting
+      // run.completed here would idle the UI while backoff/retry is still running
+      // (#8), and clearing activeRunId would drop the following auto_retry_* events.
+      if (event['willRetry'] === true) return [];
       return [
         {
           type: 'run.completed',

@@ -1369,6 +1369,9 @@ export class PiAgentRuntime implements AgentRuntime {
     }
 
     if (event.type === 'agent_end' || event.type === 'agent_settled') {
+      // Keep the run id across Pi's built-in auto-retry window so auto_retry_*
+      // and the continued turn still map onto the same desktop run (#8).
+      if (event.type === 'agent_end' && event['willRetry'] === true) return;
       if (record.activeRunId === runId) {
         record.activeRunId = null;
       }
@@ -1421,12 +1424,15 @@ export class PiAgentRuntime implements AgentRuntime {
       'lsp_diagnostics',
       'lsp_references',
     ];
-    const BUILD_TOOLS = ['read', 'bash', 'edit', 'write'];
+    const BUILD_TOOLS = [...DEFAULT_SESSION_TOOLS];
 
     if (mode === 'plan') {
       if (record.sessionMode !== 'plan') {
         try {
-          record.buildToolNames = record.pi.getActiveToolNames?.() ?? BUILD_TOOLS;
+          const active = record.pi.getActiveToolNames?.() ?? BUILD_TOOLS;
+          // Never snapshot an empty set — restoring [] would leave Build Mode
+          // with no tools after Plan (#15).
+          record.buildToolNames = active.length ? active : BUILD_TOOLS;
         } catch {
           record.buildToolNames = BUILD_TOOLS;
         }
