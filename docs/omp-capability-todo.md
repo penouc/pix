@@ -2,6 +2,7 @@
 
 > **能力说明（为什么做、路径、粗估）：** [`omp-capability-borrow.md`](./omp-capability-borrow.md)  
 > **总工程账本：** [`TODOS.md`](./TODOS.md)  
+> **新装 / 首启约定：** [`onboarding.md`](./onboarding.md)  
 > **本文件职责：** 跟踪紧急可选池的完成状态与测试状态；会话结束时更新勾选。  
 > **策略：** 不换 `@oh-my-pi` 内核；接线官方 Pi / 自建 / 移植思路。  
 > **范围：** 原 20 条 + **#21 Auto 模型请求**；按批次推进，不必一次做完。  

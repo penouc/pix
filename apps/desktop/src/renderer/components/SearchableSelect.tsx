@@ -2,6 +2,7 @@ import { Check, ChevronDown, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 
+import { listOptionClass, useListKeyboard } from '@/lib/use-list-keyboard';
 import { useDismiss } from '@/lib/use-dismiss';
 import { cn } from '@/lib/utils';
 
@@ -99,6 +100,32 @@ export function SearchableSelect({
     );
   });
 
+  const selectedIndex = Math.max(
+    0,
+    filteredOptions.findIndex((opt) => opt.value === value),
+  );
+  const { cursor, setCursor, onKeyDown } = useListKeyboard({
+    open,
+    count: filteredOptions.length,
+    initialIndex: selectedIndex >= 0 ? selectedIndex : 0,
+    resetKey: query,
+    enabled: (index) => !filteredOptions[index]?.disabled,
+    onSelect: (index) => {
+      const opt = filteredOptions[index];
+      if (!opt || opt.disabled) return;
+      onChange(opt.value);
+      close();
+    },
+    onClose: close,
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    menuRef.current
+      ?.querySelector('[data-active="true"]')
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [open, cursor]);
+
   return (
     <>
       <button
@@ -136,6 +163,9 @@ export function SearchableSelect({
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(event) => {
+                    onKeyDown(event);
+                  }}
                   placeholder={searchPlaceholder}
                   className="w-full bg-transparent text-sm outline-none placeholder:text-muted"
                 />
@@ -155,22 +185,24 @@ export function SearchableSelect({
                 {filteredOptions.length === 0 ? (
                   <div className="px-3 py-4 text-center text-xs text-muted">{emptyText}</div>
                 ) : (
-                  filteredOptions.map((opt) => {
+                  filteredOptions.map((opt, index) => {
                     const isSelected = opt.value === value;
                     return (
                       <button
                         key={opt.value}
                         type="button"
                         disabled={opt.disabled}
+                        data-active={index === cursor ? 'true' : undefined}
+                        onMouseEnter={() => setCursor(index)}
                         onClick={() => {
                           onChange(opt.value);
                           close();
                         }}
                         className={cn(
                           'flex w-full cursor-pointer items-center justify-between gap-2.5 rounded-xl px-3 py-2 text-left text-sm transition-colors',
-                          isSelected
-                            ? 'bg-accent/10 font-medium text-foreground'
-                            : 'text-foreground/80 hover:bg-foreground/[0.06] hover:text-foreground',
+                          listOptionClass(index === cursor, isSelected),
+                          isSelected && 'font-medium text-foreground',
+                          !isSelected && 'text-foreground/80',
                           opt.disabled && 'cursor-not-allowed opacity-40',
                         )}
                       >

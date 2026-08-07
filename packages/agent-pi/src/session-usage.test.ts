@@ -18,8 +18,30 @@ describe('session-usage', () => {
     ).toEqual({
       inputTokens: 100,
       outputTokens: 50,
+      cacheReadTokens: undefined,
+      cacheWriteTokens: undefined,
       totalTokens: 150,
       costUsd: 0.0123,
+    });
+  });
+
+  it('extractUsage includes cacheRead/cacheWrite in totalTokens', () => {
+    expect(
+      extractUsage({
+        input: 100,
+        output: 20,
+        cacheRead: 8000,
+        cacheWrite: 200,
+        totalTokens: 8320,
+        cost: { total: 0.05 },
+      }),
+    ).toEqual({
+      inputTokens: 100,
+      outputTokens: 20,
+      cacheReadTokens: 8000,
+      cacheWriteTokens: 200,
+      totalTokens: 8320,
+      costUsd: 0.05,
     });
   });
 
@@ -48,6 +70,8 @@ describe('session-usage', () => {
       projectId: 'p1',
       inputTokens: 10,
       outputTokens: 20,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
       costUsd: 0.01,
     });
   });

@@ -284,6 +284,8 @@ export const UsageDaySchema = z.object({
   runs: z.number().int().nonnegative(),
   inputTokens: z.number().nonnegative(),
   outputTokens: z.number().nonnegative(),
+  cacheReadTokens: z.number().nonnegative(),
+  cacheWriteTokens: z.number().nonnegative(),
   costUsd: z.number().nonnegative(),
 });
 export type UsageDay = z.infer<typeof UsageDaySchema>;
@@ -294,6 +296,8 @@ export const UsageByModelSchema = z.object({
   runs: z.number().int().nonnegative(),
   inputTokens: z.number().nonnegative(),
   outputTokens: z.number().nonnegative(),
+  cacheReadTokens: z.number().nonnegative(),
+  cacheWriteTokens: z.number().nonnegative(),
   costUsd: z.number().nonnegative(),
   lastUsedAt: z.number().int().nonnegative(),
 });
@@ -306,6 +310,8 @@ export const UsageSummarySchema = z.object({
     runs: z.number().int().nonnegative(),
     inputTokens: z.number().nonnegative(),
     outputTokens: z.number().nonnegative(),
+    cacheReadTokens: z.number().nonnegative(),
+    cacheWriteTokens: z.number().nonnegative(),
     costUsd: z.number().nonnegative(),
     completed: z.number().int().nonnegative(),
     failed: z.number().int().nonnegative(),

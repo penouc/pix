@@ -13,6 +13,7 @@ import {
   useOfferedModels,
 } from '@/features/models/use-offered-models';
 import { invoke } from '@/lib/ipc';
+import { listOptionClass, useListKeyboard } from '@/lib/use-list-keyboard';
 import { useAnchorAbove, useDismiss } from '@/lib/use-dismiss';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace-store';
@@ -95,6 +96,20 @@ export function ModelPicker() {
   const providers = useMemo(() => groupByProvider(models), [models]);
   const drilled = provider ? models.filter((model) => model.providerId === provider) : [];
 
+  type NavItem =
+    | { kind: 'auto' }
+    | { kind: 'model'; model: ModelInfo }
+    | { kind: 'provider'; id: string };
+
+  const navItems = useMemo((): NavItem[] => {
+    if (needle) return searchHits.map((model) => ({ kind: 'model' as const, model }));
+    if (provider) return drilled.map((model) => ({ kind: 'model' as const, model }));
+    const items: NavItem[] = [{ kind: 'auto' }];
+    for (const model of favorited) items.push({ kind: 'model', model });
+    for (const [id] of providers) items.push({ kind: 'provider', id });
+    return items;
+  }, [needle, searchHits, provider, drilled, favorited, providers]);
+
   function choose(model: ModelInfo) {
     const key = modelKey(model);
     setSelectedModel(key);
@@ -133,6 +148,27 @@ export function ModelPicker() {
     }).catch(console.error);
     void queryClient.invalidateQueries({ queryKey: ['agent.getThinkingLevel', session.id] });
   }
+
+  const { cursor, setCursor, onKeyDown: onListKeyDown } = useListKeyboard({
+    open,
+    count: navItems.length,
+    resetKey: `${needle}|${provider ?? ''}|${navItems.length}`,
+    onSelect: (index) => {
+      const item = navItems[index];
+      if (!item) return;
+      if (item.kind === 'auto') chooseAuto();
+      else if (item.kind === 'model') choose(item.model);
+      else setProvider(item.id);
+    },
+    onClose: close,
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    menuRef.current
+      ?.querySelector('[data-active="true"]')
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [open, cursor]);
 
   const label = autoActive
     ? 'Auto'
@@ -204,7 +240,9 @@ export function ModelPicker() {
                   onKeyDown={(event) => {
                     if (event.key === 'Backspace' && !query && provider) {
                       setProvider(null);
+                      return;
                     }
+                    onListKeyDown(event);
                   }}
                 />
               </div>
@@ -216,15 +254,17 @@ export function ModelPicker() {
                       <GroupLabel>
                         {searchHits.length} match{searchHits.length === 1 ? '' : 'es'}
                       </GroupLabel>
-                      {searchHits.map((model) => (
+                      {searchHits.map((model, index) => (
                         <Row
                           key={modelKey(model)}
                           model={model}
                           showProvider
+                          active={index === cursor}
                           selected={modelKey(model) === selectedModel}
                           starred={favorites.has(modelKey(model))}
                           onChoose={() => choose(model)}
                           onStar={() => toggleFavorite(modelKey(model))}
+                          onHover={() => setCursor(index)}
                         />
                       ))}
                     </>
@@ -234,14 +274,16 @@ export function ModelPicker() {
                 ) : provider ? (
                   <>
                     <GroupLabel>{provider}</GroupLabel>
-                    {drilled.map((model) => (
+                    {drilled.map((model, index) => (
                       <Row
                         key={modelKey(model)}
                         model={model}
+                        active={index === cursor}
                         selected={modelKey(model) === selectedModel}
                         starred={favorites.has(modelKey(model))}
                         onChoose={() => choose(model)}
                         onStar={() => toggleFavorite(modelKey(model))}
+                        onHover={() => setCursor(index)}
                       />
                     ))}
                   </>
@@ -250,10 +292,12 @@ export function ModelPicker() {
                     {/* Auto (#21) is a first-class choice, pinned above favourites. */}
                     <button
                       type="button"
+                      data-active={cursor === 0 ? 'true' : undefined}
+                      onMouseEnter={() => setCursor(0)}
                       onClick={chooseAuto}
                       className={cn(
-                        'flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3 py-[7px] text-left hover:bg-foreground/[0.06]',
-                        autoActive && 'bg-accent-soft',
+                        'flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3 py-[7px] text-left',
+                        listOptionClass(cursor === 0, autoActive),
                       )}
                     >
                       <span className="grid h-5 w-5 flex-none place-items-center rounded-full bg-accent/15">
@@ -273,32 +317,45 @@ export function ModelPicker() {
                     {favorited.length ? (
                       <>
                         <GroupLabel>Favourites</GroupLabel>
-                        {favorited.map((model) => (
+                        {favorited.map((model, index) => {
+                          const navIndex = 1 + index;
+                          return (
                           <Row
                             key={modelKey(model)}
                             model={model}
                             showProvider
+                            active={navIndex === cursor}
                             selected={modelKey(model) === selectedModel}
                             starred
                             onChoose={() => choose(model)}
                             onStar={() => toggleFavorite(modelKey(model))}
+                            onHover={() => setCursor(navIndex)}
                           />
-                        ))}
+                          );
+                        })}
                       </>
                     ) : null}
                     <GroupLabel>Providers</GroupLabel>
-                    {providers.map(([id, group]) => (
+                    {providers.map(([id, group], index) => {
+                      const navIndex = 1 + favorited.length + index;
+                      return (
                       <button
                         key={id}
                         type="button"
+                        data-active={navIndex === cursor ? 'true' : undefined}
+                        onMouseEnter={() => setCursor(navIndex)}
                         onClick={() => setProvider(id)}
-                        className="flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3 py-[7px] text-left hover:bg-foreground/[0.06]"
+                        className={cn(
+                          'flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3 py-[7px] text-left',
+                          listOptionClass(navIndex === cursor),
+                        )}
                       >
                         <span className="min-w-0 flex-1 truncate text-[12.5px]">{id}</span>
                         <span className="flex-none text-[11px] text-muted">{group.length}</span>
                         <ChevronRight className="h-3.5 w-3.5 flex-none text-muted" />
                       </button>
-                    ))}
+                      );
+                    })}
                     {!providers.length ? (
                       <Empty>
                         {isLoading
@@ -327,22 +384,28 @@ function Row({
   model,
   selected,
   starred,
+  active,
   showProvider,
   onChoose,
   onStar,
+  onHover,
 }: {
   model: ModelInfo;
   selected: boolean;
   starred: boolean;
+  active?: boolean;
   showProvider?: boolean;
   onChoose: () => void;
   onStar: () => void;
+  onHover?: () => void;
 }) {
   return (
     <div
+      data-active={active ? 'true' : undefined}
+      onMouseEnter={onHover}
       className={cn(
         'flex items-center gap-1.5 px-3 py-[6px]',
-        selected ? 'bg-accent-soft' : 'hover:bg-foreground/[0.06]',
+        listOptionClass(Boolean(active), selected),
       )}
     >
       <button

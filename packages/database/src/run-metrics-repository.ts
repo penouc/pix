@@ -7,6 +7,8 @@ export interface UsageDay {
   runs: number;
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
   costUsd: number;
 }
 
@@ -16,6 +18,8 @@ export interface UsageByModel {
   runs: number;
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
   costUsd: number;
   lastUsedAt: number;
 }
@@ -27,6 +31,8 @@ export interface UsageSummary {
     runs: number;
     inputTokens: number;
     outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
     costUsd: number;
     completed: number;
     failed: number;
@@ -45,6 +51,14 @@ export interface UsageProject {
   runs: number;
 }
 
+export type RunMetricsRecord = RunMetrics & {
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  costUsd?: number;
+};
+
 /**
  * Persisted per-run metrics (plan §14 / §26.2 v6-equivalent).
  *
@@ -53,9 +67,7 @@ export interface UsageProject {
  * usage history possible at all.
  */
 export interface RunMetricsRepository {
-  record(
-    metrics: RunMetrics & { inputTokens?: number; outputTokens?: number; costUsd?: number },
-  ): Promise<void>;
+  record(metrics: RunMetricsRecord): Promise<void>;
   summary(input: { from: number; to: number; projectId?: string }): UsageSummary;
   /** Projects that recorded runs in the window, most recent activity first. */
   projects(input: { from: number; to: number }): UsageProject[];

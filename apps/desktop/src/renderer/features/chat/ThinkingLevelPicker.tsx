@@ -1,5 +1,5 @@
 import { Brain, Check, ChevronDown } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -8,6 +8,7 @@ import type { ThinkingLevel } from '@pi-desktop/protocol';
 import { modelKey } from '@/features/models/model-key';
 import { useOfferedModels } from '@/features/models/use-offered-models';
 import { invoke } from '@/lib/ipc';
+import { listOptionClass, useListKeyboard } from '@/lib/use-list-keyboard';
 import { useAnchorAbove, useDismiss } from '@/lib/use-dismiss';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace-store';
@@ -76,10 +77,6 @@ export function ThinkingLevelPicker({ disabled }: { disabled?: boolean }) {
   useDismiss(open, [rootRef, menuRef], close);
   const anchor = useAnchorAbove(open, rootRef, 'left');
 
-  if (!supportsThinking || !options.length) return null;
-
-  const active = LABELS[level] ?? LABELS.medium;
-
   function choose(next: ThinkingLevel) {
     setOpen(false);
     if (session) {
@@ -88,6 +85,31 @@ export function ThinkingLevelPicker({ disabled }: { disabled?: boolean }) {
       setSelectedThinkingLevel(next);
     }
   }
+
+  const activeIndex = Math.max(0, options.indexOf(level));
+  const { cursor, setCursor } = useListKeyboard({
+    open,
+    count: options.length,
+    initialIndex: activeIndex,
+    resetKey: options.join(','),
+    window: true,
+    onSelect: (index) => {
+      const next = options[index];
+      if (next) choose(next);
+    },
+    onClose: close,
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    menuRef.current
+      ?.querySelector('[data-active="true"]')
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [open, cursor]);
+
+  if (!supportsThinking || !options.length) return null;
+
+  const active = LABELS[level] ?? LABELS.medium;
 
   return (
     <div ref={rootRef} className="relative inline-flex flex-none">
@@ -113,18 +135,20 @@ export function ThinkingLevelPicker({ disabled }: { disabled?: boolean }) {
               style={anchor}
               className="z-50 w-[268px] overflow-y-auto rounded-[16px] border border-border bg-background py-1 shadow-[var(--shadow-lg)]"
             >
-              {options.map((entry) => {
+              {options.map((entry, index) => {
                 const meta = LABELS[entry];
                 return (
                   <button
                     key={entry}
                     type="button"
                     role="option"
+                    data-active={index === cursor ? 'true' : undefined}
                     aria-selected={entry === level}
+                    onMouseEnter={() => setCursor(index)}
                     onClick={() => choose(entry)}
                     className={cn(
                       'flex w-full cursor-pointer items-start gap-2.5 border-0 bg-transparent px-3 py-2 text-left',
-                      entry === level ? 'bg-accent-soft' : 'hover:bg-foreground/[0.06]',
+                      listOptionClass(index === cursor, entry === level),
                     )}
                   >
                     <span className="min-w-0 flex-1">

@@ -70,6 +70,7 @@ import { AUTO_MODEL_KEY } from '@/features/models/model-key';
 import { useCreateTask } from '@/features/sessions/use-create-task';
 import { invoke, IpcError } from '@/lib/ipc';
 import { useAnchorAbove, useDismiss } from '@/lib/use-dismiss';
+import { listOptionClass, useListKeyboard } from '@/lib/use-list-keyboard';
 import {
   dotStyle,
   formatDuration,
@@ -718,6 +719,54 @@ export function ChatPanel({
     command.run();
     composerRef.current?.focus();
   }
+
+  const visibleSkills = skillMatches.slice(0, 6);
+  const visibleSlash = slashMatches.slice(0, 6);
+  const suggestionKind = fileMenuOpen
+    ? 'file'
+    : skillMenuOpen
+      ? 'skill'
+      : slashMenuOpen
+        ? 'slash'
+        : null;
+  const suggestionCount =
+    suggestionKind === 'file'
+      ? fileMatches.length
+      : suggestionKind === 'skill'
+        ? visibleSkills.length
+        : suggestionKind === 'slash'
+          ? visibleSlash.length
+          : 0;
+  const {
+    cursor: suggestionCursor,
+    setCursor: setSuggestionCursor,
+    onKeyDown: onSuggestionKeyDown,
+  } = useListKeyboard({
+    open: suggestionKind !== null && suggestionCount > 0,
+    count: suggestionCount,
+    resetKey: `${suggestionKind}:${draft}`,
+    enabled:
+      suggestionKind === 'slash'
+        ? (index) => !visibleSlash[index]?.disabled
+        : undefined,
+    onSelect: (index) => {
+      if (suggestionKind === 'file') {
+        const hit = fileMatches[index];
+        if (hit) applyFile(hit.path);
+        return;
+      }
+      if (suggestionKind === 'skill') {
+        const skill = visibleSkills[index];
+        if (skill) applySkill(skill);
+        return;
+      }
+      if (suggestionKind === 'slash') {
+        const command = visibleSlash[index];
+        if (command) runSlash(command);
+      }
+    },
+  });
+
   /**
    * Session Fork (#10): rewind to a historical user message from the toolbar
    * above the composer. The picker lists fork points from the Pi session tree;
@@ -1305,12 +1354,17 @@ export function ChatPanel({
                 {fileHits.isLoading ? (
                   <p className="px-3.5 py-2 text-[12px] text-muted">Searching files…</p>
                 ) : fileMatches.length ? (
-                  fileMatches.map((hit) => (
+                  fileMatches.map((hit, index) => (
                     <button
                       key={hit.path}
                       type="button"
+                      data-active={index === suggestionCursor ? 'true' : undefined}
+                      onMouseEnter={() => setSuggestionCursor(index)}
                       onClick={() => applyFile(hit.path)}
-                      className="flex w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-3.5 py-2 text-left hover:bg-foreground/[0.06]"
+                      className={cn(
+                        'flex w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-3.5 py-2 text-left',
+                        listOptionClass(index === suggestionCursor),
+                      )}
                     >
                       <FileText className="h-3.5 w-3.5 flex-none text-muted" />
                       <span className="min-w-0 flex-1 truncate font-mono text-[12px]">
@@ -1329,12 +1383,17 @@ export function ChatPanel({
             ) : null}
             {skillMenuOpen ? (
               <div className="mb-1.5 overflow-hidden rounded-[18px] border border-border bg-background shadow-[var(--shadow-md)]">
-                {skillMatches.slice(0, 6).map((skill) => (
+                {visibleSkills.map((skill, index) => (
                   <button
                     key={skill.id}
                     type="button"
+                    data-active={index === suggestionCursor ? 'true' : undefined}
+                    onMouseEnter={() => setSuggestionCursor(index)}
                     onClick={() => applySkill(skill)}
-                    className="flex w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-3.5 py-2 text-left hover:bg-foreground/[0.06]"
+                    className={cn(
+                      'flex w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-3.5 py-2 text-left',
+                      listOptionClass(index === suggestionCursor),
+                    )}
                   >
                     <span className="rounded-full bg-accent-100 px-2 py-0.5 font-mono text-[11.5px] text-accent-800">
                       {skill.command}
@@ -1348,18 +1407,21 @@ export function ChatPanel({
             {/* `/` commands (#6): compact, plan/build, auto model, clear queue, new task. */}
             {slashMenuOpen ? (
               <div className="mb-1.5 overflow-hidden rounded-[18px] border border-border bg-background shadow-[var(--shadow-md)]">
-                {slashMatches.slice(0, 6).map((command) => (
+                {visibleSlash.map((command, index) => (
                   <button
                     key={command.keyword}
                     type="button"
                     disabled={command.disabled}
+                    data-active={index === suggestionCursor ? 'true' : undefined}
+                    onMouseEnter={() => setSuggestionCursor(index)}
                     onClick={() => runSlash(command)}
                     title={command.disabled ? 'Not available right now' : undefined}
                     className={cn(
                       'flex w-full items-center gap-2.5 border-0 bg-transparent px-3.5 py-2 text-left',
                       command.disabled
                         ? 'cursor-not-allowed opacity-45'
-                        : 'cursor-pointer hover:bg-foreground/[0.06]',
+                        : 'cursor-pointer',
+                      !command.disabled && listOptionClass(index === suggestionCursor),
                     )}
                   >
                     <span className="rounded-full bg-accent-100 px-2 py-0.5 font-mono text-[11.5px] text-accent-800">
@@ -1653,38 +1715,25 @@ export function ChatPanel({
                   composingRef.current = false;
                 }}
                 onKeyDown={(event) => {
-                  if (event.key !== 'Enter') return;
                   // While the IME is open (拼音选字等), Enter confirms the candidate —
-                  // not sends. Without this, Chinese input accidentally submits mid-word.
+                  // not sends / not picks a suggestion.
                   if (
-                    event.nativeEvent.isComposing ||
-                    composingRef.current ||
-                    event.keyCode === 229
+                    event.key === 'Enter' &&
+                    (event.nativeEvent.isComposing ||
+                      composingRef.current ||
+                      event.keyCode === 229)
                   ) {
                     return;
                   }
+                  if (onSuggestionKeyDown(event)) return;
+                  if (event.key !== 'Enter') return;
                   // Shift+Enter is the newline. Enter sends, which is what a chat
                   // composer is expected to do; ⌘/Ctrl+Enter keeps working for the
                   // muscle memory it was built with.
                   if (event.shiftKey) return;
                   event.preventDefault();
-                  // With a suggestion list open, Enter takes the first suggestion
-                  // rather than sending a half-typed `$re`, `@src/` or `/pla`.
-                  if (fileMenuOpen) {
-                    if (fileMatches.length) {
-                      applyFile(fileMatches[0]!.path);
-                    }
-                    return;
-                  }
-                  if (skillMenuOpen && skillMatches.length) {
-                    applySkill(skillMatches[0]!);
-                    return;
-                  }
-                  if (slashMenuOpen) {
-                    const first = slashMatches.find((command) => !command.disabled);
-                    if (first) runSlash(first);
-                    return;
-                  }
+                  // Suggestion menu open but empty (e.g. still searching) — don't send.
+                  if (fileMenuOpen || skillMenuOpen || slashMenuOpen) return;
                   void send();
                 }}
               />

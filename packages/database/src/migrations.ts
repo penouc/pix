@@ -294,4 +294,12 @@ CREATE TABLE IF NOT EXISTS session_todos (
 );
 `,
   },
+  {
+    version: 15,
+    name: 'run_metrics_cache_tokens',
+    sql: `
+ALTER TABLE run_metrics ADD COLUMN cache_read_tokens INTEGER;
+ALTER TABLE run_metrics ADD COLUMN cache_write_tokens INTEGER;
+`,
+  },
 ];

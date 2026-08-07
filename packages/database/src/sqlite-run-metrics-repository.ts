@@ -1,6 +1,5 @@
-import type { RunMetrics } from '@pi-desktop/protocol';
-
 import type {
+  RunMetricsRecord,
   RunMetricsRepository,
   UsageByModel,
   UsageDay,
@@ -13,6 +12,8 @@ interface DayRow {
   runs: number;
   input_tokens: number | null;
   output_tokens: number | null;
+  cache_read_tokens: number | null;
+  cache_write_tokens: number | null;
   cost_usd: number | null;
 }
 
@@ -22,6 +23,8 @@ interface ModelRow {
   runs: number;
   input_tokens: number | null;
   output_tokens: number | null;
+  cache_read_tokens: number | null;
+  cache_write_tokens: number | null;
   cost_usd: number | null;
   last_used_at: number;
 }
@@ -30,6 +33,8 @@ interface TotalsRow {
   runs: number;
   input_tokens: number | null;
   output_tokens: number | null;
+  cache_read_tokens: number | null;
+  cache_write_tokens: number | null;
   cost_usd: number | null;
   completed: number;
   failed: number;
@@ -39,17 +44,16 @@ interface TotalsRow {
 export class SqliteRunMetricsRepository implements RunMetricsRepository {
   constructor(private readonly db: SqliteDatabase) {}
 
-  async record(
-    metrics: RunMetrics & { inputTokens?: number; outputTokens?: number; costUsd?: number },
-  ): Promise<void> {
+  async record(metrics: RunMetricsRecord): Promise<void> {
     this.db
       .prepare(
         `INSERT INTO run_metrics (
            run_id, session_id, project_id, provider_id, model_id,
            started_at, completed_at, first_token_at,
            tool_call_count, file_change_count,
-           input_tokens, output_tokens, cost_usd, outcome
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+           cost_usd, outcome
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(run_id) DO UPDATE SET
            completed_at = excluded.completed_at,
            first_token_at = excluded.first_token_at,
@@ -57,6 +61,8 @@ export class SqliteRunMetricsRepository implements RunMetricsRepository {
            file_change_count = excluded.file_change_count,
            input_tokens = excluded.input_tokens,
            output_tokens = excluded.output_tokens,
+           cache_read_tokens = excluded.cache_read_tokens,
+           cache_write_tokens = excluded.cache_write_tokens,
            cost_usd = excluded.cost_usd,
            outcome = excluded.outcome`,
       )
@@ -73,6 +79,8 @@ export class SqliteRunMetricsRepository implements RunMetricsRepository {
         metrics.fileChangeCount,
         metrics.inputTokens ?? null,
         metrics.outputTokens ?? null,
+        metrics.cacheReadTokens ?? null,
+        metrics.cacheWriteTokens ?? null,
         metrics.costUsd ?? null,
         metrics.outcome ?? null,
       );
@@ -93,6 +101,8 @@ export class SqliteRunMetricsRepository implements RunMetricsRepository {
                   COUNT(*) AS runs,
                   SUM(input_tokens) AS input_tokens,
                   SUM(output_tokens) AS output_tokens,
+                  SUM(cache_read_tokens) AS cache_read_tokens,
+                  SUM(cache_write_tokens) AS cache_write_tokens,
                   SUM(cost_usd) AS cost_usd
              FROM run_metrics
             WHERE started_at BETWEEN ? AND ? ${scope}
@@ -105,6 +115,8 @@ export class SqliteRunMetricsRepository implements RunMetricsRepository {
       runs: row.runs,
       inputTokens: row.input_tokens ?? 0,
       outputTokens: row.output_tokens ?? 0,
+      cacheReadTokens: row.cache_read_tokens ?? 0,
+      cacheWriteTokens: row.cache_write_tokens ?? 0,
       costUsd: row.cost_usd ?? 0,
     }));
 
@@ -115,6 +127,8 @@ export class SqliteRunMetricsRepository implements RunMetricsRepository {
                   COUNT(*) AS runs,
                   SUM(input_tokens) AS input_tokens,
                   SUM(output_tokens) AS output_tokens,
+                  SUM(cache_read_tokens) AS cache_read_tokens,
+                  SUM(cache_write_tokens) AS cache_write_tokens,
                   SUM(cost_usd) AS cost_usd,
                   MAX(started_at) AS last_used_at
              FROM run_metrics
@@ -129,6 +143,8 @@ export class SqliteRunMetricsRepository implements RunMetricsRepository {
       runs: row.runs,
       inputTokens: row.input_tokens ?? 0,
       outputTokens: row.output_tokens ?? 0,
+      cacheReadTokens: row.cache_read_tokens ?? 0,
+      cacheWriteTokens: row.cache_write_tokens ?? 0,
       costUsd: row.cost_usd ?? 0,
       lastUsedAt: row.last_used_at,
     }));
@@ -138,6 +154,8 @@ export class SqliteRunMetricsRepository implements RunMetricsRepository {
         `SELECT COUNT(*) AS runs,
                 SUM(input_tokens) AS input_tokens,
                 SUM(output_tokens) AS output_tokens,
+                SUM(cache_read_tokens) AS cache_read_tokens,
+                SUM(cache_write_tokens) AS cache_write_tokens,
                 SUM(cost_usd) AS cost_usd,
                 SUM(CASE WHEN outcome = 'completed' THEN 1 ELSE 0 END) AS completed,
                 SUM(CASE WHEN outcome = 'failed' THEN 1 ELSE 0 END) AS failed,
@@ -167,6 +185,8 @@ export class SqliteRunMetricsRepository implements RunMetricsRepository {
         runs: totals?.runs ?? 0,
         inputTokens: totals?.input_tokens ?? 0,
         outputTokens: totals?.output_tokens ?? 0,
+        cacheReadTokens: totals?.cache_read_tokens ?? 0,
+        cacheWriteTokens: totals?.cache_write_tokens ?? 0,
         costUsd: totals?.cost_usd ?? 0,
         completed: totals?.completed ?? 0,
         failed: totals?.failed ?? 0,

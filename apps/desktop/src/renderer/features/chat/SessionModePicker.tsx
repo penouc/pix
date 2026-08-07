@@ -1,9 +1,10 @@
 import { Check, ChevronDown, Map, Wrench } from 'lucide-react';
-import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 import type { SessionMode } from '@pi-desktop/protocol';
 
+import { listOptionClass, useListKeyboard } from '@/lib/use-list-keyboard';
 import { useAnchorAbove, useDismiss } from '@/lib/use-dismiss';
 import { cn } from '@/lib/utils';
 
@@ -50,6 +51,31 @@ export function SessionModePicker({
   useDismiss(open, [rootRef, menuRef], close);
   const anchor = useAnchorAbove(open, rootRef, 'left');
 
+  const activeIndex = Math.max(
+    0,
+    MODES.findIndex((entry) => entry.value === mode),
+  );
+  const { cursor, setCursor } = useListKeyboard({
+    open,
+    count: MODES.length,
+    initialIndex: activeIndex,
+    window: true,
+    onSelect: (index) => {
+      const entry = MODES[index];
+      if (!entry || disabled) return;
+      onChange(entry.value);
+      setOpen(false);
+    },
+    onClose: close,
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    menuRef.current
+      ?.querySelector('[data-active="true"]')
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [open, cursor]);
+
   const active = MODES.find((entry) => entry.value === mode) ?? MODES[1]!;
 
   return (
@@ -76,20 +102,22 @@ export function SessionModePicker({
               style={anchor}
               className="z-50 w-[268px] overflow-y-auto rounded-[16px] border border-border bg-background py-1 shadow-[var(--shadow-lg)]"
             >
-              {MODES.map((entry) => (
+              {MODES.map((entry, index) => (
                 <button
                   key={entry.value}
                   type="button"
                   role="option"
+                  data-active={index === cursor ? 'true' : undefined}
                   aria-selected={entry.value === mode}
                   disabled={disabled}
+                  onMouseEnter={() => setCursor(index)}
                   onClick={() => {
                     onChange(entry.value);
                     setOpen(false);
                   }}
                   className={cn(
                     'flex w-full cursor-pointer items-start gap-2.5 border-0 bg-transparent px-3 py-2 text-left',
-                    entry.value === mode ? 'bg-accent-soft' : 'hover:bg-foreground/[0.06]',
+                    listOptionClass(index === cursor, entry.value === mode),
                     disabled && 'cursor-not-allowed opacity-45',
                   )}
                 >

@@ -39,6 +39,8 @@ describe('SqliteRunMetricsRepository', () => {
       fileChangeCount: 1,
       inputTokens: 500,
       outputTokens: 120,
+      cacheReadTokens: 2000,
+      cacheWriteTokens: 50,
       costUsd,
       outcome: 'completed',
     });
@@ -50,9 +52,20 @@ describe('SqliteRunMetricsRepository', () => {
     await record('r2', 'p1', NOW);
 
     const summary = repo.summary({ from: NOW - 3 * 24 * 60 * 60 * 1000, to: NOW });
-    expect(summary.totals).toMatchObject({ runs: 2, inputTokens: 1000, outputTokens: 240 });
+    expect(summary.totals).toMatchObject({
+      runs: 2,
+      inputTokens: 1000,
+      outputTokens: 240,
+      cacheReadTokens: 4000,
+      cacheWriteTokens: 100,
+    });
     expect(summary.byModel).toHaveLength(1);
-    expect(summary.byModel[0]).toMatchObject({ providerId: 'openai', modelId: 'gpt-4o-mini', runs: 2 });
+    expect(summary.byModel[0]).toMatchObject({
+      providerId: 'openai',
+      modelId: 'gpt-4o-mini',
+      runs: 2,
+      cacheReadTokens: 4000,
+    });
     expect(summary.days.length).toBeGreaterThanOrEqual(2);
   });
 

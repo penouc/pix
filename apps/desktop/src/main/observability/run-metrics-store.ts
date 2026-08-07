@@ -9,6 +9,8 @@ import type { RunMetrics } from '@pi-desktop/protocol';
 export type RunMetricsWithUsage = RunMetrics & {
   inputTokens?: number;
   outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   costUsd?: number;
 };
 
@@ -63,6 +65,10 @@ export class RunMetricsStore {
           if (event.inputTokens != null) m.inputTokens = (m.inputTokens ?? 0) + event.inputTokens;
           if (event.outputTokens != null)
             m.outputTokens = (m.outputTokens ?? 0) + event.outputTokens;
+          if (event.cacheReadTokens != null)
+            m.cacheReadTokens = (m.cacheReadTokens ?? 0) + event.cacheReadTokens;
+          if (event.cacheWriteTokens != null)
+            m.cacheWriteTokens = (m.cacheWriteTokens ?? 0) + event.cacheWriteTokens;
           if (event.costUsd != null) m.costUsd = (m.costUsd ?? 0) + event.costUsd;
         }
         break;

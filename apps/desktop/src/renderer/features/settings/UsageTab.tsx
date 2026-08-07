@@ -152,12 +152,25 @@ export function UsageTab() {
           label="Tokens"
           value={
             totals
-              ? formatTokenMillions(totals.inputTokens + totals.outputTokens)
+              ? formatTokenMillions(
+                  totals.inputTokens +
+                    totals.outputTokens +
+                    totals.cacheReadTokens +
+                    totals.cacheWriteTokens,
+                )
               : NOT_REPORTED
           }
         >
           {totals
-            ? `${formatTokenMillions(totals.inputTokens)} in · ${formatTokenMillions(totals.outputTokens)} out`
+            ? [
+                `${formatTokenMillions(totals.inputTokens)} in`,
+                `${formatTokenMillions(totals.outputTokens)} out`,
+                totals.cacheReadTokens + totals.cacheWriteTokens > 0
+                  ? `${formatTokenMillions(totals.cacheReadTokens + totals.cacheWriteTokens)} cache`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')
             : '—'}
         </Stat>
         <Stat label="Finished" value={successRate == null ? NOT_REPORTED : `${successRate}%`}>
@@ -289,8 +302,10 @@ export function UsageTab() {
       )}
 
       <p className="mt-4 text-[11.5px] leading-relaxed text-muted">
-        Token and cost figures are whatever the provider reported for each run — some report
-        neither, and those runs count toward Runs but not toward Spend. Nothing is estimated.
+        Token totals include input, output, and prompt-cache read/write when the provider reports
+        them (Pi&apos;s <code className="text-[11px]">totalTokens</code>). Spend uses the
+        provider&apos;s reported cost. Some providers report neither — those runs still count
+        toward Runs but not toward Spend or Tokens. Nothing is estimated.
       </p>
     </>
   );
@@ -298,6 +313,8 @@ export function UsageTab() {
 
 function ModelRow({ model, peak }: { model: UsageByModel; peak: number }) {
   const share = peak > 0 ? Math.max(0.02, model.costUsd / peak) : 0;
+  const tokens =
+    model.inputTokens + model.outputTokens + model.cacheReadTokens + model.cacheWriteTokens;
   return (
     <tr className="border-b border-border last:border-b-0 hover:bg-foreground/[0.03]">
       <td className="px-3.5 py-2.5">
@@ -305,9 +322,7 @@ function ModelRow({ model, peak }: { model: UsageByModel; peak: number }) {
         <div className="text-[11px] text-muted">{model.providerId}</div>
       </td>
       <td className="px-3.5 py-2.5 text-right font-mono">{model.runs.toLocaleString()}</td>
-      <td className="px-3.5 py-2.5 text-right font-mono">
-        {formatTokenMillions(model.inputTokens + model.outputTokens)}
-      </td>
+      <td className="px-3.5 py-2.5 text-right font-mono">{formatTokenMillions(tokens)}</td>
       <td className="px-3.5 py-2.5">
         <div className="flex items-center gap-2">
           {/* One hue, so this stays a magnitude meter rather than an identity colour. */}

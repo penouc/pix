@@ -534,6 +534,13 @@ Each item needs its own ADR + evaluation + security review.
 - Pierre Diffs: https://diffs.com/  
 - Pierre CodeView: https://pierre.computer/writing/on-rendering-diffs  
 
+### 9.3 Internal docs
+
+| Doc | Role |
+|-----|------|
+| [`omp-capability-todo.md`](./omp-capability-todo.md) | OMP 紧急能力完成状态 |
+| [`omp-capability-borrow.md`](./omp-capability-borrow.md) | OMP 对照与借鉴说明 |
+| [`onboarding.md`](./onboarding.md) | 新装 / 首启 checklist 与 onboarding 约定（尚未实现） |
 ---
 
 ## 10. Changelog
@@ -565,6 +572,7 @@ Each item needs its own ADR + evaluation + security review.
 | 2026-07-25 | M8-2: `DesktopLogger` (5MB rotating NDJSON + redactSecrets + console replacement); `RunMetricsStore` observes run events and records the lifecycle; `RunMetrics` schema added to protocol; `diagnostics.export` IPC returns the log path and recent metrics |
 | 2026-07-25 | M8-3: added 5 fixtures (needs-clarification, workspace-outside-read, dangerous-command-risk, cancel-long-task, precise-revert); `verify:fixtures` covers all 11 fixtures; clarification's conservative change and precise-revert's post-hoc verification are both covered; Playwright E2E covers `app.getInfo`, project, trust, session, send, and cancel |
 | 2026-07-25 | M8-4: electron-builder.yml adds a DMG target (arm64); `scripts/verify-packaged.mjs` validates the bundle/asar/native loadability/DMG artifact; `pnpm verify:packaged` script; uninstall-path documentation |
+| 2026-08-07 | Added [`onboarding.md`](./onboarding.md): first-run checklist + layered onboarding proposal; linked from §9.3 |
 
 ---
 

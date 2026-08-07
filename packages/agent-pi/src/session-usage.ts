@@ -9,6 +9,8 @@ export interface SessionLogUsageEntry {
   completedAt: number;
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
   costUsd: number;
 }
 
@@ -34,6 +36,8 @@ function pickNumber(record: Record<string, unknown>, keys: string[]): number | u
 export function extractUsage(usage: unknown): {
   inputTokens?: number;
   outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   totalTokens?: number;
   costUsd?: number;
 } | null {
@@ -42,7 +46,21 @@ export function extractUsage(usage: unknown): {
 
   const inputTokens = pickNumber(record, ['input', 'inputTokens', 'input_tokens']);
   const outputTokens = pickNumber(record, ['output', 'outputTokens', 'output_tokens']);
-  const totalTokens = pickNumber(record, ['totalTokens', 'total_tokens', 'total']);
+  // Pi Usage: totalTokens = input + output + cacheRead + cacheWrite. OpenAI-compat
+  // providers often subtract cache from `input`, so cache must be counted separately.
+  const cacheReadTokens = pickNumber(record, [
+    'cacheRead',
+    'cacheReadTokens',
+    'cache_read',
+    'cache_read_tokens',
+  ]);
+  const cacheWriteTokens = pickNumber(record, [
+    'cacheWrite',
+    'cacheWriteTokens',
+    'cache_write',
+    'cache_write_tokens',
+  ]);
+  const totalTokens = pickNumber(record, ['totalTokens', 'total_tokens']);
 
   let costUsd: number | undefined;
   const cost = record['cost'];
@@ -55,18 +73,31 @@ export function extractUsage(usage: unknown): {
   if (
     inputTokens == null &&
     outputTokens == null &&
+    cacheReadTokens == null &&
+    cacheWriteTokens == null &&
     totalTokens == null &&
     costUsd == null
   ) {
     return null;
   }
 
+  const summedParts =
+    (inputTokens ?? 0) +
+    (outputTokens ?? 0) +
+    (cacheReadTokens ?? 0) +
+    (cacheWriteTokens ?? 0);
+  const hasParts =
+    inputTokens != null ||
+    outputTokens != null ||
+    cacheReadTokens != null ||
+    cacheWriteTokens != null;
+
   return {
     inputTokens,
     outputTokens,
-    totalTokens:
-      totalTokens ??
-      (inputTokens != null && outputTokens != null ? inputTokens + outputTokens : undefined),
+    cacheReadTokens,
+    cacheWriteTokens,
+    totalTokens: totalTokens ?? (hasParts ? summedParts : undefined),
     costUsd,
   };
 }
@@ -116,7 +147,14 @@ export function parseSessionLogLines(
 
     const inputTokens = usage.inputTokens ?? 0;
     const outputTokens = usage.outputTokens ?? 0;
-    if (inputTokens + outputTokens <= 0 && (usage.costUsd ?? 0) <= 0) continue;
+    const cacheReadTokens = usage.cacheReadTokens ?? 0;
+    const cacheWriteTokens = usage.cacheWriteTokens ?? 0;
+    if (
+      inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens <= 0 &&
+      (usage.costUsd ?? 0) <= 0
+    ) {
+      continue;
+    }
 
     const lineId = typeof row['id'] === 'string' ? row['id'] : null;
     if (!lineId) continue;
@@ -138,6 +176,8 @@ export function parseSessionLogLines(
       completedAt: when,
       inputTokens,
       outputTokens,
+      cacheReadTokens,
+      cacheWriteTokens,
       costUsd: usage.costUsd ?? 0,
     });
   }

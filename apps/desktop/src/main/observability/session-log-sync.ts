@@ -140,8 +140,9 @@ function recordSessionLogEntry(db: DesktopDatabase, entry: SessionLogUsageEntry)
       `INSERT OR IGNORE INTO run_metrics (
          run_id, session_id, project_id, provider_id, model_id,
          started_at, completed_at, tool_call_count, file_change_count,
-         input_tokens, output_tokens, cost_usd, outcome
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, 'completed')`,
+         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+         cost_usd, outcome
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, 'completed')`,
     )
     .run(
       entry.runId,
@@ -153,6 +154,8 @@ function recordSessionLogEntry(db: DesktopDatabase, entry: SessionLogUsageEntry)
       entry.completedAt,
       entry.inputTokens,
       entry.outputTokens,
+      entry.cacheReadTokens,
+      entry.cacheWriteTokens,
       entry.costUsd,
     );
 }

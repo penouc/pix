@@ -145,6 +145,8 @@ export const DesktopAgentEventSchema = z.discriminatedUnion('type', [
       type: z.literal('usage.updated'),
       inputTokens: z.number().nonnegative().optional(),
       outputTokens: z.number().nonnegative().optional(),
+      cacheReadTokens: z.number().nonnegative().optional(),
+      cacheWriteTokens: z.number().nonnegative().optional(),
       totalTokens: z.number().nonnegative().optional(),
       costUsd: z.number().nonnegative().optional(),
     })

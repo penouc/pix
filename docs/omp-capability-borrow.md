@@ -3,13 +3,14 @@
 > 来源：[oh-my-pi / OMP](https://omp.sh/)  
 > 策略：**不换内核**（继续 `@earendil-works/pi`），把 OMP 当竞品功能雷达；能接线的接线，值得学的学交互/算法，重的自建并走 PiX 权限与 Checkpoint。  
 > 对照：[`product-and-engineering-plan.md`](./product-and-engineering-plan.md) §22–§24  
-> **进度跟踪（完成状态）：** [`omp-capability-todo.md`](./omp-capability-todo.md)
+> **进度跟踪（完成状态）：** [`omp-capability-todo.md`](./omp-capability-todo.md)  
+> **新装 / 首启（尚未实现）：** [`onboarding.md`](./onboarding.md)
 
 ---
 
 ## 紧急可选池（21 条）
 
-**已确认：原 20 条 + #21 Auto 模型请求全部纳入。** 权威进度在 [`omp-capability-todo.md`](./omp-capability-todo.md)；下表勾选与之同步（**21/21 全部完成**）。
+**已确认：原 20 条 + #21 Auto 模型请求全部纳入。** 权威进度在 [`omp-capability-todo.md`](./omp-capability-todo.md)；下表勾选与之同步（**21/21 全部完成** · 截至 v0.4.0）。
 
 下表保留编号与说明；排序按「个人日用紧急度 × 投入产出」。
 
@@ -42,9 +43,20 @@
 
 > **命名注意：** PiX 审批模式里已有文案「Auto」（`auto-reads`）。**#21 是模型 Auto**，产品文案需区分（例如「Auto model」vs 审批「Auto」），避免用户搞混。
 
+### 批次落地摘要
+
+| Batch | 项 | 落地要点（实现侧） |
+|-------|----|--------------------|
+| A | #1–10、#21 | Compaction / Thinking / Plan·Build / Composer `@$/` / Usage / retry / Steer / Fork / Auto 模型路由 |
+| B | #11–12 | `todo`、`ask` 自定义工具 + UI（Dock Todo、AskDialog）；走权限管线且 `safe` |
+| C | #13–15 | hashline `edit` + `hash_lines`；TS 进程内 `lsp_*`；会话默认启用 `grep`/`find`/`ls` |
+| D | #16–20 | `git_*` + `git_commit`；`web_search`（DuckDuckGo）；`.pi-desktop/mcp.json` → `mcp__*`；`memory` / `learn` |
+
+细节、验收标准与测试状态见 [`omp-capability-todo.md`](./omp-capability-todo.md)。
+
 ### 推进顺序
 
-推荐顺序与完成勾选，见 [`omp-capability-todo.md`](./omp-capability-todo.md)（#21 排在 Plan Mode 之后）。
+紧急池已全部勾完。后续从下方「完整能力对照」里挑下一批（对照表「建议路径」仍为雷达，**不是**承诺排期）。
 
 ### 明确不进本轮池（避免分心）
 
@@ -64,21 +76,23 @@
 - **移植思路**：学交互或算法，不搬 OMP 运行时
 - **低优先 / 跳过**：定位冲突或性价比低
 
+「PiX 现状」相对紧急池完成态更新；未进池项仍可能是「无」。
+
 ### A. 编辑与代码修改
 
 | OMP 能力 | 一句话 | PiX 现状 | 建议路径 |
 |----------|--------|----------|----------|
-| Hashline edit | hash 锚点改文件，少 token、少 stale patch | Pi `edit`/`write` | 移植思路（高价值） |
-| stale-anchor 拒绝 | 文件变了就拒 patch | Checkpoint/冲突检测部分有 | 移植思路 |
+| Hashline edit | hash 锚点改文件，少 token、少 stale patch | **已落地（#13）**：自定义 `edit` 覆盖 Pi 内置；`lineHash` + `oldHash`；坏锚点整批拒绝 | 移植思路（已做） |
+| stale-anchor 拒绝 | 文件变了就拒 patch | **已落地（#13）**：`oldHash` 全文件校验 | 移植思路（已做） |
 | ast_edit | ast-grep 结构改写，preview 再 Accept | 无 | 自建（中） |
-| ast_grep | 结构查询 | 靠 bash/rg | 自建（中） |
+| ast_grep | 结构查询 | 靠 bash/`grep` 工具 | 自建（中） |
 | Preview then accept | 提案 → Accept 再落盘 | Diff + Keep/Revert 已有 | 移植思路 |
 
 ### B. 搜索与读取
 
 | OMP 能力 | 一句话 | PiX 现状 | 建议路径 |
 |----------|--------|----------|----------|
-| grep / glob 一等工具 | 不靠 bash 搜 | bash + 本地 index | 接线 Pi / 自建 |
+| grep / glob 一等工具 | 不靠 bash 搜 | **已落地（#15）**：会话默认启用 Pi `grep`/`find`/`ls`；Plan→Build 回退完整白名单 | 接线 Pi / 自建 |
 | read 万能路径 | 文件/归档/PDF/URL/ssh 同一 read | 普通文件 | 移植思路（选子集） |
 | 内部 URL schemes（`pr://` 等） | PR/冲突/子代理当 FS | 无 | 移植思路（选 1–2 个） |
 | conflict:// 解冲突 | `@theirs/@ours/@base` | 无 | 自建（跟 Git 一起） |
@@ -87,8 +101,8 @@
 
 | OMP 能力 | 一句话 | PiX 现状 | 建议路径 |
 |----------|--------|----------|----------|
-| LSP 工具 | diagnostics / refs / rename 等 | 无；`@symbol` 计划用 rg | 自建（高价值） |
-| 写时 LSP 联动 | rename 带 re-export | 无 | 自建（跟 LSP） |
+| LSP 工具 | diagnostics / refs / rename 等 | **已落地（#14）**：TS 进程内语言服务 — `lsp_diagnostics` / `lsp_references` / `lsp_rename`；经权限管线 | 自建（已做，先 TS） |
+| 写时 LSP 联动 | rename 带 re-export | **部分**：`lsp_rename` 会改写跨文件引用/import | 自建（跟 LSP） |
 | DAP debugger | 真调试步进 | 无 | 低优先 |
 
 ### D. 运行时与执行
@@ -104,20 +118,20 @@
 
 | OMP 能力 | 一句话 | PiX 现状 | 建议路径 |
 |----------|--------|----------|----------|
-| 自动/手动 compaction | 长会话不撞墙 | Not wired（Pi 有 API） | 接线 Pi（P0） |
+| 自动/手动 compaction | 长会话不撞墙 | **已落地（#1）**：协议 + Compact 按钮 + Composer context 用量 | 接线 Pi（已做） |
 | TTSR 流中注入规则 | 跑偏中止并注入规则 | 无 | 移植思路（中） |
 | checkpoint / rewind（对话态） | 折叠探索上下文 | 文件 Checkpoint 语义不同 | 移植思路（勿撞名） |
-| Session fork | 从某条消息分叉 | Not wired | 接线 Pi |
+| Session fork | 从某条消息分叉 | **已落地（#10）**：`forkPoints` / `forkSession` + UI Fork | 接线 Pi |
 | `/fresh` | 重置 provider 流 | 无 | 接线 Pi / 小自建 |
-| steer / followUp / 队列 | 跑着插话 | IPC 部分有 | 接线 Pi |
+| steer / followUp / 队列 | 跑着插话 | **已落地（#9）**：Queue/Steer UI + `agent.steer` | 接线 Pi |
 
 ### F. 规划与人机协作
 
 | OMP 能力 | 一句话 | PiX 现状 | 建议路径 |
 |----------|--------|----------|----------|
-| Plan mode | 只读工具集 | Not wired | 接线 Pi |
-| todo | 步骤清单 | 计划自建 | 自建 |
-| ask | 结构化追问 | 无 | 自建 |
+| Plan mode | 只读工具集 | **已落地（#3）**：Plan/Build 工具集 + 安全 fail-closed + Approve→Build | 接线 Pi |
+| todo | 步骤清单 | **已落地（#11）**：`todo` 工具 + SQLite + Dock 面板；风险 `safe` | 自建 |
+| ask | 结构化追问 | **已落地（#12）**：`ask` + AskDialog；阻塞至用户回答 | 自建 |
 | Magic keywords | 散文触发特殊行为 | 无 | 移植思路（低；不如模式按钮） |
 | Vibe mode | 导演 + 只读工人 | 多 Agent 冻结 | 低优先 |
 
@@ -134,30 +148,30 @@
 
 | OMP 能力 | 一句话 | PiX 现状 | 建议路径 |
 |----------|--------|----------|----------|
-| retain / recall / learn | 跨会话记忆 | 仅权限记忆 | 自建（可选） |
-| learn → skill | 教训沉淀为 skill | Skills UI 已有 | 移植思路 |
+| retain / recall / learn | 跨会话记忆 | **已落地（#20）**：`memory` → `.pi-desktop/agent/memory.json`；recall=`safe`，retain/forget=`workspace-write` | 自建（已做，JSON 无云） |
+| learn → skill | 教训沉淀为 skill | **已落地（#20）**：`learn` 写 `.pi/skills/<name>/SKILL.md` | 移植思路（已做） |
 | 继承 Cursor/Claude/Codex rules | 读盘上已有规则 | 主要跟 Pi skills | 自建（中） |
-| `/` `$` `@` Composer | 已承诺能力 | 实现不完整 | 接线 Pi（P0） |
+| `/` `$` `@` Composer | 已承诺能力 | **已落地（#4–6）**：`@`（含 protected 过滤）/ `$` skills / `/` 命令菜单 | 接线 Pi（已做） |
 
 ### I. 外部世界
 
 | OMP 能力 | 一句话 | PiX 现状 | 建议路径 |
 |----------|--------|----------|----------|
-| web_search | 多后端搜索 | 无 | 自建（先单 provider） |
+| web_search | 多后端搜索 | **已落地（#18）**：单 provider（DuckDuckGo HTML）；风险 `external-side-effect`；Plan 阻断 | 自建（已做，单 provider） |
 | github / github-as-fs | PR/issue 当路径 | shell + gh | 移植思路 |
 | browser（Puppeteer/CDP） | Agent 开车页 | 仅 preview iframe | 自建（高风险） |
 | computer（OS 操控） | 截屏/键鼠/AX | 无 | 跳过 |
 | generate_image / tts | 多媒体 | 非核心 | 低优先 |
-| 图片理解 / 粘贴截图 | UI bug 复现 | roadmap 部分 | 接线 Pi / 小自建 |
-| MCP 内置 | 接 MCP servers | 计划自建桥 | 自建（原 roadmap） |
+| 图片理解 / 粘贴截图 | UI bug 复现 | Composer 可贴图（roadmap 余量） | 接线 Pi / 小自建 |
+| MCP 内置 | 接 MCP servers | **已落地（#19）**：`.pi-desktop/mcp.json` → `McpBridge` stdio；工具名 `mcp__{server}__{tool}`；未知 fail-closed；默认 `sensitive`；dispose 清子进程 | 自建（已做） |
 
 ### J. 模型路由
 
 | OMP 能力 | 一句话 | PiX 现状 | 建议路径 |
 |----------|--------|----------|----------|
-| **Auto 模型请求（产品化）** | 用户选 Auto：代选 + 角色路由 + 失败换模 | 仅有 `pickDefaultModel`；无 Auto UI / 无角色链 | **#21 紧急项**；接线 Pi `scopedModels` + 产品路由层 |
-| 多 role 模型 | plan/fast/smol… | scopedModels Not wired | 接线 Pi（含在 #21） |
-| fallback chains | 429 换模型 | retry Not wired | 接线 Pi（含在 #21；UI 与 #8 联动） |
+| **Auto 模型请求（产品化）** | 用户选 Auto：代选 + 角色路由 + 失败换模 | **已落地（#21）**：Composer Auto + 角色链 + fallback + UI `model.auto-switched` | 接线 Pi + 产品路由层 |
+| 多 role 模型 | plan/fast/smol… | **部分（#21）**：至少 `default` + `plan` 档 | 接线 Pi（含在 #21） |
+| fallback chains | 429 换模型 | **已落地（#21 + #8）**：换模 + retry 可见化 | 接线 Pi |
 | path-scoped models | 目录绑模型 | 无 | 移植思路（低） |
 | round-robin keys | 多 key 轮转 | 无 | 低优先 |
 | 本地 llama / Ollama | 本地推理 | M12；Pi 有 llama ext | 接线 Pi |
@@ -166,8 +180,8 @@
 
 | OMP 能力 | 一句话 | PiX 现状 | 建议路径 |
 |----------|--------|----------|----------|
-| 原子拆 commit | 按依赖拆提交 | Diff UI 有 | 移植思路（高，需审批） |
-| git_overview / hunk 工具 | 结构化看 git | bash + Pierre | 自建 |
+| 原子拆 commit | 按依赖拆提交 | **已落地（#17）**：`git_commit`（本地、禁 push）+ `ask` 提案多 commit；`workspace-write` 审批；Plan 阻断 | 移植思路（已做） |
+| git_overview / hunk 工具 | 结构化看 git | **已落地（#16）**：`git_status` / `git_diff` / `git_log`；hunk 走全量 patch（无独立 `git_hunk`）；解析对齐 Diff 面板 | 自建 |
 | `/review` P0–P3 | 带裁决的 review | example skill | 移植思路 |
 
 ### L. 协作与分发
@@ -183,14 +197,14 @@
 
 | OMP 能力 | 一句话 | PiX 现状 | 建议路径 |
 |----------|--------|----------|----------|
-| 破坏性操作审批 | 权限提示 | Ask/Auto/Read-only + Automations | **保持自有模型** |
+| 破坏性操作审批 | 权限提示 | Ask/Auto/Read-only + Automations；Batch D 工具已纳入 risk/Plan 规则 | **保持自有模型** |
 | security_scan | 云/本地安审 | 无 | 低优先（可用 skill） |
 
 ---
 
 ## 与「换内核」的关系（归档）
 
-全量 `@earendil-works` → `@oh-my-pi` **不划算**：Electron×Bun、natives 打包、默认工具面爆炸。默认策略是留在官方 Pi，按本清单勾选借鉴。
+全量 `@earendil-works` → `@oh-my-pi` **不划算**：Electron×Bun、natives 打包、默认工具面爆炸。默认策略是留在官方 Pi，按本清单勾选借鉴。紧急池 21 条已完成，后续仍按「接线 / 自建 / 移植思路」从对照表增量挑选，不换核。
 
 ---
 
@@ -201,3 +215,5 @@
 | 2026-08-07 | 初版：完整对照 + 20 条紧急可选池 |
 | 2026-08-07 | 新增 #21 Auto 模型请求；池扩为 21 条 |
 | 2026-08-07 | Batch D（#16–20）完成；紧急池 21/21 |
+| 2026-08-07 | 同步完整对照表「PiX 现状」与批次落地摘要（对齐 v0.4.0 / todo 21/21）；推进顺序改为从对照表挑下一批 |
+| 2026-08-07 | 链到 [`onboarding.md`](./onboarding.md)（新装 checklist 约定） |
