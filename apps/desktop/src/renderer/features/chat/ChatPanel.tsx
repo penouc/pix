@@ -1099,7 +1099,7 @@ export function ChatPanel({
                         <MessageImages images={entry.message.images} />
                       ) : null}
                       {entry.message.content ? (
-                        <div className="rounded-[22px_22px_6px_22px] bg-surface px-4 py-2.5 text-[13.5px] leading-relaxed shadow-[var(--shadow-sm)] whitespace-pre-wrap">
+                        <div className="min-w-0 max-w-full overflow-x-auto rounded-[22px_22px_6px_22px] bg-surface px-4 py-2.5 text-[13.5px] leading-relaxed shadow-[var(--shadow-sm)] whitespace-pre-wrap">
                           {entry.message.content}
                         </div>
                       ) : null}

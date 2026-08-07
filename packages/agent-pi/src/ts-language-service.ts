@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync, writeFileSync, type Dirent } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, type Dirent } from 'node:fs';
 import path from 'node:path';
 
 import * as ts from 'typescript';
@@ -133,11 +133,16 @@ function createHost(rootPath: string): HostEntry {
     getCurrentDirectory: () => rootPath,
     getCompilationSettings: () => ({ ...DEFAULT_COMPILER_OPTIONS }),
     getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
-    fileExists: ts.sys.fileExists,
-    readFile: ts.sys.readFile,
-    readDirectory: ts.sys.readDirectory,
-    directoryExists: ts.sys.directoryExists,
-    getDirectories: ts.sys.getDirectories,
+    // Deliberately NOT `ts.sys.*`: TypeScript's node sys initializer reads
+    // `__filename`, which the ESM bundle of the Electron main process cannot
+    // resolve. Pure node:fs implementations avoid that code path entirely.
+    fileExists: (fileName) => existsSync(fileName),
+    readFile: (fileName) => readFileSync(fileName, 'utf8'),
+    directoryExists: (dirName) => existsSync(dirName) && statSync(dirName).isDirectory(),
+    getDirectories: (dirName) =>
+      readdirSync(dirName, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name),
   };
   const service = ts.createLanguageService(host);
   return { host, service };

@@ -43,6 +43,7 @@ export default defineConfig({
                 'semver',
                 'undici',
                 'typebox',
+                'typescript',
                 'minimatch',
                 'cross-spawn',
                 'highlight.js',
