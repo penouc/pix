@@ -90,20 +90,23 @@
             </div>
           </div>
           <div class="hero-visual">
-            <a
-              class="hero-screen"
-              href="/screens/pix-workbench.png"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <img
-                src="/screens/pix-workbench.png"
-                data-i18n-alt="preview.w1"
-                alt="PiX workbench interface"
+            <div class="hero-screen">
+              <video
+                autoplay
+                muted
+                loop
+                playsinline
+                preload="auto"
+                poster="/screens/pix-workbench.png"
                 width="1280"
                 height="800"
-              />
-            </a>
+                role="img"
+                data-i18n-aria="preview.w1"
+                aria-label="PiX workbench interface"
+              >
+                <source src="/videos/workbench.mp4" type="video/mp4" />
+              </video>
+            </div>
           </div>
         </div>
       </section>
@@ -220,45 +223,63 @@
           </p>
           <div class="screens">
             <figure class="screen">
-              <a href="/screens/pix-workbench.png" target="_blank" rel="noopener noreferrer">
-                <img
-                  src="/screens/pix-workbench.png"
-                  alt=""
-                  data-i18n-alt="preview.w1"
-                  width="1280"
-                  height="800"
-                />
-              </a>
+              <video
+                autoplay
+                muted
+                loop
+                playsinline
+                preload="metadata"
+                poster="/screens/pix-workbench.png"
+                width="1280"
+                height="800"
+                role="img"
+                data-i18n-aria="preview.w1"
+                aria-label=""
+              >
+                <source src="/videos/workbench.mp4" type="video/mp4" />
+              </video>
               <figcaption data-i18n="preview.w1">
                 Local projects, task history, permission modes, model selection, and context input
                 in one workbench.
               </figcaption>
             </figure>
             <figure class="screen">
-              <a href="/screens/pix-agent-run.png" target="_blank" rel="noopener noreferrer">
-                <img
-                  src="/screens/pix-agent-run.png"
-                  alt=""
-                  data-i18n-alt="preview.w2"
-                  width="1280"
-                  height="800"
-                />
-              </a>
+              <video
+                autoplay
+                muted
+                loop
+                playsinline
+                preload="metadata"
+                poster="/screens/pix-agent-run.png"
+                width="1280"
+                height="800"
+                role="img"
+                data-i18n-aria="preview.w2"
+                aria-label=""
+              >
+                <source src="/videos/agent-run.mp4" type="video/mp4" />
+              </video>
               <figcaption data-i18n="preview.w2">
                 Agent run with tool calls, reasoning, completion summary, and the Changes review
                 panel.
               </figcaption>
             </figure>
             <figure class="screen">
-              <a href="/screens/pix-usage.png" target="_blank" rel="noopener noreferrer">
-                <img
-                  src="/screens/pix-usage.png"
-                  alt=""
-                  data-i18n-alt="preview.w3"
-                  width="1280"
-                  height="800"
-                />
-              </a>
+              <video
+                autoplay
+                muted
+                loop
+                playsinline
+                preload="metadata"
+                poster="/screens/pix-usage.png"
+                width="1280"
+                height="800"
+                role="img"
+                data-i18n-aria="preview.w3"
+                aria-label=""
+              >
+                <source src="/videos/usage.mp4" type="video/mp4" />
+              </video>
               <figcaption data-i18n="preview.w3">
                 Local Usage &amp; Cost: run counts, tokens, spend trends, and model breakdown.
               </figcaption>

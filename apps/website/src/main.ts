@@ -88,3 +88,29 @@ void fetchLatestDmg().then((release) => {
   latest = release;
   syncDownloadButtons();
 });
+
+/**
+ * Respect `prefers-reduced-motion`: pause the looping showcase videos and
+ * show their posters (static screenshots) instead of playing them.
+ */
+function respectReducedMotion(): void {
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const apply = () => {
+    const videos = document.querySelectorAll<HTMLVideoElement>('video[autoplay]');
+    for (const video of videos) {
+      if (reduced.matches) {
+        video.pause();
+        video.removeAttribute('autoplay');
+        video.load();
+      } else {
+        video.setAttribute('autoplay', '');
+        video.muted = true;
+        void video.play().catch(() => undefined);
+      }
+    }
+  };
+  apply();
+  reduced.addEventListener('change', apply);
+}
+
+respectReducedMotion();

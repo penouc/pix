@@ -62,7 +62,8 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-img {
+img,
+video {
   max-width: 100%;
   height: auto;
   display: block;
@@ -350,7 +351,8 @@ a:hover {
   outline-offset: 4px;
 }
 
-.hero-screen img {
+.hero-screen img,
+.hero-screen video {
   width: 100%;
 }
 
@@ -566,7 +568,8 @@ a:hover {
   margin: 0;
 }
 
-.screen img {
+.screen img,
+.screen video {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: 0 18px 40px oklch(0.35 0.04 150 / 0.12);
