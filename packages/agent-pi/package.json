@@ -24,6 +24,7 @@
     "@pi-desktop/agent-domain": "workspace:*",
     "@pi-desktop/protocol": "workspace:*",
     "@pi-desktop/security": "workspace:*",
+    "cross-spawn": "^7.0.6",
     "typebox": "1.3.7",
     "typescript": "^5.8.3",
     "zod": "^3.25.56"
