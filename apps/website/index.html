@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
     <meta name="description" data-i18n="meta.description" content="" />
     <meta property="og:title" content="PiX" />
     <meta property="og:description" data-i18n-content="meta.description" content="" />
@@ -92,11 +94,12 @@
           <div class="hero-visual">
             <div class="hero-screen">
               <video
+                class="hero-video"
                 autoplay
                 muted
                 loop
                 playsinline
-                preload="auto"
+                preload="metadata"
                 poster="/screens/pix-workbench.png"
                 width="1280"
                 height="800"
@@ -104,7 +107,8 @@
                 data-i18n-aria="preview.w1"
                 aria-label="PiX workbench interface"
               >
-                <source src="/videos/workbench.mp4?v=2" type="video/mp4" />
+                <source src="/videos/workbench.webm?v=3" type="video/webm" />
+                <source src="/videos/workbench.mp4?v=3" type="video/mp4" />
               </video>
             </div>
           </div>
@@ -224,20 +228,20 @@
           <div class="screens">
             <figure class="screen">
               <video
-                autoplay
+                class="lazy-video"
                 muted
                 loop
                 playsinline
-                preload="metadata"
+                preload="none"
                 poster="/screens/pix-workbench.png"
                 width="1280"
                 height="800"
                 role="img"
+                data-src-webm="/videos/workbench.webm?v=3"
+                data-src-mp4="/videos/workbench.mp4?v=3"
                 data-i18n-aria="preview.w1"
                 aria-label=""
-              >
-                <source src="/videos/workbench.mp4?v=2" type="video/mp4" />
-              </video>
+              ></video>
               <figcaption data-i18n="preview.w1">
                 Local projects, task history, permission modes, model selection, and context input
                 in one workbench.
@@ -245,20 +249,20 @@
             </figure>
             <figure class="screen">
               <video
-                autoplay
+                class="lazy-video"
                 muted
                 loop
                 playsinline
-                preload="metadata"
+                preload="none"
                 poster="/screens/pix-agent-run.png"
                 width="1280"
                 height="800"
                 role="img"
+                data-src-webm="/videos/agent-run.webm?v=3"
+                data-src-mp4="/videos/agent-run.mp4?v=3"
                 data-i18n-aria="preview.w2"
                 aria-label=""
-              >
-                <source src="/videos/agent-run.mp4?v=2" type="video/mp4" />
-              </video>
+              ></video>
               <figcaption data-i18n="preview.w2">
                 Agent run with tool calls, reasoning, completion summary, and the Changes review
                 panel.
@@ -266,20 +270,20 @@
             </figure>
             <figure class="screen">
               <video
-                autoplay
+                class="lazy-video"
                 muted
                 loop
                 playsinline
-                preload="metadata"
+                preload="none"
                 poster="/screens/pix-usage.png"
                 width="1280"
                 height="800"
                 role="img"
+                data-src-webm="/videos/usage.webm?v=3"
+                data-src-mp4="/videos/usage.mp4?v=3"
                 data-i18n-aria="preview.w3"
                 aria-label=""
-              >
-                <source src="/videos/usage.mp4?v=2" type="video/mp4" />
-              </video>
+              ></video>
               <figcaption data-i18n="preview.w3">
                 Local Usage &amp; Cost: run counts, tokens, spend trends, and model breakdown.
               </figcaption>

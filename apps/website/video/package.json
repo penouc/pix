@@ -5,10 +5,11 @@
   "type": "module",
   "description": "Remotion compositions for the PiX marketing site — rendered MP4s land in ../public/videos",
   "scripts": {
-    "render": "pnpm render:hero && pnpm render:run && pnpm render:usage",
+    "render": "pnpm render:hero && pnpm render:run && pnpm render:usage && pnpm encode:webm",
     "render:hero": "remotion render src/index.ts WorkbenchSession ../public/videos/workbench.mp4",
     "render:run": "remotion render src/index.ts AgentRun ../public/videos/agent-run.mp4",
     "render:usage": "remotion render src/index.ts UsageDashboard ../public/videos/usage.mp4",
+    "encode:webm": "bash scripts/encode-webm.sh",
     "studio": "remotion studio src/index.ts"
   },
   "dependencies": {

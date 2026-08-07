@@ -1,13 +1,20 @@
 /**
- * Static site worker: Assets for everything, plus Safari-safe MP4 Range (206).
+ * Static site worker: Assets for everything, plus Safari-safe video Range (206).
  * HTML is served with no-store so deploys are not stuck behind a stale edge HIT.
  */
 export interface Env {
   ASSETS: Fetcher;
 }
 
-function isMp4(pathname: string): boolean {
-  return pathname.startsWith('/videos/') && pathname.endsWith('.mp4');
+function isVideo(pathname: string): boolean {
+  return (
+    pathname.startsWith('/videos/') &&
+    (pathname.endsWith('.mp4') || pathname.endsWith('.webm'))
+  );
+}
+
+function videoContentType(pathname: string): string {
+  return pathname.endsWith('.webm') ? 'video/webm' : 'video/mp4';
 }
 
 function parseRange(
@@ -42,13 +49,21 @@ function parseRange(
 
 function withHtmlCacheHeaders(response: Response): Response {
   const headers = new Headers(response.headers);
-  headers.set('Cache-Control', 'no-store, must-revalidate');
+  headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  headers.set('Pragma', 'no-cache');
+  headers.set('Expires', '0');
   headers.set('CDN-Cache-Control', 'no-store');
   headers.set('Cloudflare-CDN-Cache-Control', 'no-store');
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  // Avoid sticky bfcache / intermediary reuse of pre-video HTML.
+  headers.set('Surrogate-Control', 'no-store');
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
-async function serveMp4(request: Request, env: Env, url: URL): Promise<Response> {
+async function serveVideo(request: Request, env: Env, url: URL): Promise<Response> {
   const assetRequest = new Request(url.toString(), {
     method: 'GET',
     headers: (() => {
@@ -64,7 +79,7 @@ async function serveMp4(request: Request, env: Env, url: URL): Promise<Response>
   const body = await asset.arrayBuffer();
   const size = body.byteLength;
   const headers = new Headers();
-  headers.set('Content-Type', 'video/mp4');
+  headers.set('Content-Type', videoContentType(url.pathname));
   headers.set('Accept-Ranges', 'bytes');
   headers.set('Cache-Control', 'public, max-age=604800, immutable');
   const etag = asset.headers.get('etag');
@@ -95,8 +110,8 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
-    if ((request.method === 'GET' || request.method === 'HEAD') && isMp4(url.pathname)) {
-      return serveMp4(request, env, url);
+    if ((request.method === 'GET' || request.method === 'HEAD') && isVideo(url.pathname)) {
+      return serveVideo(request, env, url);
     }
 
     const response = await env.ASSETS.fetch(request);

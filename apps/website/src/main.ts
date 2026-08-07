@@ -90,41 +90,98 @@ void fetchLatestDmg().then((release) => {
 });
 
 /**
- * Respect `prefers-reduced-motion`: pause the looping showcase videos and
- * show their posters (static screenshots) instead of playing them.
- * Otherwise force muted autoplay — posters alone look like the old static site.
+ * Hero video: muted autoplay when motion is allowed.
+ * Preview videos stay on posters until near the viewport — do not compete
+ * with the first paint for ~2MB of MP4s.
  */
-function respectReducedMotion(): void {
+function setupVideos(): void {
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
 
-  const kick = (video: HTMLVideoElement) => {
+  const playMuted = (video: HTMLVideoElement) => {
     video.muted = true;
     video.playsInline = true;
-    video.setAttribute('autoplay', '');
     video.setAttribute('muted', '');
     video.setAttribute('playsinline', '');
+    video.setAttribute('autoplay', '');
     const tryPlay = () => void video.play().catch(() => undefined);
     if (video.readyState >= 2) tryPlay();
     else video.addEventListener('loadeddata', tryPlay, { once: true });
   };
 
-  const apply = () => {
-    const videos = document.querySelectorAll<HTMLVideoElement>('video');
-    for (const video of videos) {
-      if (reduced.matches) {
-        video.pause();
-        video.removeAttribute('autoplay');
-        video.load();
-      } else {
-        kick(video);
-      }
+  const hydrateLazy = (video: HTMLVideoElement) => {
+    if (video.dataset.hydrated === '1') return;
+    const webm = video.dataset.srcWebm;
+    const mp4 = video.dataset.srcMp4;
+    if (!webm && !mp4) return;
+    video.dataset.hydrated = '1';
+    if (webm) {
+      const source = document.createElement('source');
+      source.src = webm;
+      source.type = 'video/webm';
+      video.appendChild(source);
+    }
+    if (mp4) {
+      const source = document.createElement('source');
+      source.src = mp4;
+      source.type = 'video/mp4';
+      video.appendChild(source);
+    }
+    video.preload = 'metadata';
+    video.load();
+    if (!reduced.matches) playMuted(video);
+  };
+
+  const applyHero = () => {
+    const hero = document.querySelector<HTMLVideoElement>('video.hero-video');
+    if (!hero) return;
+    if (reduced.matches) {
+      hero.pause();
+      hero.removeAttribute('autoplay');
+      hero.load();
+    } else {
+      playMuted(hero);
     }
   };
 
-  apply();
-  reduced.addEventListener('change', apply);
-  // Late layout / bfcache returns
-  window.addEventListener('pageshow', apply);
+  applyHero();
+  reduced.addEventListener('change', () => {
+    applyHero();
+    if (reduced.matches) {
+      for (const video of document.querySelectorAll<HTMLVideoElement>('video.lazy-video')) {
+        video.pause();
+        video.removeAttribute('autoplay');
+      }
+    } else {
+      for (const video of document.querySelectorAll<HTMLVideoElement>(
+        'video.lazy-video[data-hydrated="1"]',
+      )) {
+        playMuted(video);
+      }
+    }
+  });
+
+  const lazyVideos = document.querySelectorAll<HTMLVideoElement>('video.lazy-video');
+  if (!('IntersectionObserver' in window)) {
+    for (const video of lazyVideos) hydrateLazy(video);
+    return;
+  }
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const video = entry.target;
+        if (video instanceof HTMLVideoElement) {
+          hydrateLazy(video);
+          observer.unobserve(video);
+        }
+      }
+    },
+    { rootMargin: '200px 0px', threshold: 0.01 },
+  );
+
+  for (const video of lazyVideos) observer.observe(video);
+  window.addEventListener('pageshow', applyHero);
 }
 
-respectReducedMotion();
+setupVideos();
