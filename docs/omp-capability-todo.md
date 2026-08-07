@@ -39,14 +39,14 @@
 
 | 状态 | 数量 |
 |------|------|
-| 未开始 `[ ]` | 19 |
+| 未开始 `[ ]` | 18 |
 | 进行中 `[~]` | 0 |
-| 完成 `[x]` | 2 |
+| 完成 `[x]` | 3 |
 | 推迟 `[-]` | 0 |
 
-**进度：** 2 / 21  
+**进度：** 3 / 21  
 
-**已完成项测试：** #1 `partial` · #3 `unit`
+**已完成项测试：** #1 `partial` · #2 `partial` · #3 `unit`
 
 ---
 
@@ -57,7 +57,7 @@
 | # | 状态 | 测试 | 能力 | 路径 | 完成标准（验收） | 备注 |
 |---|------|------|------|------|------------------|------|
 | 1 | [x] | partial | Compaction + 上下文用量 | 接线 Pi | 自动/手动 compact 可用；Composer 上方可见 context 用量；撞墙 fixture 仍能完成任务 | 实现：2026-08-07。**已测：** protocol events/commands、fake-runtime compact、agent-stream-store `context.updated`/compacting；相关 vitest 通过。**未测：** 桌面手测 Compact 按钮；context-overflow fixture |
-| 2 | [ ] | — | Thinking level 控制 | 接线 Pi | 会话可选 thinking；主路径步骤 3 不再缺控件 | |
+| 2 | [x] | partial | Thinking level 控制 | 接线 Pi | 会话可选 thinking；主路径步骤 3 不再缺控件 | 此前已接线：`ThinkingLevelPicker` + `agent.set/getThinkingLevel` + Pi `setThinkingLevel`；建任务时会套用所选 level。**已测：** 代码路径存在且桌面可见。**未测：** 本轮未单独补自动化断言 |
 | 3 | [x] | unit | Plan Mode（只读再动手） | 接线 Pi | Plan 下无 write/edit/bash 落盘；Approve → Build 可切换；安全测试断言 | 实现：2026-08-07。**已测：** `policy-engine` Plan 下 deny write/edit/bash；packages build + vitest 通过。**未测：** 桌面手测 Plan/Build 切换与真实 Pi `setActiveToolsByName`；Approve-plan→Build 注入仍未做 |
 | 4 | [ ] | — | Composer `@` 文件引用 | 接线 Pi / Main | `@` 可搜并插入工作区内路径；受 protected paths 约束 | |
 | 5 | [ ] | — | Composer `$` skills | 接线 Pi | `$` 触发已启用 skill；与 Skills 面板开关一致 | |
@@ -118,9 +118,9 @@
 
 1. **#1** Compaction + 上下文 ~~（已完成 · partial）~~
 2. **#3** Plan Mode ~~（已完成 · unit）~~
-3. **#21** Auto 模型请求（代选 + 角色路由 + fallback）
-4. **#4–6** Composer `@` / `$` / `/`
-5. **#2** Thinking level
+3. **#2** Thinking level ~~（已完成 · partial；此前已接线）~~
+4. **#21** Auto 模型请求（代选 + 角色路由 + fallback）
+5. **#4–6** Composer `@` / `$` / `/`
 6. **#7–9** 成本、retry、steer（#8 与 #21 fallback 联动）
 7. **#11–12** Todo + Ask
 8. **#10** Session Fork
@@ -143,3 +143,4 @@
 | 2026-08-07 | **#1 完成**：compaction/context 接线（协议 + agent-pi + Main IPC + Composer Compact/gauge）；测试=`partial` |
 | 2026-08-07 | **#3 完成**：Plan/Build 模式（工具集切换 + 安全 fail-closed + Composer 切换器）；测试=`unit` |
 | 2026-08-07 | 表格增加「测试」列与测试状态图例；总览增加已完成项测试摘要 |
+| 2026-08-07 | **#2 标记完成**：Thinking level 此前已接线（Picker + IPC + Pi）；测试=`partial` |

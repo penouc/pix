@@ -25,10 +25,12 @@ import type {
 import { DomainError, agentError } from '@pi-desktop/agent-domain';
 import type {
   ApprovalDecision,
+  AutoModelConfig,
   CompactionResult,
   ContextUsage,
   DesktopAgentEvent,
   ModelRef,
+  ModelSelection,
   RunRef,
   StoredMessage,
   ThinkingLevel,
@@ -36,6 +38,8 @@ import type {
   SessionMode,
 } from '@pi-desktop/protocol';
 import { PermissionPipeline, type ApprovalMode, type RememberedRule } from '@pi-desktop/security';
+
+import { AutoModelRouter, classifyAutoSwitchError, type AutoRole } from './auto-model.js';
 
 import {
   describeAuthSources,
@@ -75,6 +79,18 @@ export function writeToolPath(toolName: string, input: unknown): string | undefi
   return typeof value === 'string' ? value : undefined;
 }
 
+/** Pi's `Model<Api>` is `{ provider, id, ... }` — reduce it to the desktop ref. */
+function toModelRef(model: { provider: unknown; id: unknown }): ModelRef {
+  return {
+    providerId: String(model.provider),
+    modelId: String(model.id),
+  };
+}
+
+function roleForMode(mode: SessionMode): AutoRole {
+  return mode === 'plan' ? 'plan' : 'default';
+}
+
 export interface PiAgentRuntimeOptions {
   /**
    * Directory for Pi-related local state (plan §7.2 controllable paths).
@@ -103,6 +119,14 @@ interface SessionRecord {
   sessionMode: SessionMode;
   /** Tool names to restore when leaving Plan Mode. */
   buildToolNames: string[] | null;
+  /**
+   * What the session is pinned to: a concrete model or Auto (#21).
+   * Defaults to Auto — a fresh session resolves at first send, exactly like
+   * the old pickDefaultModel heuristic, but with role routing and fallback.
+   */
+  modelSelection: ModelSelection;
+  /** Auto routing policy, refreshed from Settings on every send. */
+  autoConfig: AutoModelConfig | null;
 }
 
 /**
@@ -239,7 +263,11 @@ export class PiAgentRuntime implements AgentRuntime {
 
     if (options.model) {
       try {
-        await this.applyModel(piSession, options.model);
+        if (options.model.kind === 'model') {
+          await this.applyModel(piSession, options.model);
+        }
+        // Auto needs no SDK-side pin here; the record below records the
+        // selection and resolution happens at first send.
       } catch {
         // Model may be unavailable without auth; session still creatable.
       }
@@ -266,6 +294,8 @@ export class PiAgentRuntime implements AgentRuntime {
       compactionReason: null,
       sessionMode: 'build',
       buildToolNames: null,
+      modelSelection: options.model ?? { kind: 'auto' },
+      autoConfig: options.autoModel ?? null,
     };
     recordHolder.value = record;
 
@@ -368,9 +398,28 @@ export class PiAgentRuntime implements AgentRuntime {
       );
     }
 
+    if (input.autoModel) {
+      record.autoConfig = input.autoModel;
+    }
     if (input.model) {
-      await this.applyModel(record.pi, input.model);
-    } else if (!record.pi.model) {
+      await this.applyModelSelection(record, input.model);
+    } else if (record.modelSelection.kind === 'model' && !record.pi.model) {
+      // A pinned selection that has not been applied yet (e.g. a resumed
+      // session whose model was never re-applied to the SDK session).
+      await this.applyModel(record.pi, record.modelSelection);
+    }
+
+    // Auto (#21): resolve the concrete model for this turn's role right before
+    // the run, so a switch between Plan and Build picks the matching tier.
+    if (record.modelSelection.kind === 'auto') {
+      const role: AutoRole = record.sessionMode === 'plan' ? 'plan' : 'default';
+      const ref = await this.resolveAutoModel(record, role);
+      if (ref) {
+        await this.applyModel(record.pi, ref);
+      }
+    }
+
+    if (!record.pi.model) {
       const fallback = await this.pickDefaultModel();
       if (fallback) {
         await this.applyModel(record.pi, fallback);
@@ -496,10 +545,10 @@ export class PiAgentRuntime implements AgentRuntime {
     }
   }
 
-  async setModel(sessionId: string, model: ModelRef): Promise<void> {
+  async setModel(sessionId: string, model: ModelSelection): Promise<void> {
     this.assertAlive();
     const record = this.requireSession(sessionId);
-    await this.applyModel(record.pi, model);
+    await this.applyModelSelection(record, model);
     record.desktop.updatedAt = Date.now();
   }
 
@@ -987,29 +1036,90 @@ export class PiAgentRuntime implements AgentRuntime {
       }, RUN_TIMEOUT_MS);
     });
 
+    /**
+     * How many Auto fallback switches a single run may do (#21). Each switch
+     * tries the next model in the chain on the same user turn; bounding it
+     * keeps a chain of broken models from turning one prompt into a loop.
+     */
+    const MAX_AUTO_SWITCHES = 2;
+
     try {
-      await Promise.race([
-        record.pi.prompt(text, {
-          images: images?.map(({ data, mimeType }) => ({ type: 'image', data, mimeType })),
-        }),
-        timeoutPromise,
-      ]);
-    } catch (error) {
-      if (record.abortedRunIds.has(runId)) return;
-      const message = error instanceof Error ? error.message : String(error);
-      this.emit({
-        type: 'run.failed',
-        projectId: record.desktop.projectId,
-        sessionId: record.desktop.id,
-        runId,
-        sequence: ++record.sequence,
-        timestamp: Date.now(),
-        error: agentError('PI_PROMPT_FAILED', message, {
-          retryable: /api key|auth|credential|login|no model/i.test(message),
-        }),
-      });
-      if (record.activeRunId === runId) {
-        record.activeRunId = null;
+      // Attempt 0 is a fresh prompt. Later attempts are the same turn retried
+      // on the next model, via agent.continue() — the user message is already
+      // in the transcript, so calling prompt() again would duplicate it.
+      let attempt = 0;
+      for (;;) {
+        try {
+          if (attempt === 0) {
+            await Promise.race([
+              record.pi.prompt(text, {
+                images: images?.map(({ data, mimeType }) => ({ type: 'image', data, mimeType })),
+              }),
+              timeoutPromise,
+            ]);
+          } else {
+            await Promise.race([record.pi.agent.continue(), timeoutPromise]);
+          }
+          return;
+        } catch (error) {
+          if (record.abortedRunIds.has(runId)) return;
+
+          const auto = record.modelSelection.kind === 'auto';
+          const reason = auto ? classifyAutoSwitchError(error) : null;
+          const current = record.pi.model ? toModelRef(record.pi.model) : null;
+          const next =
+            reason && current && attempt < MAX_AUTO_SWITCHES
+              ? await this.nextAutoModel(record, roleForMode(record.sessionMode), current)
+              : null;
+
+          if (next && current && reason) {
+            attempt += 1;
+            // Pi's own retry path removes the error assistant message before
+            // continue(); mirror that so the retried turn resumes from the
+            // pending user prompt / tool results.
+            const messages = record.pi.agent.state.messages;
+            const last = messages[messages.length - 1] as
+              | { role?: string; errorMessage?: string }
+              | undefined;
+            if (last && last.role === 'assistant' && last.errorMessage) {
+              record.pi.agent.state.messages = messages.slice(0, -1);
+            }
+            await this.applyModel(record.pi, next);
+            // agent_end / agent_settled from the failed attempt cleared the
+            // active run id; the run continues, so put it back before the
+            // retried turn streams.
+            record.activeRunId = runId;
+            this.emit({
+              type: 'model.auto-switched',
+              projectId: record.desktop.projectId,
+              sessionId: record.desktop.id,
+              runId,
+              sequence: ++record.sequence,
+              timestamp: Date.now(),
+              from: current,
+              to: next,
+              reason,
+            });
+            continue;
+          }
+
+          const message = error instanceof Error ? error.message : String(error);
+          this.emit({
+            type: 'run.failed',
+            projectId: record.desktop.projectId,
+            sessionId: record.desktop.id,
+            runId,
+            sequence: ++record.sequence,
+            timestamp: Date.now(),
+            error: agentError('PI_PROMPT_FAILED', message, {
+              retryable: /api key|auth|credential|login|no model/i.test(message),
+            }),
+          });
+          if (record.activeRunId === runId) {
+            record.activeRunId = null;
+          }
+          return;
+        }
       }
     } finally {
       clearTimeout(timeoutHandle);
@@ -1075,6 +1185,16 @@ export class PiAgentRuntime implements AgentRuntime {
     });
 
     for (const desktopEvent of mapped) {
+      if (desktopEvent.type === 'run.completed' && record.sessionMode === 'plan') {
+        // Plan Mode (#3): capture the draft for the Approve → Build flow. The
+        // renderer needs it as data on the completion event, not a hidden
+        // transcript read, so the plan card can be rebuilt after a rerender.
+        const planText = extractLastAssistantText(
+          record.pi.messages as Array<{ role?: string; content?: unknown }>,
+        );
+        this.emit({ ...desktopEvent, ...(planText ? { planText } : {}) });
+        continue;
+      }
       this.emit(desktopEvent);
     }
 
@@ -1177,6 +1297,44 @@ export class PiAgentRuntime implements AgentRuntime {
     await session.setModel(model);
   }
 
+  /**
+   * Apply a picker selection. Auto records the mode without pinning a concrete
+   * model — the role-based resolution happens at send time.
+   */
+  private async applyModelSelection(
+    record: SessionRecord,
+    selection: ModelSelection,
+  ): Promise<void> {
+    if (selection.kind === 'model') {
+      record.modelSelection = selection;
+      await this.applyModel(record.pi, selection);
+      return;
+    }
+    record.modelSelection = { kind: 'auto' };
+  }
+
+  private async autoRouter(record: SessionRecord): Promise<AutoModelRouter> {
+    const models = await this.listModels();
+    return new AutoModelRouter(record.autoConfig ?? undefined, models);
+  }
+
+  private async resolveAutoModel(
+    record: SessionRecord,
+    role: AutoRole,
+  ): Promise<ModelRef | null> {
+    const router = await this.autoRouter(record);
+    return router.resolve(role);
+  }
+
+  private async nextAutoModel(
+    record: SessionRecord,
+    role: AutoRole,
+    current: ModelRef,
+  ): Promise<ModelRef | null> {
+    const router = await this.autoRouter(record);
+    return router.next(role, current);
+  }
+
   private async ensureRuntime(projectPath: string): Promise<void> {
     if (this.modelRuntime) return;
     if (this.initPromise) {
@@ -1264,6 +1422,22 @@ function flattenMessageText(content: unknown): string {
     })
     .join('')
     .trim();
+}
+
+/**
+ * Last assistant prose in a transcript — the plan draft a Plan-mode run
+ * produced. Returns null when the run ended without any assistant text.
+ */
+export function extractLastAssistantText(
+  messages: Array<{ role?: string; content?: unknown }>,
+): string | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || message.role !== 'assistant') continue;
+    const text = flattenMessageText(message.content);
+    if (text) return text;
+  }
+  return null;
 }
 
 const MAX_HISTORY_ARG_SUMMARY = 200;

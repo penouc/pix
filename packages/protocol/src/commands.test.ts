@@ -76,9 +76,24 @@ describe('Provider settings IPC commands', () => {
     expect(
       parseIpcCommand({
         method: 'settings.setDefaultModel',
-        params: { model: { providerId: 'openai', modelId: 'gpt-5' } },
+        params: { model: { kind: 'model', providerId: 'openai', modelId: 'gpt-5' } },
       }).success,
     ).toBe(true);
+    // Auto (#21) is a first-class selection, not a sentinel provider id.
+    expect(
+      parseIpcCommand({
+        method: 'settings.setDefaultModel',
+        params: { model: { kind: 'auto' } },
+      }).success,
+    ).toBe(true);
+    // The pre-#21 bare ModelRef shape is rejected so a stale renderer cannot
+    // silently pin a model the runtime treats as unset.
+    expect(
+      parseIpcCommand({
+        method: 'settings.setDefaultModel',
+        params: { model: { providerId: 'openai', modelId: 'gpt-5' } },
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects empty Provider credentials', () => {
@@ -86,6 +101,32 @@ describe('Provider settings IPC commands', () => {
       parseIpcCommand({
         method: 'provider.saveApiKey',
         params: { providerId: 'openai', apiKey: '' },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('Auto model routing IPC commands', () => {
+  it('round-trips the configurable fallback chain', () => {
+    const get = parseIpcCommand({ method: 'settings.getAutoModel' });
+    expect(get.success).toBe(true);
+    const set = parseIpcCommand({
+      method: 'settings.setAutoModel',
+      params: {
+        config: {
+          defaultKey: 'openai/gpt-4o-mini',
+          planKey: 'anthropic/claude-sonnet-4-5',
+          fallbackKeys: ['openai/gpt-4o-mini', 'deepseek/deepseek-chat'],
+        },
+      },
+    });
+    expect(set.success).toBe(true);
+    // Keys are non-empty strings; format is resolved (and unresolvable keys
+    // skipped) by the runtime, not rejected here.
+    expect(
+      parseIpcCommand({
+        method: 'settings.setAutoModel',
+        params: { config: { fallbackKeys: [''] } },
       }).success,
     ).toBe(false);
   });

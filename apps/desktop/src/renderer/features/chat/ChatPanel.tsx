@@ -154,6 +154,7 @@ export function ChatPanel({
   const usage = useAgentStreamStore((s) => s.usage);
   const isCompacting = useAgentStreamStore((s) => s.isCompacting);
   const model = useAgentStreamStore((s) => s.model);
+  const pendingPlan = useAgentStreamStore((s) => s.pendingPlan);
   const startedAt = useAgentStreamStore((s) => s.startedAt);
   const approval = useAgentStreamStore((s) => s.approval);
   const error = useAgentStreamStore((s) => s.error);
@@ -797,6 +798,27 @@ export function ChatPanel({
     }
   }
 
+  async function approvePlan() {
+    if (!pendingPlan || !session || running) return;
+    const planText = pendingPlan.text;
+    useAgentStreamStore.setState({ pendingPlan: null });
+    try {
+      // Approve → Build (#3): leave the read-only toolset, then inject the
+      // plan as the first message of a new Build run on the same session.
+      await setSessionMode.mutateAsync('build');
+      await sendDirect(`I approve this plan — proceed with it now:\n\n${planText}`);
+    } catch (err) {
+      console.error(err);
+      useAgentStreamStore.setState({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  function discardPlan() {
+    useAgentStreamStore.setState({ pendingPlan: null });
+  }
+
   const tone = statusTone(status);
   const runTitle = blank ? 'New task' : (session?.title ?? 'No session');
   const runMeta = blank
@@ -901,6 +923,13 @@ export function ChatPanel({
                         <MessageCopyButton content={entry.message.content} />
                       ) : null}
                     </div>
+                  ) : entry.message.role === 'system' ? (
+                    <div
+                      key={`message:${entry.message.id}`}
+                      className="self-center rounded-full bg-foreground/[0.05] px-3 py-1 text-center text-[11px] leading-snug text-muted"
+                    >
+                      {entry.message.content}
+                    </div>
                   ) : (
                     <AssistantMessage
                       key={`message:${entry.message.id}`}
@@ -1001,6 +1030,40 @@ export function ChatPanel({
                       onClick={() => void resolveApproval('deny')}
                     >
                       Deny
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Plan Mode draft (#3): the read-only run produced a plan; offer
+                  Approve → Build so the plan becomes the first message of a
+                  Build run. */}
+              {pendingPlan && pendingPlan.sessionId === session?.id && !blank && !running ? (
+                <div className="rounded-[20px] border border-accent/30 bg-accent-100 px-4 py-4">
+                  <div className="flex items-center gap-2.5">
+                    <ListOrdered className="h-4 w-4 flex-none text-accent-800" />
+                    <div className="flex-1 text-sm font-bold text-accent-900">
+                      Plan ready
+                    </div>
+                    <Badge tone="outline" className="text-[10.5px]">
+                      Plan Mode
+                    </Badge>
+                  </div>
+                  <p className="mt-1.5 pl-[26px] text-[12.5px] leading-normal text-accent-900/80">
+                    The run stayed read-only. Approving switches to Build and sends the
+                    plan as the first instruction — nothing else has been written.
+                  </p>
+                  <pre className="output-pre mt-2 ml-[26px] max-h-56 overflow-y-auto rounded-[14px] px-3.5 py-2.5 text-[12px] leading-relaxed whitespace-pre-wrap">
+                    {pendingPlan.text}
+                  </pre>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 pl-[26px]">
+                    <Button size="sm" onClick={() => void approvePlan()}>
+                      <Check className="h-3.5 w-3.5" />
+                      Approve &amp; start Build
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={discardPlan}>
+                      <X className="h-3.5 w-3.5" />
+                      Discard
                     </Button>
                   </div>
                 </div>

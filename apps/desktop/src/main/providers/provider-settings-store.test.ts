@@ -47,7 +47,15 @@ describe('ProviderSettingsStore', () => {
     const store = new ProviderSettingsStore(encPath);
     store.saveApiKey('openai', 'sk-test');
     store.setUiFlag('autoUpdate', false);
-    store.setDefaultModel({ providerId: 'openai', modelId: 'gpt-4.1' });
+    store.setDefaultModel({
+      kind: 'model',
+      providerId: 'openai',
+      modelId: 'gpt-4.1',
+    });
+    store.setAutoModelConfig({
+      planKey: 'anthropic/claude-sonnet-4-5',
+      fallbackKeys: ['openai/gpt-4o-mini', 'deepseek/deepseek-chat'],
+    });
 
     const encRaw = readFileSync(encPath, 'utf8');
     expect(encRaw).not.toContain('sk-test');
@@ -55,15 +63,44 @@ describe('ProviderSettingsStore', () => {
 
     const prefs = JSON.parse(readFileSync(prefsPath, 'utf8')) as {
       uiFlags: { autoUpdate: boolean };
-      defaultModel: { providerId: string; modelId: string };
+      defaultModel: { kind: string; providerId: string; modelId: string };
+      autoModel: { planKey: string; fallbackKeys: string[] };
     };
     expect(prefs.uiFlags.autoUpdate).toBe(false);
-    expect(prefs.defaultModel).toEqual({ providerId: 'openai', modelId: 'gpt-4.1' });
+    expect(prefs.defaultModel).toEqual({
+      kind: 'model',
+      providerId: 'openai',
+      modelId: 'gpt-4.1',
+    });
+    expect(prefs.autoModel.fallbackKeys).toEqual(['openai/gpt-4o-mini', 'deepseek/deepseek-chat']);
 
     const reloaded = new ProviderSettingsStore(encPath);
     expect(reloaded.getApiKeys()).toEqual([{ providerId: 'openai', apiKey: 'sk-test' }]);
     expect(reloaded.getUiFlags().autoUpdate).toBe(false);
-    expect(reloaded.getDefaultModel()).toEqual({ providerId: 'openai', modelId: 'gpt-4.1' });
+    expect(reloaded.getDefaultModel()).toEqual({
+      kind: 'model',
+      providerId: 'openai',
+      modelId: 'gpt-4.1',
+    });
+    expect(reloaded.getAutoModelConfig().planKey).toBe('anthropic/claude-sonnet-4-5');
+    expect(reloaded.getAutoModelConfig().fallbackKeys).toEqual([
+      'openai/gpt-4o-mini',
+      'deepseek/deepseek-chat',
+    ]);
+  });
+
+  it('normalizes a legacy bare ModelRef default to the ModelSelection shape', () => {
+    writeFileSync(
+      prefsPath,
+      JSON.stringify({ defaultModel: { providerId: 'openai', modelId: 'gpt-4.1' } }),
+      'utf8',
+    );
+    const store = new ProviderSettingsStore(encPath);
+    expect(store.getDefaultModel()).toEqual({
+      kind: 'model',
+      providerId: 'openai',
+      modelId: 'gpt-4.1',
+    });
   });
 
   it('reads uiFlags without requiring the encrypted blob', () => {

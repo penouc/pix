@@ -102,6 +102,71 @@ describe('agent stream scoping', () => {
     expect(useAgentStreamStore.getState().tools[0]?.toolName).toBe('read');
   });
 
+  it('captures a Plan Mode draft for Approve → Build and clears it on reset', () => {
+    useAgentStreamStore.getState().applyEvent({
+      type: 'run.completed',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      runId: 'agent-run-1',
+      sequence: 2,
+      timestamp: Date.now(),
+      summary: 'plan run finished',
+      planText: '1. read auth\n2. propose a fix',
+    } as DesktopAgentEvent);
+
+    expect(useAgentStreamStore.getState().pendingPlan).toMatchObject({
+      text: '1. read auth\n2. propose a fix',
+      runId: 'agent-run-1',
+      sessionId: 'agent-session',
+    });
+
+    // A build-mode completion (no planText) must not wipe a prior plan.
+    useAgentStreamStore.getState().applyEvent({
+      type: 'run.completed',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      runId: 'agent-run-2',
+      sequence: 3,
+      timestamp: Date.now(),
+    } as DesktopAgentEvent);
+    expect(useAgentStreamStore.getState().pendingPlan).not.toBeNull();
+
+    useAgentStreamStore.getState().resetSessionView();
+    expect(useAgentStreamStore.getState().pendingPlan).toBeNull();
+  });
+
+  it('updates the active model when Auto routing switches mid-run', () => {
+    useAgentStreamStore.getState().applyEvent({
+      type: 'run.started',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      runId: 'agent-run-1',
+      sequence: 1,
+      timestamp: Date.now(),
+      model: { providerId: 'openai', modelId: 'gpt-4o-mini' },
+    } as DesktopAgentEvent);
+
+    useAgentStreamStore.getState().applyEvent({
+      type: 'model.auto-switched',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      runId: 'agent-run-1',
+      sequence: 2,
+      timestamp: Date.now(),
+      from: { providerId: 'openai', modelId: 'gpt-4o-mini' },
+      to: { providerId: 'anthropic', modelId: 'claude-sonnet-4-5' },
+      reason: 'rate-limit',
+    } as DesktopAgentEvent);
+
+    expect(useAgentStreamStore.getState().model).toEqual({
+      providerId: 'anthropic',
+      modelId: 'claude-sonnet-4-5',
+    });
+    expect(useAgentStreamStore.getState().status).toBe('running');
+    // The switch is visible in the thread as a system note.
+    expect(useAgentStreamStore.getState().messages.some((m) => m.role === 'system')).toBe(true);
+  });
+
   it('keeps queued messages when the current run is cancelled', () => {
     useAgentStreamStore.getState().addQueuedMessage('continue with the tests');
     useAgentStreamStore.getState().applyEvent({

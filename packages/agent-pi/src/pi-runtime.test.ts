@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveRunTimeoutMs, writeToolPath } from './pi-runtime.js';
+import { extractLastAssistantText, resolveRunTimeoutMs, writeToolPath } from './pi-runtime.js';
 
 describe('Pi write tool bridge', () => {
   it('forwards only write/edit paths from SDK-shaped tool calls', () => {
@@ -25,5 +25,42 @@ describe('resolveRunTimeoutMs', () => {
     expect(resolveRunTimeoutMs('30000')).toBe(30_000);
     expect(resolveRunTimeoutMs('60000')).toBe(60_000);
     expect(resolveRunTimeoutMs('2147483648')).toBe(2_147_483_647);
+  });
+});
+
+describe('extractLastAssistantText', () => {
+  it('returns the newest assistant prose across text and typed parts', () => {
+    const messages = [
+      { role: 'user', content: 'plan the migration' },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'draft one' },
+          { type: 'toolCall', id: 't1', name: 'read', arguments: { path: 'a.ts' } },
+        ],
+      },
+      { role: 'toolResult', toolCallId: 't1', content: '...' },
+      { role: 'assistant', content: '1. inspect\n2. propose' },
+    ];
+    expect(extractLastAssistantText(messages)).toBe('1. inspect\n2. propose');
+  });
+
+  it('flattens a plain string assistant message', () => {
+    expect(
+      extractLastAssistantText([{ role: 'assistant', content: 'just a string' }]),
+    ).toBe('just a string');
+  });
+
+  it('returns null when the transcript has no assistant prose', () => {
+    expect(extractLastAssistantText([])).toBeNull();
+    expect(
+      extractLastAssistantText([{ role: 'user', content: 'hi' }, { role: 'assistant', content: '' }]),
+    ).toBeNull();
+    expect(
+      extractLastAssistantText([
+        { role: 'user', content: 'hi' },
+        { role: 'assistant', content: [{ type: 'thinking', thinking: 'only thinking' }] },
+      ]),
+    ).toBeNull();
   });
 });

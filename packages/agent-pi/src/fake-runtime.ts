@@ -14,6 +14,7 @@ import type {
   ContextUsage,
   DesktopAgentEvent,
   ModelRef,
+  ModelSelection,
   RunRef,
   ThinkingLevel,
   ThinkingLevelState,
@@ -35,6 +36,8 @@ const ALL_THINKING_LEVELS: ThinkingLevel[] = [
 interface SessionRecord extends AgentSession {
   projectPath: string;
   model?: ModelRef;
+  /** Concrete model or Auto; Auto resolves to the fake demo at run time. */
+  modelSelection: ModelSelection;
   thinkingLevel: ThinkingLevel;
   /** First user prompt — used for offline auto-naming. */
   firstUserText?: string;
@@ -69,6 +72,7 @@ export class FakeAgentRuntime implements AgentRuntime {
   async createSession(options: CreateSessionOptions): Promise<AgentSession> {
     this.assertAlive();
     const now = Date.now();
+    const selection: ModelSelection = options.model ?? { kind: 'auto' };
     const session: SessionRecord = {
       id: options.id ?? randomUUID(),
       projectId: options.projectId,
@@ -76,7 +80,8 @@ export class FakeAgentRuntime implements AgentRuntime {
       title: options.title ?? 'New session',
       createdAt: options.createdAt ?? now,
       updatedAt: options.updatedAt ?? now,
-      model: options.model,
+      model: selection.kind === 'model' ? selection : undefined,
+      modelSelection: selection,
       thinkingLevel: 'medium',
       contextTokens: 12_000,
       autoCompactionEnabled: true,
@@ -115,7 +120,17 @@ export class FakeAgentRuntime implements AgentRuntime {
     };
     this.runs.set(runId, active);
     session.updatedAt = Date.now();
-    if (input.model) session.model = input.model;
+    if (input.model) {
+      session.modelSelection = input.model;
+      session.model =
+        input.model.kind === 'model'
+          ? { providerId: input.model.providerId, modelId: input.model.modelId }
+          : { providerId: 'fake', modelId: 'fake-demo' };
+    } else if (session.modelSelection.kind === 'auto' && !session.model) {
+      // Auto resolves to the first runnable fake model, mirroring the real
+      // runtime's derived default.
+      session.model = { providerId: 'fake', modelId: 'fake-demo' };
+    }
     session.firstUserText ??= input.text.trim();
 
     void this.simulateRun(active, session, input.text);
@@ -151,13 +166,17 @@ export class FakeAgentRuntime implements AgentRuntime {
     this.runs.delete(runId);
   }
 
-  async setModel(sessionId: string, model: ModelRef): Promise<void> {
+  async setModel(sessionId: string, model: ModelSelection): Promise<void> {
     this.assertAlive();
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw new DomainError(agentError('SESSION_NOT_FOUND', `Session ${sessionId} not found`));
     }
-    session.model = model;
+    session.modelSelection = model;
+    session.model =
+      model.kind === 'model'
+        ? { providerId: model.providerId, modelId: model.modelId }
+        : { providerId: 'fake', modelId: 'fake-demo' };
     session.updatedAt = Date.now();
   }
 
@@ -508,6 +527,9 @@ export class FakeAgentRuntime implements AgentRuntime {
       sequence: bump(),
       timestamp: Date.now(),
       summary: 'Fake run completed',
+      // Plan Mode (#3): mirror the real runtime so the Approve → Build flow
+      // is exercisable with the offline runtime.
+      ...(session.sessionMode === 'plan' ? { planText: reply } : {}),
     });
 
     this.runs.delete(run.runId);

@@ -59,7 +59,7 @@ export function StatusPanel() {
         method: 'agent.setModel',
         params: {
           sessionId: session.id,
-          model: { providerId, modelId },
+          model: { kind: 'model', providerId, modelId },
         },
       });
     } catch (err) {

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { ProjectSummary, SessionSummary } from '@pi-desktop/protocol';
 
 import { invoke } from '@/lib/ipc';
+import { AUTO_MODEL_KEY } from '@/features/models/model-key';
 import { useAgentStreamStore } from '@/stores/agent-stream-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 
@@ -51,13 +52,23 @@ export function useCreateTask() {
        * nothing to target — so without this the first run of a new task silently
        * ignored the model you had just selected.
        */
-      if (selectedModel.includes('/')) {
+      if (selectedModel === AUTO_MODEL_KEY) {
+        // Auto (#21): the runtime resolves the model per role and falls back
+        // through the chain on rate limits.
+        await invoke({
+          method: 'agent.setModel',
+          params: { sessionId: created.id, model: { kind: 'auto' } },
+        }).catch((err) => console.error('[createTask] setModel failed', err));
+      } else if (selectedModel.includes('/')) {
         const [providerId, ...rest] = selectedModel.split('/');
         const modelId = rest.join('/');
         if (providerId && modelId) {
           await invoke({
             method: 'agent.setModel',
-            params: { sessionId: created.id, model: { providerId, modelId } },
+            params: {
+              sessionId: created.id,
+              model: { kind: 'model', providerId, modelId },
+            },
           }).catch((err) => console.error('[createTask] setModel failed', err));
         }
       }

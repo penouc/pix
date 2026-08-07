@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronLeft, ChevronRight, Search, Star } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Search, Sparkles, Star } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -6,7 +6,7 @@ import type { ModelInfo, Settings } from '@pi-desktop/protocol';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { modelKey } from '@/features/models/model-key';
+import { AUTO_MODEL_KEY, modelKey } from '@/features/models/model-key';
 import {
   groupByProvider,
   matchesModel,
@@ -51,13 +51,19 @@ export function ModelPicker() {
   const rootRef = useRef<HTMLDivElement>(null);
 
   const active = models.find((model) => modelKey(model) === selectedModel);
+  const autoActive = selectedModel === AUTO_MODEL_KEY;
 
   // Last-used model (settings default) → favourite → first runnable model.
   useEffect(() => {
     if (!models.length || selectedModel || saved.isLoading) return;
-    const savedKey = saved.data?.defaultModel
-      ? `${saved.data.defaultModel.providerId}/${saved.data.defaultModel.modelId}`
-      : '';
+    if (saved.data?.defaultModel?.kind === 'auto') {
+      setSelectedModel(AUTO_MODEL_KEY);
+      return;
+    }
+    const savedKey =
+      saved.data?.defaultModel && saved.data.defaultModel.kind === 'model'
+        ? `${saved.data.defaultModel.providerId}/${saved.data.defaultModel.modelId}`
+        : '';
     const fromSaved = savedKey ? models.find((model) => modelKey(model) === savedKey) : undefined;
     const preferred =
       fromSaved ?? models.find((model) => favorites.has(modelKey(model))) ?? models[0]!;
@@ -99,25 +105,44 @@ export function ModelPicker() {
     // Remember globally so the next launch and new tasks reopen on this model.
     void invoke({
       method: 'settings.setDefaultModel',
-      params: { model: ref },
+      params: { model: { kind: 'model', ...ref } },
     })
       .then(() => void queryClient.invalidateQueries({ queryKey: ['settings.get'] }))
       .catch(console.error);
     if (!session) return;
     void invoke({
       method: 'agent.setModel',
-      params: { sessionId: session.id, model: ref },
+      params: { sessionId: session.id, model: { kind: 'model', ...ref } },
     }).catch(console.error);
     void queryClient.invalidateQueries({ queryKey: ['agent.getThinkingLevel', session.id] });
   }
 
-  const label = active
-    ? active.displayName
-    : isLoading
-      ? 'loading models…'
-      : models.length
-        ? 'choose a model'
-        : 'no provider configured';
+  /** Auto (#21): the runtime picks per role and falls back on rate limits. */
+  function chooseAuto() {
+    setSelectedModel(AUTO_MODEL_KEY);
+    setOpen(false);
+    setQuery('');
+    setProvider(null);
+    void invoke({ method: 'settings.setDefaultModel', params: { model: { kind: 'auto' } } })
+      .then(() => void queryClient.invalidateQueries({ queryKey: ['settings.get'] }))
+      .catch(console.error);
+    if (!session) return;
+    void invoke({
+      method: 'agent.setModel',
+      params: { sessionId: session.id, model: { kind: 'auto' } },
+    }).catch(console.error);
+    void queryClient.invalidateQueries({ queryKey: ['agent.getThinkingLevel', session.id] });
+  }
+
+  const label = autoActive
+    ? 'Auto'
+    : active
+      ? active.displayName
+      : isLoading
+        ? 'loading models…'
+        : models.length
+          ? 'choose a model'
+          : 'no provider configured';
 
   return (
     <div ref={rootRef} className="relative inline-flex">
@@ -216,6 +241,29 @@ export function ModelPicker() {
                   </>
                 ) : (
                   <>
+                    {/* Auto (#21) is a first-class choice, pinned above favourites. */}
+                    <button
+                      type="button"
+                      onClick={chooseAuto}
+                      className={cn(
+                        'flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3 py-[7px] text-left hover:bg-foreground/[0.06]',
+                        autoActive && 'bg-accent-soft',
+                      )}
+                    >
+                      <span className="grid h-5 w-5 flex-none place-items-center rounded-full bg-accent/15">
+                        <Sparkles className="h-3 w-3 text-accent-700" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[12.5px]">Auto</span>
+                        <span className="block truncate text-[10.5px] text-muted">
+                          Picks per task &amp; mode — cheap for chores, strong for Plan, falls back
+                          on rate limits
+                        </span>
+                      </span>
+                      {autoActive ? (
+                        <Check className="h-3.5 w-3.5 flex-none text-accent" />
+                      ) : null}
+                    </button>
                     {favorited.length ? (
                       <>
                         <GroupLabel>Favourites</GroupLabel>

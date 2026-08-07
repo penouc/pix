@@ -40,6 +40,12 @@ export const DesktopAgentEventSchema = z.discriminatedUnion('type', [
     .object({
       type: z.literal('run.completed'),
       summary: z.string().optional(),
+      /**
+       * Plan Mode (#3): the draft the agent produced in the read-only run,
+       * i.e. the last assistant prose. Present only when the completed run
+       * happened under Plan Mode, so the UI can offer Approve → Build.
+       */
+      planText: z.string().max(100_000).optional(),
     })
     .merge(EventScopeSchema),
   z
@@ -186,5 +192,19 @@ export const DesktopAgentEventSchema = z.discriminatedUnion('type', [
     tokensBefore: z.number().nonnegative().optional(),
     estimatedTokensAfter: z.number().nonnegative().optional(),
   }),
+  /**
+   * Auto model routing (#21) abandoned the current model mid-run and retried
+   * the same user turn on the next model in the chain. Run-scoped so the
+   * renderer can badge the switch on the run it belongs to.
+   */
+  z
+    .object({
+      type: z.literal('model.auto-switched'),
+      from: ModelRefSchema,
+      to: ModelRefSchema,
+      /** Why the previous model was abandoned. */
+      reason: z.enum(['rate-limit', 'timeout', 'quota', 'error']),
+    })
+    .merge(EventScopeSchema),
 ]);
 export type DesktopAgentEvent = z.infer<typeof DesktopAgentEventSchema>;

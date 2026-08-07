@@ -28,6 +28,37 @@ describe('DesktopAgentEventSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('accepts run.completed with a Plan Mode draft', () => {
+    expect(
+      DesktopAgentEventSchema.safeParse({
+        type: 'run.completed',
+        projectId: 'p1',
+        sessionId: 's1',
+        runId: 'r1',
+        sequence: 4,
+        timestamp: Date.now(),
+        summary: 'Pi agent run completed',
+        planText: '1. read the auth module\n2. propose a fix',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts model.auto-switched with scope and reason', () => {
+    expect(
+      DesktopAgentEventSchema.safeParse({
+        type: 'model.auto-switched',
+        projectId: 'p1',
+        sessionId: 's1',
+        runId: 'r1',
+        sequence: 3,
+        timestamp: Date.now(),
+        from: { providerId: 'openai', modelId: 'gpt-4o-mini' },
+        to: { providerId: 'anthropic', modelId: 'claude-sonnet-4-5' },
+        reason: 'rate-limit',
+      }).success,
+    ).toBe(true);
+  });
+
   it('accepts session.updated without a run scope', () => {
     const result = DesktopAgentEventSchema.safeParse({
       type: 'session.updated',

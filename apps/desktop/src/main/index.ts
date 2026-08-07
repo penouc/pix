@@ -18,6 +18,7 @@ import { DesktopDatabase } from '@pi-desktop/database';
 import {
   IpcChannels,
   errResult,
+  modelSelectionFromRef,
   okResult,
   parseDesktopAgentEvent,
   parseIpcCommand,
@@ -607,6 +608,7 @@ function getAutomationScheduler(): AutomationScheduler {
         projectPath: project.path,
         title: `Automation: ${automation.name}`,
         model: getProviderSettings().getDefaultModel(),
+        autoModel: getProviderSettings().getAutoModelConfig(),
       });
       await db.sessions.put({
         id: runtimeSession.id,
@@ -892,6 +894,13 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         getProviderSettings().setDefaultModel(cmd.params.model);
         return okResult({ defaultModel: cmd.params.model });
       }
+      case 'settings.getAutoModel': {
+        return okResult(getProviderSettings().getAutoModelConfig());
+      }
+      case 'settings.setAutoModel': {
+        getProviderSettings().setAutoModelConfig(cmd.params.config);
+        return okResult(cmd.params.config);
+      }
       case 'session.create': {
         const project = projects.get(cmd.params.projectId);
         if (!project) {
@@ -905,13 +914,15 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         }
         let model = cmd.params.model ?? getProviderSettings().getDefaultModel();
         if (!model && typeof agent.pickDefaultModel === 'function') {
-          model = (await agent.pickDefaultModel()) ?? undefined;
+          const fallback = await agent.pickDefaultModel();
+          if (fallback) model = modelSelectionFromRef(fallback);
         }
         const runtimeSession = await agent.createSession({
           projectId: project.id,
           projectPath: project.path,
           title: cmd.params.title,
           model,
+          autoModel: getProviderSettings().getAutoModelConfig(),
         });
         const summary = await sessions.put({
           id: runtimeSession.id,
@@ -994,6 +1005,7 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
             text: cmd.params.text,
             images: cmd.params.images,
             model: cmd.params.model,
+            autoModel: getProviderSettings().getAutoModelConfig(),
           });
         } catch (error) {
           await db.checkpoints.discard(checkpoint.id);
@@ -1050,6 +1062,7 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
           text: cmd.params.text,
           images: cmd.params.images,
           model: cmd.params.model,
+          autoModel: getProviderSettings().getAutoModelConfig(),
         });
         persistSessionMessage(
           cmd.params.sessionId,

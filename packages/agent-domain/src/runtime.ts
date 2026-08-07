@@ -1,10 +1,12 @@
 import type {
   ApprovalDecision,
+  AutoModelConfig,
   CompactionResult,
   ContextUsage,
   DesktopAgentEvent,
   InputImage,
   ModelRef,
+  ModelSelection,
   RunRef,
   StoredMessage,
   ThinkingLevel,
@@ -23,7 +25,10 @@ export interface CreateSessionOptions {
   title?: string;
   createdAt?: number;
   updatedAt?: number;
-  model?: ModelRef;
+  /** Concrete model or Auto. Omitted = Auto. */
+  model?: ModelSelection;
+  /** Auto routing policy (role pins + fallback chain) from Settings. */
+  autoModel?: AutoModelConfig;
 }
 
 export interface AgentSession {
@@ -37,7 +42,10 @@ export interface AgentSession {
 export interface AgentInput {
   text: string;
   images?: InputImage[];
-  model?: ModelRef;
+  /** Concrete model or Auto. Omitted = keep the session's current selection. */
+  model?: ModelSelection;
+  /** Auto routing policy, refreshed from Settings on every send. */
+  autoModel?: AutoModelConfig;
 }
 
 export type AgentEventListener = (event: DesktopAgentEvent) => void;
@@ -136,7 +144,7 @@ export interface AgentRuntime {
   steer(runId: string, input: AgentInput): Promise<void>;
   followUp(sessionId: string, input: AgentInput): Promise<void>;
   abort(runId: string): Promise<void>;
-  setModel(sessionId: string, model: ModelRef): Promise<void>;
+  setModel(sessionId: string, model: ModelSelection): Promise<void>;
   setThinkingLevel?(sessionId: string, level: ThinkingLevel): Promise<void>;
   getThinkingLevel?(sessionId: string): Promise<ThinkingLevelState>;
   /** Live context-window occupancy (Pi `getContextUsage`). */

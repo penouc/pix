@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { safeStorage } from 'electron';
 
-import type { ModelRef } from '@pi-desktop/protocol';
+import type { AutoModelConfig, ModelSelection } from '@pi-desktop/protocol';
 
 interface StoredProvider {
   providerId: string;
@@ -54,7 +54,10 @@ interface EncryptedSettings {
  * safeStorage blob just to draw the window.
  */
 interface PlainPreferences {
-  defaultModel?: ModelRef;
+  /** Concrete model or Auto; legacy prefs (a bare ModelRef) are normalized on read. */
+  defaultModel?: ModelSelection;
+  /** Auto routing policy (#21): role pins + ordered fallback chain. */
+  autoModel?: AutoModelConfig;
   uiFlags?: Partial<UiFlags>;
   defaultApprovalMode?: StoredApprovalMode;
   /**
@@ -111,8 +114,12 @@ export class ProviderSettingsStore {
     });
   }
 
-  getDefaultModel(): ModelRef | undefined {
+  getDefaultModel(): ModelSelection | undefined {
     return this.readPrefs().defaultModel;
+  }
+
+  getAutoModelConfig(): AutoModelConfig {
+    return this.readPrefs().autoModel ?? {};
   }
 
   getUiFlags(): UiFlags {
@@ -141,10 +148,22 @@ export class ProviderSettingsStore {
     this.writePrefs(prefs);
   }
 
-  setDefaultModel(model: ModelRef | undefined): void {
+  setDefaultModel(model: ModelSelection | undefined): void {
     const prefs = this.readPrefs();
     if (model) prefs.defaultModel = model;
     else delete prefs.defaultModel;
+    this.writePrefs(prefs);
+  }
+
+  setAutoModelConfig(config: AutoModelConfig): void {
+    const prefs = this.readPrefs();
+    prefs.autoModel = {
+      ...(config.defaultKey ? { defaultKey: config.defaultKey } : {}),
+      ...(config.planKey ? { planKey: config.planKey } : {}),
+      ...(Array.isArray(config.fallbackKeys) && config.fallbackKeys.length
+        ? { fallbackKeys: [...new Set(config.fallbackKeys)] }
+        : {}),
+    };
     this.writePrefs(prefs);
   }
 
@@ -189,7 +208,10 @@ export class ProviderSettingsStore {
     try {
       const parsed = JSON.parse(readFileSync(this.prefsPath, 'utf8')) as Partial<PlainPreferences>;
       return {
-        ...(parsed.defaultModel ? { defaultModel: parsed.defaultModel } : {}),
+        ...(parsed.defaultModel
+          ? { defaultModel: normalizeModelSelection(parsed.defaultModel) ?? { kind: 'auto' } }
+          : {}),
+        ...(parsed.autoModel ? { autoModel: parsed.autoModel } : {}),
         ...(parsed.uiFlags ? { uiFlags: parsed.uiFlags } : {}),
         ...(parsed.defaultApprovalMode
           ? { defaultApprovalMode: parsed.defaultApprovalMode }
@@ -236,7 +258,10 @@ export class ProviderSettingsStore {
       }
 
       const prefs: PlainPreferences = {
-        ...(parsed.defaultModel ? { defaultModel: parsed.defaultModel } : {}),
+        ...(parsed.defaultModel
+          ? { defaultModel: normalizeModelSelection(parsed.defaultModel) ?? { kind: 'auto' } }
+          : {}),
+        ...(parsed.autoModel ? { autoModel: parsed.autoModel } : {}),
         ...(parsed.uiFlags ? { uiFlags: parsed.uiFlags } : {}),
         ...(parsed.defaultApprovalMode
           ? { defaultApprovalMode: parsed.defaultApprovalMode }
@@ -255,4 +280,24 @@ export class ProviderSettingsStore {
       // Leave the blob alone; read paths already fall back to empty.
     }
   }
+}
+
+/**
+ * Accepts the new ModelSelection shape and the legacy ModelRef shape (pre-#21
+ * prefs stored `{ providerId, modelId }` without a `kind` tag). Anything else
+ * reads as undefined so callers can fall back to Auto.
+ */
+function normalizeModelSelection(value: unknown): ModelSelection | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const rec = value as Record<string, unknown>;
+  if (rec.kind === 'auto') return { kind: 'auto' };
+  if (
+    typeof rec.providerId === 'string' &&
+    rec.providerId.length > 0 &&
+    typeof rec.modelId === 'string' &&
+    rec.modelId.length > 0
+  ) {
+    return { kind: 'model', providerId: rec.providerId, modelId: rec.modelId };
+  }
+  return undefined;
 }

@@ -9,6 +9,7 @@ import { SearchableSelect } from '@/components/SearchableSelect';
 import { useOfferedModels } from '@/features/models/use-offered-models';
 import { FavoriteModelsSection } from '@/features/models/FavoriteModelsSection';
 import { SubscriptionsSection } from '@/features/settings/SubscriptionsSection';
+import { AutoModelSection } from '@/features/settings/AutoModelSection';
 import { invoke } from '@/lib/ipc';
 
 interface SettingsPanelProps {
@@ -52,6 +53,10 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 
   useEffect(() => {
     if (model || !settings.data?.defaultModel) return;
+    if (settings.data.defaultModel.kind === 'auto') {
+      setModel('auto');
+      return;
+    }
     setModel(`${settings.data.defaultModel.providerId}/${settings.data.defaultModel.modelId}`);
   }, [model, settings.data?.defaultModel]);
 
@@ -123,12 +128,18 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 
   async function saveDefaultModel(value: string) {
     setModel(value);
-    const [pid, ...modelParts] = value.split('/');
-    const mid = modelParts.join('/');
-    await invoke({
-      method: 'settings.setDefaultModel',
-      params: { model: pid && mid ? { providerId: pid, modelId: mid } : undefined },
-    });
+    if (value === 'auto') {
+      await invoke({ method: 'settings.setDefaultModel', params: { model: { kind: 'auto' } } });
+    } else {
+      const [pid, ...modelParts] = value.split('/');
+      const mid = modelParts.join('/');
+      await invoke({
+        method: 'settings.setDefaultModel',
+        params: {
+          model: pid && mid ? { kind: 'model', providerId: pid, modelId: mid } : undefined,
+        },
+      });
+    }
     await queryClient.invalidateQueries({ queryKey: ['settings'] });
   }
 
@@ -348,6 +359,11 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           </div>
           <SearchableSelect
             options={[
+              {
+                value: 'auto',
+                label: 'Auto — the app picks (recommended)',
+                sublabel: 'per-task routing, Plan tier, fallback chain',
+              },
               { value: '', label: 'Choose automatically' },
               ...offered.map((entry) => ({
                 value: `${entry.providerId}/${entry.modelId}`,
@@ -360,6 +376,11 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
             placeholder="Choose automatically"
             searchPlaceholder="Search models…"
           />
+        </section>
+
+        {/* ── Auto model routing (#21) ── */}
+        <section className="space-y-3 border-t border-border pt-6">
+          <AutoModelSection />
         </section>
       </div>
     </div>

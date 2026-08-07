@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { IpcCommandSchema, ModelRefSchema } from './commands.js';
+import { IpcCommandSchema, ModelSelectionSchema } from './commands.js';
 import { DesktopAgentEventSchema } from './events.js';
 
 export const IpcSuccessSchema = z.object({
@@ -359,7 +359,7 @@ export const AuditSummarySchema = z.object({
 export type AuditSummary = z.infer<typeof AuditSummarySchema>;
 
 export const SettingsSchema = z.object({
-  defaultModel: ModelRefSchema.optional(),
+  defaultModel: ModelSelectionSchema.optional(),
   uiFlags: UiFlagsSchema.optional(),
 });
 export type Settings = z.infer<typeof SettingsSchema>;

@@ -6,10 +6,59 @@ export const ModelRefSchema = z.object({
 });
 export type ModelRef = z.infer<typeof ModelRefSchema>;
 
+/**
+ * What a picker can pin for a session: a concrete model, or **Auto**.
+ *
+ * Auto is the #21 capability — the runtime picks the model per task and role,
+ * and on rate-limit / timeout / quota failures advances down a fallback chain
+ * instead of failing the run. It is deliberately a discriminated union rather
+ * than a sentinel provider id (`providerId: 'auto'` would collide with a real
+ * provider the moment one is named "auto").
+ */
+export const ModelSelectionSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('model'),
+    providerId: z.string().min(1),
+    modelId: z.string().min(1),
+  }),
+  z.object({ kind: z.literal('auto') }),
+]);
+export type ModelSelection = z.infer<typeof ModelSelectionSchema>;
+
+/** Wrap a concrete ref in the selection shape. */
+export function modelSelectionFromRef(ref: ModelRef): ModelSelection {
+  return { kind: 'model', providerId: ref.providerId, modelId: ref.modelId };
+}
+
+/**
+ * Ordered Auto-model routing policy, configured in Settings and applied by the
+ * runtime on every Auto run.
+ *
+ * Keys are `providerId/modelId` strings so they reuse the picker's identity.
+ * Every field is optional: absent entries fall back to the derived ordering
+ * (cheapest runnable first for the default role, reasoning-capable first for
+ * the plan role). `fallbackKeys` is what makes #21's fallback chain
+ * user-configurable.
+ */
+export const AutoModelConfigSchema = z.object({
+  /** `providerId/modelId` pinned to the default (cheap / fast) role. */
+  defaultKey: z.string().min(1).optional(),
+  /** `providerId/modelId` pinned to the plan (strong / reasoning) role. */
+  planKey: z.string().min(1).optional(),
+  /** Ordered `providerId/modelId` fallback chain after the role pick. */
+  fallbackKeys: z.array(z.string().min(1)).max(50).optional(),
+});
+export type AutoModelConfig = z.infer<typeof AutoModelConfigSchema>;
+
+export const SetAutoModelConfigInputSchema = z.object({
+  config: AutoModelConfigSchema,
+});
+export type SetAutoModelConfigInput = z.infer<typeof SetAutoModelConfigInputSchema>;
+
 export const CreateSessionInputSchema = z.object({
   projectId: z.string().min(1),
   title: z.string().optional(),
-  model: ModelRefSchema.optional(),
+  model: ModelSelectionSchema.optional(),
 });
 export type CreateSessionInput = z.infer<typeof CreateSessionInputSchema>;
 
@@ -69,7 +118,7 @@ export const SendMessageInputSchema = z
   .object({
     ...MessageContentShape,
     sessionId: z.string().min(1),
-    model: ModelRefSchema.optional(),
+    model: ModelSelectionSchema.optional(),
   })
   .superRefine(validateMessageContent);
 export type SendMessageInput = z.infer<typeof SendMessageInputSchema>;
@@ -88,7 +137,7 @@ export const FollowUpInputSchema = z
   .object({
     ...MessageContentShape,
     sessionId: z.string().min(1),
-    model: ModelRefSchema.optional(),
+    model: ModelSelectionSchema.optional(),
   })
   .superRefine(validateMessageContent);
 export type FollowUpInput = z.infer<typeof FollowUpInputSchema>;
@@ -121,7 +170,7 @@ export const RemoveProviderInputSchema = z.object({
 export type RemoveProviderInput = z.infer<typeof RemoveProviderInputSchema>;
 
 export const SetDefaultModelInputSchema = z.object({
-  model: ModelRefSchema.optional(),
+  model: ModelSelectionSchema.optional(),
 });
 export type SetDefaultModelInput = z.infer<typeof SetDefaultModelInputSchema>;
 
@@ -146,7 +195,7 @@ export type ArchiveSessionInput = z.infer<typeof ArchiveSessionInputSchema>;
 
 export const SetModelInputSchema = z.object({
   sessionId: z.string().min(1),
-  model: ModelRefSchema,
+  model: ModelSelectionSchema,
 });
 export type SetModelInput = z.infer<typeof SetModelInputSchema>;
 
@@ -470,6 +519,8 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('provider.remove'), params: RemoveProviderInputSchema }),
   z.object({ method: z.literal('settings.get'), params: z.object({}).optional() }),
   z.object({ method: z.literal('settings.setDefaultModel'), params: SetDefaultModelInputSchema }),
+  z.object({ method: z.literal('settings.getAutoModel'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('settings.setAutoModel'), params: SetAutoModelConfigInputSchema }),
   z.object({ method: z.literal('session.create'), params: CreateSessionInputSchema }),
   z.object({
     method: z.literal('session.list'),

@@ -139,6 +139,11 @@ interface AgentStreamState {
   isCompacting: boolean;
   model: { providerId: string; modelId: string } | null;
   startedAt: number | null;
+  /**
+   * Draft captured from a Plan-mode run (#3). Non-null until the user
+   * approves (→ inject as first message of a Build run) or discards it.
+   */
+  pendingPlan: { text: string; runId: string; sessionId: string } | null;
   lastUserText: string | null;
   lastUserImages: InputImage[];
   errorRetryable: boolean;
@@ -242,6 +247,18 @@ const nextOrder = () => (timelineSeq += 1);
  */
 function toThinkingId(messageId: string): string {
   return messageId.startsWith('think-') ? messageId : `think-${messageId}`;
+}
+
+function autoSwitchMessage(
+  event: Extract<DesktopAgentEvent, { type: 'model.auto-switched' }>,
+): string {
+  const reasonLabel: Record<string, string> = {
+    'rate-limit': 'rate limited',
+    timeout: 'timed out',
+    quota: 'hit its quota',
+    error: 'errored',
+  };
+  return `${event.from.modelId} ${reasonLabel[event.reason] ?? 'failed'} — Auto switched to ${event.to.modelId} and retried this turn.`;
 }
 
 /** Pending message.delta chunks coalesced per animation frame (plan §14.1). */
@@ -356,6 +373,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
   isCompacting: false,
   model: null,
   startedAt: null,
+  pendingPlan: null,
   lastUserText: null,
   lastUserImages: [],
   errorRetryable: false,
@@ -539,6 +557,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       thinkings,
       status: 'idle',
       activeRunId: null,
+      pendingPlan: null,
       usage: get().activeSessionId
         ? { contextTokens: get().contextTokensBySession[get().activeSessionId!] }
         : null,
@@ -561,6 +580,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       tokenRateSamples: [],
       model: null,
       startedAt: null,
+      pendingPlan: null,
       lastUserText: null,
       lastUserImages: [],
       errorRetryable: false,
@@ -681,6 +701,11 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
           status: 'completed',
           activeRunId: event.runId,
           lastSequenceByRun,
+          // Plan Mode (#3): hold the draft until the user approves or
+          // discards it; build-mode completions leave a prior plan alone.
+          pendingPlan: event.planText
+            ? { text: event.planText, runId: event.runId, sessionId: event.sessionId }
+            : state.pendingPlan,
           messages: get().messages.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
           thinkings: get().thinkings.map((t) => (t.streaming ? { ...t, streaming: false } : t)),
         });
@@ -705,6 +730,26 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
           lastSequenceByRun,
           messages: get().messages.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
           thinkings: get().thinkings.map((t) => (t.streaming ? { ...t, streaming: false } : t)),
+        });
+        break;
+      case 'model.auto-switched':
+        // Auto routing (#21) retried the same turn on the next model in the
+        // chain. Keep the run alive, update the active model, and leave a
+        // visible system note in the thread.
+        set({
+          status: 'running',
+          lastSequenceByRun,
+          model: { providerId: event.to.providerId, modelId: event.to.modelId },
+          messages: [
+            ...get().messages,
+            {
+              id: `auto-switch-${event.runId}-${event.sequence}`,
+              role: 'system',
+              content: autoSwitchMessage(event),
+              streaming: false,
+              order: nextOrder(),
+            },
+          ],
         });
         break;
       case 'message.delta': {
