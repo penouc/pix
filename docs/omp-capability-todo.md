@@ -152,3 +152,4 @@
 | 2026-08-07 | **#9 标记完成**：Steer 队列 UI 此前已接线；测试=`partial` |
 | 2026-08-07 | **#7 完成**：Usage 页增加项目筛选（`usage.projects` IPC + 下拉）；测试=`unit` |
 | 2026-08-07 | **#10 完成**：Session Fork（`agent.forkPoints`/`agent.forkSession` + 工具栏 Fork 菜单 + 回卷）；测试=`unit` |
+| 2026-08-07 | 发版 **v0.2.3**；同步 `omp-capability-borrow.md` 紧急池勾选（#1–10、#21 → `[x]`） |

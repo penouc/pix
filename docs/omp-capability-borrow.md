@@ -9,22 +9,22 @@
 
 ## 紧急可选池（21 条）
 
-**已确认：原 20 条 + #21 Auto 模型请求全部纳入。** 完成状态请只在 [`omp-capability-todo.md`](./omp-capability-todo.md) 更新，避免两处打架。
+**已确认：原 20 条 + #21 Auto 模型请求全部纳入。** 权威进度在 [`omp-capability-todo.md`](./omp-capability-todo.md)；下表勾选与之同步（Batch A 已完成 11/21）。
 
 下表保留编号与说明；排序按「个人日用紧急度 × 投入产出」。
 
 | # | 能力 | 为什么紧急 | 路径 | 粗估 |
 |---|------|------------|------|------|
-| 1 | [ ] **Compaction + 上下文用量** | 长任务撞 context 是最常见崩法 | 接线 Pi | S |
-| 2 | [ ] **Thinking level 控制** | 主路径已承诺，未接线 | 接线 Pi | S |
-| 3 | [ ] **Plan Mode（只读再动手）** | 防 Agent 一上来就改错方向 | 接线 Pi | M |
-| 4 | [ ] **Composer `@` 文件引用** | UI 已承诺；选文件进上下文 | 接线 Pi / Main 搜索 | M |
-| 5 | [ ] **Composer `$` skills** | Skills 发现已有，Composer 触发不齐 | 接线 Pi | S |
-| 6 | [ ] **Composer `/` 命令** | 同上；compact/model 等入口 | 接线 Pi | S |
-| 7 | [ ] **成本 / token / cache 面板** | 看不见花销就无法控成本 | 接线 Pi | S |
-| 8 | [ ] **Auto-retry 可见化** | Provider 抖动时像卡住 | 接线 Pi | S |
-| 9 | [ ] **Steer 队列 UI** | IPC 有、策略/队列展示弱 | 接线 Pi | S |
-| 10 | [ ] **Session Fork** | 试探分支不毁主线对话 | 接线 Pi | M |
+| 1 | [x] **Compaction + 上下文用量** | 长任务撞 context 是最常见崩法 | 接线 Pi | S |
+| 2 | [x] **Thinking level 控制** | 会话可选 thinking 深度 | 接线 Pi | S |
+| 3 | [x] **Plan Mode（只读再动手）** | 防 Agent 一上来就改错方向 | 接线 Pi | M |
+| 4 | [x] **Composer `@` 文件引用** | UI 已承诺；选文件进上下文 | 接线 Pi / Main 搜索 | M |
+| 5 | [x] **Composer `$` skills** | Skills 发现已有，Composer 触发不齐 | 接线 Pi | S |
+| 6 | [x] **Composer `/` 命令** | 同上；compact/model 等入口 | 接线 Pi | S |
+| 7 | [x] **成本 / token / cache 面板** | 看不见花销就无法控成本 | 接线 Pi | S |
+| 8 | [x] **Auto-retry 可见化** | Provider 抖动时像卡住 | 接线 Pi | S |
+| 9 | [x] **Steer 队列 UI** | IPC 有、策略/队列展示弱 | 接线 Pi | S |
+| 10 | [x] **Session Fork** | 试探分支不毁主线对话 | 接线 Pi | M |
 | 11 | [ ] **Todo 步骤清单工具** | 长任务可跟踪；Pi 无内置 | 自建 `defineTool` | S |
 | 12 | [ ] **Ask 结构化追问** | 减少瞎猜；可点选回答 | 自建 | S |
 | 13 | [ ] **Hashline / 锚点编辑** | OMP 最大编辑收益；少坏 patch | 移植思路 | M–L |
@@ -35,7 +35,7 @@
 | 18 | [ ] **web_search（单 provider 起步）** | 查文档/报错；须走外部副作用审批 | 自建 | M |
 | 19 | [ ] **MCP 桥（经权限管线）** | 扩展工具生态；官方 Pi 无 MCP | 自建（原 M11） | L |
 | 20 | [ ] **跨会话 memory / learn→skill** | 项目习惯沉淀；可先 SQLite | 自建 / 移植思路 | M |
-| 21 | [ ] **Auto 模型请求** | 不钉死单一模型；代选 + 角色路由 + 失败换模 | 接线 Pi + 产品化 | M |
+| 21 | [x] **Auto 模型请求** | 不钉死单一模型；代选 + 角色路由 + 失败换模 | 接线 Pi + 产品化 | M |
 
 **路径图例：** 接线 Pi = 官方 SDK 已有，主要做 IPC/UI；自建 = Desktop 工具或服务；移植思路 = 学 OMP，不搬其 Bun/natives 栈。  
 **粗估：** S ≈ 数天；M ≈ 1–2 周；L ≈ 2 周+。
