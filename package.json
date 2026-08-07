@@ -1,7 +1,7 @@
 {
   "name": "pi-desktop",
   "private": true,
-  "version": "0.2.3",
+  "version": "0.3.0",
   "type": "module",
   "description": "Local desktop coding agent powered by Pi Agent SDK",
   "packageManager": "pnpm@10.15.0",
