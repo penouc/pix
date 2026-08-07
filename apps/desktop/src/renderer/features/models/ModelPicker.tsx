@@ -137,12 +137,12 @@ export function ModelPicker() {
   const label = autoActive
     ? 'Auto'
     : active
-      ? active.displayName
+      ? shortModelLabel(active)
       : isLoading
-        ? 'loading models…'
+        ? 'loading…'
         : models.length
-          ? 'choose a model'
-          : 'no provider configured';
+          ? 'model'
+          : 'no model';
 
   return (
     <div ref={rootRef} className="relative inline-flex">
@@ -152,12 +152,18 @@ export function ModelPicker() {
         aria-expanded={open}
         disabled={!models.length && !isLoading}
         onClick={() => setOpen((value) => !value)}
-        title={active ? `${active.providerId} / ${active.modelId}` : 'Choose a model'}
-        className="flex h-[26px] max-w-[220px] cursor-pointer items-center gap-1.5 rounded-full border-0 bg-foreground/[0.06] pr-2 pl-2.5 text-[12px] hover:bg-foreground/[0.1]"
+        title={
+          autoActive
+            ? 'Auto — picks per task & mode'
+            : active
+              ? `${active.displayName} · ${active.providerId}/${active.modelId}`
+              : 'Choose a model'
+        }
+        className="flex h-[26px] max-w-[140px] cursor-pointer items-center gap-1.5 rounded-full border-0 bg-foreground/[0.06] pr-2 pl-2.5 text-[12px] hover:bg-foreground/[0.1]"
       >
         <span
           className="h-1.5 w-1.5 flex-none rounded-full"
-          style={{ background: active ? 'var(--color-accent-2)' : 'var(--color-neutral-400)' }}
+          style={{ background: active || autoActive ? 'var(--color-accent-2)' : 'var(--color-neutral-400)' }}
         />
         <span className="min-w-0 truncate">{label}</span>
         <ChevronDown className="h-3 w-3 flex-none text-muted" />
@@ -394,4 +400,14 @@ function formatTokens(tokens: number): string {
   if (tokens >= 1_000_000) return `${Math.round(tokens / 100_000) / 10}M`;
   if (tokens >= 1_000) return `${Math.round(tokens / 1_000)}K`;
   return String(tokens);
+}
+
+/** Footer trigger label: prefer a short readable name over the full marketing string. */
+function shortModelLabel(model: ModelInfo): string {
+  const name = model.displayName.trim();
+  // Dated ids like "claude-opus-4-20250514" → drop the trailing YYYYMMDD.
+  const undated = name.replace(/[-_]?\d{8}$/, '');
+  const candidate = undated.length >= 4 ? undated : name;
+  if (candidate.length <= 22) return candidate;
+  return `${candidate.slice(0, 20)}…`;
 }

@@ -98,10 +98,10 @@ export function ThinkingLevelPicker({ disabled }: { disabled?: boolean }) {
         disabled={disabled || setLevel.isPending}
         onClick={() => setOpen((value) => !value)}
         title={`Thinking depth: ${active.word} — ${active.detail}`}
-        className="flex h-[26px] cursor-pointer items-center gap-1.5 rounded-full border-0 bg-foreground/[0.06] pr-2 pl-2.5 text-[12px] hover:bg-foreground/[0.1]"
+        className="flex h-[26px] max-w-[112px] cursor-pointer items-center gap-1 rounded-full border-0 bg-foreground/[0.06] pr-1.5 pl-2 text-[11.5px] hover:bg-foreground/[0.1]"
       >
         <Brain className="h-3.5 w-3.5 flex-none text-muted" />
-        <span>{active.word}</span>
+        <span className="min-w-0 truncate">{active.word}</span>
         <ChevronDown className="h-3 w-3 flex-none text-muted" />
       </button>
 

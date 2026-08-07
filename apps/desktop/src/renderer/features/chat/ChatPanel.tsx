@@ -54,7 +54,6 @@ import { createPortal } from 'react-dom';
 import { SearchableSelect } from '@/components/SearchableSelect';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Segmented } from '@/components/ui/segmented';
 import { ApprovalModePicker } from '@/features/chat/ApprovalModePicker';
 import { SessionModePicker } from '@/features/chat/SessionModePicker';
 import {
@@ -1630,9 +1629,9 @@ export function ChatPanel({
                     ? 'Choose a project above — you can start typing now…'
                     : running
                       ? queueMode === 'queue'
-                        ? 'Type a message to queue… (⏎ to Queue)'
-                        : 'Type to interject mid-run… (⏎ to Steer)'
-                      : 'Describe the change you want — @ for a file, $ for a skill'
+                        ? 'Type a message to queue… (⏎ queues · ⇧⏎ newline)'
+                        : 'Type to interject mid-run… (⏎ steers · ⇧⏎ newline)'
+                      : 'Describe the change — @ file, $ skill, / command · ⏎ send'
                 }
                 // The model can begin streaming before the initial send IPC
                 // finishes its checkpoint bookkeeping. Once a run is visible,
@@ -1720,45 +1719,49 @@ export function ChatPanel({
                 />
                 <ThinkingLevelPicker disabled={!project || sending} />
                 <span className="min-w-0 flex-1" />
-                {running ? (
-                  <Segmented
-                    aria-label="Queue mode"
-                    size="sm"
-                    options={[
-                      { value: 'queue', label: 'Queue' },
-                      { value: 'steer', label: 'Steer' },
-                    ]}
-                    value={queueMode}
-                    onChange={(val) => setQueueMode(val as 'queue' | 'steer')}
-                  />
-                ) : null}
                 <ContextUsageRing
                   used={usage?.contextTokens}
                   capacity={contextWindow}
                   compacting={isCompacting || compacting}
+                  canCompact={Boolean(session) && !running && !isCompacting && !compacting}
+                  onCompact={() => void compactSession()}
                 />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-[30px] px-2 text-[11px] text-muted"
-                  disabled={!session || running || isCompacting || compacting}
-                  title="Compact conversation context to free window space"
-                  onClick={() => void compactSession()}
-                >
-                  Compact
-                </Button>
                 {/* Model choice belongs with the send button: it is a property of the
                     message you are about to send, not of the window. */}
                 <ModelPicker />
-                <span className="flex-none font-mono text-[11px] text-muted">↵</span>
+                {running ? (
+                  <button
+                    type="button"
+                    aria-label={
+                      queueMode === 'queue'
+                        ? 'Queue mode — click to switch to Steer'
+                        : 'Steer mode — click to switch to Queue'
+                    }
+                    title={
+                      queueMode === 'queue'
+                        ? 'Queue: send waits until the run finishes. Click for Steer.'
+                        : 'Steer: send interjects mid-run. Click for Queue.'
+                    }
+                    onClick={() =>
+                      setQueueMode((mode) => (mode === 'queue' ? 'steer' : 'queue'))
+                    }
+                    className={cn(
+                      'inline-flex h-[30px] w-[30px] flex-none cursor-pointer items-center justify-center rounded-full border-0 text-muted',
+                      queueMode === 'steer'
+                        ? 'bg-accent/15 text-accent-700 hover:bg-accent/25'
+                        : 'bg-foreground/[0.06] hover:bg-foreground/[0.1]',
+                    )}
+                  >
+                    {queueMode === 'queue' ? (
+                      <ListPlus className="h-3.5 w-3.5" />
+                    ) : (
+                      <Zap className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                ) : null}
                 <Button
-                  size={running && queueMode === 'queue' ? 'sm' : 'icon'}
-                  className={cn(
-                    running && queueMode === 'queue'
-                      ? 'h-[30px] px-3 gap-1.5 font-semibold text-[12px] bg-accent text-accent-foreground hover:bg-accent/90'
-                      : 'h-[30px] w-[30px] flex-none',
-                  )}
+                  size="icon"
+                  className="h-[30px] w-[30px] flex-none"
                   disabled={
                     !project ||
                     (!draft.trim() && !attachments.length) ||
@@ -1776,10 +1779,7 @@ export function ChatPanel({
                 >
                   {running ? (
                     queueMode === 'queue' ? (
-                      <>
-                        <ListPlus className="h-3.5 w-3.5" />
-                        <span>Queue</span>
-                      </>
+                      <ListPlus className="h-3.5 w-3.5" />
                     ) : (
                       <Zap className="h-3.5 w-3.5" />
                     )
@@ -2154,10 +2154,14 @@ function ContextUsageRing({
   used,
   capacity,
   compacting = false,
+  canCompact = false,
+  onCompact,
 }: {
   used?: number;
   capacity?: number;
   compacting?: boolean;
+  canCompact?: boolean;
+  onCompact?: () => void;
 }) {
   // Providers report usage only after a model call finishes. Before the first
   // response there is still useful information: the whole context window is
@@ -2165,6 +2169,8 @@ function ContextUsageRing({
   const remaining = capacity ? Math.max(0, capacity - (used ?? 0)) : 0;
   const remainingRatio = capacity ? Math.min(1, Math.max(0, remaining / capacity)) : 0;
   const remainingPercent = Math.round(remainingRatio * 100);
+  const usedRatio = capacity && used != null ? Math.min(1, Math.max(0, used / capacity)) : 0;
+  const pressure = usedRatio >= 0.7;
   const radius = 10;
   const circumference = 2 * Math.PI * radius;
   const label = compacting
@@ -2175,49 +2181,110 @@ function ContextUsageRing({
         ? `${formatTokens(capacity)} context available · 100% remaining`
         : `${formatTokens(remaining)} context remaining of ${formatTokens(capacity)} · ${remainingPercent}%`;
 
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(open, [rootRef, menuRef], close);
+  const anchor = useAnchorAbove(open, rootRef, 'right');
+
   return (
-    <div
-      role="img"
-      aria-label={label}
-      title={label}
-      className={cn(
-        'relative flex h-[30px] w-[30px] flex-none items-center justify-center text-[8px] font-semibold tabular-nums text-muted',
-        compacting && 'animate-pulse text-warning',
-      )}
-    >
-      <svg
-        className="absolute inset-0 h-full w-full -rotate-90"
-        viewBox="0 0 28 28"
-        aria-hidden="true"
+    <div ref={rootRef} className="relative inline-flex flex-none">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={label}
+        title={`${label}${canCompact ? ' · click for Compact' : ''}`}
+        onClick={() => setOpen((value) => !value)}
+        className={cn(
+          'relative flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-full border-0 bg-transparent p-0 text-[8px] font-semibold tabular-nums text-muted hover:bg-foreground/[0.06]',
+          compacting && 'animate-pulse text-warning',
+          pressure && !compacting && 'text-warning',
+        )}
       >
-        <circle
-          cx="14"
-          cy="14"
-          r={radius}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          className="text-foreground/10"
-        />
-        <circle
-          cx="14"
-          cy="14"
-          r={radius}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - remainingRatio)}
-          className={cn(
-            'text-accent transition-[stroke-dashoffset] duration-300',
-            remainingPercent <= 10 && 'text-danger',
-            remainingPercent > 10 && remainingPercent <= 25 && 'text-warning',
-            compacting && 'text-warning',
-          )}
-        />
-      </svg>
-      <span>{compacting ? '…' : capacity ? remainingPercent : '—'}</span>
+        <svg
+          className="absolute inset-0 h-full w-full -rotate-90"
+          viewBox="0 0 28 28"
+          aria-hidden="true"
+        >
+          <circle
+            cx="14"
+            cy="14"
+            r={radius}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            className="text-foreground/10"
+          />
+          <circle
+            cx="14"
+            cy="14"
+            r={radius}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference * (1 - remainingRatio)}
+            className={cn(
+              'text-accent transition-[stroke-dashoffset] duration-300',
+              remainingPercent <= 10 && 'text-danger',
+              remainingPercent > 10 && remainingPercent <= 25 && 'text-warning',
+              compacting && 'text-warning',
+            )}
+          />
+        </svg>
+        <span>{compacting ? '…' : capacity ? remainingPercent : '—'}</span>
+      </button>
+
+      {open && anchor
+        ? createPortal(
+            <div
+              ref={menuRef}
+              role="menu"
+              style={anchor}
+              className="z-50 w-[240px] overflow-hidden rounded-[16px] border border-border bg-background shadow-[var(--shadow-lg)]"
+            >
+              <div className="border-b border-border px-3.5 py-2.5">
+                <p className="m-0 text-[12px] font-semibold">Context window</p>
+                <p className="m-0 mt-0.5 text-[11px] leading-snug text-muted">{label}</p>
+              </div>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={!canCompact || !onCompact}
+                title={
+                  !onCompact || !canCompact
+                    ? compacting
+                      ? 'Already compacting…'
+                      : 'Compact is available when a task is idle'
+                    : 'Summarize older turns to free context space'
+                }
+                onClick={() => {
+                  if (!canCompact || !onCompact) return;
+                  setOpen(false);
+                  onCompact();
+                }}
+                className={cn(
+                  'flex w-full cursor-pointer items-start gap-2.5 border-0 bg-transparent px-3.5 py-2.5 text-left hover:bg-foreground/[0.06]',
+                  (!canCompact || !onCompact) && 'cursor-not-allowed opacity-45',
+                  pressure && canCompact && 'bg-warning/10',
+                )}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[12.5px] font-semibold">Compact</span>
+                  <span className="block text-[11px] leading-snug text-muted">
+                    {pressure
+                      ? 'Context is getting full — free space now'
+                      : 'Summarize earlier turns to reclaim tokens'}
+                  </span>
+                </span>
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
