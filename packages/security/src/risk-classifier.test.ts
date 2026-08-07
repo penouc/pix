@@ -87,4 +87,39 @@ describe('classifyRisk', () => {
     const t = tool('lsp_rename', { path: 'src/a.ts', symbol: 'x', newName: 'y' });
     expect(classifyRisk(t).level).toBe('workspace-write');
   });
+
+  // #16 / #17 / #18 / #19 / #20 — Batch D risk classes.
+  it.each(['git_status', 'git_diff', 'git_log'])('marks %s as safe', (name) => {
+    expect(classifyRisk(tool(name, {})).level).toBe('safe');
+  });
+
+  it('marks git_commit as workspace-write (local only, never push)', () => {
+    expect(classifyRisk(tool('git_commit', { message: 'fix: x' })).level).toBe('workspace-write');
+  });
+
+  it('marks web_search as external-side-effect', () => {
+    expect(classifyRisk(tool('web_search', { query: 'typescript' })).level).toBe(
+      'external-side-effect',
+    );
+  });
+
+  it('marks memory recall as safe and retain/forget as workspace-write', () => {
+    expect(classifyRisk(tool('memory', { action: 'recall' })).level).toBe('safe');
+    expect(classifyRisk(tool('memory', { action: 'retain', key: 'k', value: 'v' })).level).toBe(
+      'workspace-write',
+    );
+    expect(classifyRisk(tool('memory', { action: 'forget', key: 'k' })).level).toBe(
+      'workspace-write',
+    );
+  });
+
+  it('marks learn as workspace-write', () => {
+    expect(
+      classifyRisk(tool('learn', { name: 'foo', description: 'd', body: 'steps' })).level,
+    ).toBe('workspace-write');
+  });
+
+  it('marks mcp__* tools as sensitive', () => {
+    expect(classifyRisk(tool('mcp__fixture__echo', { text: 'hi' })).level).toBe('sensitive');
+  });
 });

@@ -39,27 +39,67 @@ export function classifyRisk(tool: NormalizedToolCall): RiskAssessment {
     case 'lsp_references':
     case 'todo':
     case 'ask':
+    case 'git_status':
+    case 'git_diff':
+    case 'git_log':
       // #11/#12: todo and ask only mutate in-session checklist/ask state; #13:
       // hash_lines only reads and hashes a file; #14: lsp_diagnostics and
-      // lsp_references only read — no filesystem writes, shell, or network —
-      // so all are safe like the read-only tools and never enter the queue.
+      // lsp_references only read; #16: structured git read tools — no
+      // filesystem writes, shell, or network — so all are safe and never enter
+      // the queue.
       if (!tool.escapesWorkspace && !tool.hitsProtectedPath) {
         level = 'safe';
         if (reasons.length === 0) reasons.push('Read-only tool inside workspace');
       }
       break;
+    case 'memory': {
+      // #20: recall is read-only; retain/forget write `.pi-desktop/agent/memory.json`.
+      const action =
+        tool.args && typeof tool.args === 'object' && 'action' in tool.args
+          ? String((tool.args as { action?: unknown }).action ?? '')
+          : '';
+      if (action === 'recall') {
+        if (!tool.escapesWorkspace && !tool.hitsProtectedPath) {
+          level = 'safe';
+          if (reasons.length === 0) reasons.push('Memory recall is read-only');
+        }
+      } else {
+        raise('workspace-write', 'Writes project memory notes');
+      }
+      break;
+    }
     case 'write':
     case 'edit':
     case 'apply_patch':
     case 'lsp_rename':
-      raise('workspace-write', 'Modifies workspace files');
+    case 'git_commit':
+    case 'learn':
+      raise(
+        'workspace-write',
+        tool.toolName === 'git_commit'
+          ? 'Stages and commits locally (never pushes)'
+          : tool.toolName === 'learn'
+            ? 'Writes a skill under .pi/skills'
+            : 'Modifies workspace files',
+      );
+      break;
+    case 'web_search':
+      // #18: network fetch — never rememberable as allow-session/project.
+      raise('external-side-effect', 'Fetches results from the public web');
       break;
     case 'bash':
     case 'shell':
       classifyBash(tool.command ?? '', raise);
       break;
     default:
-      raise('sensitive', `Unknown tool "${tool.toolName}" treated as sensitive`);
+      if (tool.toolName.startsWith('mcp__')) {
+        // #19: MCP tools are fail-closed to sensitive unless a server config
+        // narrows risk (handled at registration description; classifier stays
+        // conservative here because config is not on the NormalizedToolCall).
+        raise('sensitive', `MCP tool "${tool.toolName}" requires approval`);
+      } else {
+        raise('sensitive', `Unknown tool "${tool.toolName}" treated as sensitive`);
+      }
   }
 
   const rememberable = level === 'safe' || level === 'workspace-write' || level === 'sensitive';

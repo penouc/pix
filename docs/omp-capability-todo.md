@@ -39,14 +39,14 @@
 
 | 状态 | 数量 |
 |------|------|
-| 未开始 `[ ]` | 5 |
+| 未开始 `[ ]` | 0 |
 | 进行中 `[~]` | 0 |
-| 完成 `[x]` | 16 |
+| 完成 `[x]` | 21 |
 | 推迟 `[-]` | 0 |
 
-**进度：** 16 / 21  
+**进度：** 21 / 21  
 
-**已完成项测试：** #1 `partial` · #2 `partial` · #3 `unit` · #21 `unit` · #4 `unit` · #6 `unit` · #8 `unit` · #7 `unit` · #10 `unit` · #11 `unit` · #12 `unit` · #13 `unit` · #14 `unit` · #15 `unit`
+**已完成项测试：** #1 `partial` · #2 `partial` · #3 `unit` · #21 `unit` · #4 `unit` · #6 `unit` · #8 `unit` · #7 `unit` · #10 `unit` · #11 `unit` · #12 `unit` · #13 `unit` · #14 `unit` · #15 `unit` · #16 `unit` · #17 `unit` · #18 `unit` · #19 `unit` · #20 `unit`
 
 ---
 
@@ -104,11 +104,11 @@
 
 | # | 状态 | 测试 | 能力 | 路径 | 完成标准（验收） | 备注 |
 |---|------|------|------|------|------------------|------|
-| 16 | [ ] | — | 结构化 Git 工具 | 自建 | status/diff/hunk 类工具可用；与 Diff 面板数据可共享或一致 | |
-| 17 | [ ] | — | 智能拆 commit（需审批） | 移植思路 | 可提案多 commit；**须用户审批**；默认禁止 push | |
-| 18 | [ ] | — | web_search（单 provider） | 自建 | 至少一个搜索后端；默认 `external-side-effect` 审批 | |
-| 19 | [ ] | — | MCP 桥（经权限管线） | 自建 | MCP tools → customTools；未知工具 fail-closed；进程可随 abort 清理 | |
-| 20 | [ ] | — | memory / learn→skill | 自建 / 移植 | 项目范围可 retain/recall；可选把教训写成 skill；无云依赖起步 | |
+| 16 | [x] | unit | 结构化 Git 工具 | 自建 | status/diff/hunk 类工具可用；与 Diff 面板数据可共享或一致 | 实现：2026-08-07。`git_status` / `git_diff` / `git_log` 自定义工具（`execFile`，无 shell）；解析对齐 Diff 面板的 porcelain / numstat 思路。hunk 级查看走 `git_diff` 全量 patch（无独立 `git_hunk`）。风险 `safe`；Plan Mode 可用。**已测：** git-tools 单测 + risk/policy + session smoke。**未测：** 桌面手测真实模型调用 |
+| 17 | [x] | unit | 智能拆 commit（需审批） | 移植思路 | 可提案多 commit；**须用户审批**；默认禁止 push | 实现：2026-08-07。`git_commit`（本地 stage+commit，拒绝 push）；配合 `ask` 提案多 commit；风险 `workspace-write`；Plan Mode 阻断。**已测：** git-tools commit 单测 + risk/policy。**未测：** 桌面手测多 commit 审批流 |
+| 18 | [x] | unit | web_search（单 provider） | 自建 | 至少一个搜索后端；默认 `external-side-effect` 审批 | 实现：2026-08-07。`web_search`（DuckDuckGo HTML 起步）；风险 `external-side-effect`；Plan Mode 阻断。**已测：** web-search 单测 + risk/policy。**未测：** 桌面手测真实搜索 |
+| 19 | [x] | unit | MCP 桥（经权限管线） | 自建 | MCP tools → customTools；未知工具 fail-closed；进程可随 abort 清理 | 实现：2026-08-07。`.pi-desktop/mcp.json` → `McpBridge` stdio 客户端；工具名 `mcp__{server}__{tool}`；未知调用 fail-closed；`dispose` 关 client/子进程；风险 `sensitive`；Plan Mode 阻断。**已测：** mcp-bridge 单测 + fixture server + risk/policy。**未测：** 桌面手测真实 MCP server |
+| 20 | [x] | unit | memory / learn→skill | 自建 / 移植 | 项目范围可 retain/recall；可选把教训写成 skill；无云依赖起步 | 实现：2026-08-07。`memory`（retain/recall/forget → `.pi-desktop/agent/memory.json`）；`learn` 写 `.pi/skills`；recall=`safe`，其余 `workspace-write`；Plan 仅允许 recall。**已测：** memory-tools 单测 + risk/policy。**未测：** 桌面手测 |
 
 ---
 
@@ -127,10 +127,10 @@
 9. **#15** grep/glob ~~（已完成 · unit）~~
 10. **#13** Hashline ~~（已完成 · unit）~~
 11. **#14** LSP ~~（已完成 · unit）~~
-12. **#16–17** Git 工具与拆 commit
-13. **#18** web_search
-14. **#19** MCP
-15. **#20** memory / learn→skill
+12. **#16–17** Git 工具与拆 commit ~~（已完成 · unit）~~
+13. **#18** web_search ~~（已完成 · unit）~~
+14. **#19** MCP ~~（已完成 · unit）~~
+15. **#20** memory / learn→skill ~~（已完成 · unit）~~
 
 ---
 
@@ -159,3 +159,4 @@
 | 2026-08-07 | **#14 完成**：TS 进程内语言服务 LSP 工具（diagnostics/references/rename），rename 走 workspace-write 审批、Plan 阻断；测试=`unit` |
 | 2026-08-07 | **#15 完成**：修复 grep/find/ls 默认未启用（`createAgentSession` 全量工具白名单）+ `listActiveTools` 可见性；测试=`unit` |
 | 2026-08-07 | **审计修复**：#8 `willRetry` 不误发 completed；#11 listTodos SQLite 回落；#12 跨会话 ask 不孤儿；#15 Plan→Build 全量工具回退；#3 备注更正 Approve→Build 已接线 |
+| 2026-08-07 | **#16–20 完成（Batch D）**：Git 工具 + `git_commit`、`web_search`、MCP 桥、`memory`/`learn` 接入会话白名单与权限管线；进度 21/21；测试=`unit` |

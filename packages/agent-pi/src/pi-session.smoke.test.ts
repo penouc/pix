@@ -125,8 +125,22 @@ describe('first-class search + quality tools (#15 / #13 / #14)', () => {
         expect(tools).toContain(name);
       }
 
-      // #13/#14: our custom tools are registered too.
-      for (const name of ['todo', 'ask', 'hash_lines', 'lsp_diagnostics', 'lsp_references', 'lsp_rename']) {
+      // #13/#14/#16/#18/#20: custom tools are registered too.
+      for (const name of [
+        'todo',
+        'ask',
+        'hash_lines',
+        'lsp_diagnostics',
+        'lsp_references',
+        'lsp_rename',
+        'git_status',
+        'git_diff',
+        'git_log',
+        'git_commit',
+        'web_search',
+        'memory',
+        'learn',
+      ]) {
         expect(tools).toContain(name);
       }
 

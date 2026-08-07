@@ -49,10 +49,19 @@ import {
 } from './collab-tools.js';
 import { createAnchoredEditTool, createHashLinesTool } from './hashline-edit.js';
 import {
+  createGitCommitTool,
+  createGitDiffTool,
+  createGitLogTool,
+  createGitStatusTool,
+} from './git-tools.js';
+import {
   createLspDiagnosticsTool,
   createLspReferencesTool,
   createLspRenameTool,
 } from './lsp-tools.js';
+import { createLearnSkillTool, createMemoryTool } from './memory-tools.js';
+import { loadMcpConfig, McpBridge } from './mcp-bridge.js';
+import { createWebSearchTool } from './web-search.js';
 
 import {
   describeAuthSources,
@@ -106,6 +115,16 @@ const DEFAULT_SESSION_TOOLS = [
   'lsp_diagnostics',
   'lsp_references',
   'lsp_rename',
+  // #16 / #17
+  'git_status',
+  'git_diff',
+  'git_log',
+  'git_commit',
+  // #18
+  'web_search',
+  // #20
+  'memory',
+  'learn',
 ];
 
 export function writeToolPath(toolName: string, input: unknown): string | undefined {
@@ -172,6 +191,8 @@ interface SessionRecord {
   autoConfig: AutoModelConfig | null;
   /** #11/#12: this session's checklist + pending asks (todo / ask tools). */
   collab: CollaborationService;
+  /** #19: MCP bridge for this session (dispose kills child processes). */
+  mcpBridge: McpBridge | null;
 }
 
 /**
@@ -238,6 +259,12 @@ export class PiAgentRuntime implements AgentRuntime {
           : null;
       },
       persistence: this.todoPersistence,
+    });
+    // #19: optional MCP servers from `.pi-desktop/mcp.json`. Fail-closed —
+    // missing config or a dead server just means fewer tools.
+    const mcpBridge = new McpBridge({
+      servers: loadMcpConfig(options.projectPath),
+      projectPath: options.projectPath,
     });
     try {
       const resourceLoader = new DefaultResourceLoader({
@@ -331,6 +358,38 @@ export class PiAgentRuntime implements AgentRuntime {
               pi.registerTool(createLspRenameTool());
             },
           },
+          {
+            // #16 / #17 — structured git tools + local-only commit (never push).
+            name: 'pi-desktop-git',
+            factory: (pi) => {
+              pi.registerTool(createGitStatusTool());
+              pi.registerTool(createGitDiffTool());
+              pi.registerTool(createGitLogTool());
+              pi.registerTool(createGitCommitTool());
+            },
+          },
+          {
+            // #18 — DuckDuckGo web search (external-side-effect).
+            name: 'pi-desktop-web-search',
+            factory: (pi) => {
+              pi.registerTool(createWebSearchTool());
+            },
+          },
+          {
+            // #20 — project memory + learn→skill.
+            name: 'pi-desktop-memory',
+            factory: (pi) => {
+              pi.registerTool(createMemoryTool());
+              pi.registerTool(createLearnSkillTool());
+            },
+          },
+          {
+            // #19 — MCP bridge. Async: connect servers, register advertised tools.
+            name: 'pi-desktop-mcp',
+            factory: async (pi) => {
+              await mcpBridge.registerTools(pi);
+            },
+          },
         ],
       });
       await resourceLoader.reload();
@@ -343,11 +402,13 @@ export class PiAgentRuntime implements AgentRuntime {
         // #15: grep/find/ls are first-class search tools — the agent should
         // reach for them instead of bash. `tools` is an allowlist in the SDK,
         // so every tool we expose must be enumerated here (built-ins + the
-        // custom tools registered by the extension factories below).
-        tools: DEFAULT_SESSION_TOOLS,
+        // custom tools registered by the extension factories below). MCP tool
+        // names are dynamic and folded in after the bridge connects (#19).
+        tools: [...DEFAULT_SESSION_TOOLS, ...mcpBridge.toolNames()],
       });
       piSession = result.session;
     } catch (error) {
+      void mcpBridge.dispose().catch(() => undefined);
       throw new DomainError(
         agentError(
           'PI_SESSION_CREATE_FAILED',
@@ -393,6 +454,7 @@ export class PiAgentRuntime implements AgentRuntime {
       modelSelection: options.model ?? { kind: 'auto' },
       autoConfig: options.autoModel ?? null,
       collab,
+      mcpBridge,
     };
     recordHolder.value = record;
 
@@ -1175,6 +1237,7 @@ export class PiAgentRuntime implements AgentRuntime {
         }
         record.pi.abortBash();
         record.pi.dispose();
+        await record.mcpBridge?.dispose();
       } catch (error) {
         console.error('[PiAgentRuntime] dispose session error', error);
       }
@@ -1423,6 +1486,12 @@ export class PiAgentRuntime implements AgentRuntime {
       'hash_lines',
       'lsp_diagnostics',
       'lsp_references',
+      // #16: read-only git inspection is fine while planning.
+      'git_status',
+      'git_diff',
+      'git_log',
+      // #20: recall only — retain/forget are denied by policy in Plan Mode.
+      'memory',
     ];
     const BUILD_TOOLS = [...DEFAULT_SESSION_TOOLS];
 

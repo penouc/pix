@@ -232,4 +232,45 @@ describe('remembered rules', () => {
       expect(engine.evaluate(read, ctx).action).toBe('allow');
     }
   });
+
+  it('#16–20: Plan Mode allows read-only git/memory; denies commit/search/learn/mcp', () => {
+    const engine = new PolicyEngine({ defaultMode: 'auto-reads' });
+    engine.setSessionWorkMode('s1', 'plan');
+
+    for (const toolName of ['git_status', 'git_diff', 'git_log'] as const) {
+      const read = normalizeToolCall({
+        toolCallId: 'g',
+        toolName,
+        args: {},
+        workspaceRoot: workspace,
+      });
+      expect(engine.evaluate(read, ctx).action).toBe('allow');
+    }
+
+    const recall = normalizeToolCall({
+      toolCallId: 'm',
+      toolName: 'memory',
+      args: { action: 'recall' },
+      workspaceRoot: workspace,
+    });
+    expect(engine.evaluate(recall, ctx).action).toBe('allow');
+
+    for (const [toolName, args] of [
+      ['git_commit', { message: 'x' }],
+      ['web_search', { query: 'q' }],
+      ['learn', { name: 'n', description: 'd', body: 'b' }],
+      ['mcp__fixture__echo', { text: 'hi' }],
+      ['memory', { action: 'retain', key: 'k', value: 'v' }],
+    ] as const) {
+      const denied = normalizeToolCall({
+        toolCallId: 'x',
+        toolName,
+        args,
+        workspaceRoot: workspace,
+      });
+      const decision = engine.evaluate(denied, ctx);
+      expect(decision.action).toBe('deny');
+      if (decision.action === 'deny') expect(decision.message).toMatch(/Plan Mode/);
+    }
+  });
 });

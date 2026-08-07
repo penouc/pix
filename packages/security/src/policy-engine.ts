@@ -133,7 +133,7 @@ export class PolicyEngine {
 
     // Plan Mode fail-closed: even if a write tool somehow remains registered,
     // refuse mutations instead of queuing them for approval.
-    if (workMode === 'plan' && isPlanForbiddenTool(tool.toolName)) {
+    if (workMode === 'plan' && isPlanForbiddenTool(tool)) {
       return {
         action: 'deny',
         assessment: {
@@ -243,9 +243,9 @@ function requireApproval(tool: NormalizedToolCall, assessment: RiskAssessment): 
   };
 }
 
-function isPlanForbiddenTool(toolName: string): boolean {
-  const name = toolName.toLowerCase();
-  return (
+function isPlanForbiddenTool(tool: NormalizedToolCall): boolean {
+  const name = tool.toolName.toLowerCase();
+  if (
     name === 'write' ||
     name === 'edit' ||
     name === 'bash' ||
@@ -253,6 +253,22 @@ function isPlanForbiddenTool(toolName: string): boolean {
     name === 'apply_patch' ||
     name === 'applypatch' ||
     // #14: lsp_rename rewrites files, so it is a mutation like edit.
-    name === 'lsp_rename'
-  );
+    name === 'lsp_rename' ||
+    // #17/#18/#19/#20: mutating / external Batch D tools.
+    name === 'git_commit' ||
+    name === 'web_search' ||
+    name === 'learn' ||
+    name.startsWith('mcp__')
+  ) {
+    return true;
+  }
+  // #20: memory recall is fine in Plan; retain/forget write project files.
+  if (name === 'memory') {
+    const action =
+      tool.args && typeof tool.args === 'object' && 'action' in tool.args
+        ? String((tool.args as { action?: unknown }).action ?? '')
+        : '';
+    return action !== 'recall';
+  }
+  return false;
 }
