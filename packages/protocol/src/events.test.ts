@@ -137,6 +137,19 @@ describe('DesktopAgentEventSchema', () => {
 });
 
 describe('parseIpcCommand', () => {
+  it('accepts update.status with download progress', () => {
+    expect(
+      DesktopAgentEventSchema.safeParse({
+        type: 'update.status',
+        status: 'downloading',
+        currentVersion: '0.2.2',
+        version: '0.2.3',
+        progress: 42,
+        timestamp: Date.now(),
+      }).success,
+    ).toBe(true);
+  });
+
   it('accepts agent.sendMessage', () => {
     const result = parseIpcCommand({
       method: 'agent.sendMessage',

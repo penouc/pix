@@ -165,7 +165,12 @@ function getProviderSettings(): ProviderSettingsStore {
 }
 
 function getUpdates(): UpdateService {
-  updates ??= new UpdateService();
+  if (!updates) {
+    updates = new UpdateService();
+    updates.onChange((state) => {
+      broadcastEvent({ type: 'update.status', ...state, timestamp: Date.now() });
+    });
+  }
   return updates;
 }
 

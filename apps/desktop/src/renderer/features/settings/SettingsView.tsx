@@ -638,7 +638,9 @@ function UpdatesTab() {
       invoke<UpdateState>({ method }),
     onSuccess: (state) => queryClient.setQueryData(['update.status'], state),
   });
-  const state = action.data ?? updates.data;
+  // Live `update.status` events write the query cache directly; prefer that over
+  // a stale mutation result so download percent can move while invoke is pending.
+  const state = updates.data ?? action.data;
   const { flags, loading, setFlag } = useUiFlags();
   const busy = action.isPending || state?.status === 'checking' || state?.status === 'downloading';
   const primaryAction =
@@ -647,6 +649,9 @@ function UpdatesTab() {
       : state?.status === 'downloaded'
         ? { method: 'update.install' as const, label: 'Restart to install' }
         : { method: 'update.check' as const, label: busy ? 'Checking…' : 'Check for updates' };
+  const progress = state?.progress;
+  const showProgress =
+    state?.status === 'downloading' || (state?.status === 'downloaded' && progress != null);
 
   return (
     <>
@@ -674,11 +679,34 @@ function UpdatesTab() {
             disabled={busy || state?.status === 'unsupported'}
             onClick={() => action.mutate(primaryAction.method)}
           >
-            {state?.status === 'unsupported' ? 'Packaged app only' : primaryAction.label}
+            {state?.status === 'unsupported'
+              ? 'Packaged app only'
+              : state?.status === 'downloading'
+                ? `Downloading… ${progress ?? 0}%`
+                : primaryAction.label}
           </Button>
         </Row>
-        {state?.progress !== undefined && state.status === 'downloading' ? (
-          <div className="text-[12px] text-muted">Downloading… {state.progress}%</div>
+        {showProgress ? (
+          <div className="flex flex-col gap-1.5 px-1">
+            <div
+              className="h-1.5 w-full overflow-hidden rounded-full bg-foreground/10"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progress ?? 0}
+              aria-label="Update download progress"
+            >
+              <div
+                className="h-full rounded-full bg-accent transition-[width] duration-200"
+                style={{ width: `${Math.min(100, Math.max(0, progress ?? 0))}%` }}
+              />
+            </div>
+            <div className="text-[12px] text-muted">
+              {state?.status === 'downloaded'
+                ? 'Download complete'
+                : `Downloading… ${progress ?? 0}%`}
+            </div>
+          </div>
         ) : null}
         {state?.error ? <div className="text-[12px] text-destructive">{state.error}</div> : null}
       </Group>
@@ -693,7 +721,9 @@ function updateDescription(state: UpdateState | undefined): string {
     case 'available':
       return 'A newer release is available. Download it now, or let PiX download it in the background.';
     case 'downloading':
-      return 'The update is downloading securely from GitHub Releases.';
+      return state.progress != null
+        ? `Downloading securely from GitHub Releases — ${state.progress}%.`
+        : 'The update is downloading securely from GitHub Releases.';
     case 'downloaded':
       return 'Ready to install. PiX will restart and then reopen your workbench.';
     case 'not-available':

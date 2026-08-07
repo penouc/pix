@@ -77,6 +77,18 @@ export function App() {
         }
         return;
       }
+      if (event.type === 'update.status') {
+        queryClient.setQueryData(['update.status'], {
+          status: event.status,
+          currentVersion: event.currentVersion,
+          ...(event.version != null ? { version: event.version } : {}),
+          ...(event.progress != null ? { progress: event.progress } : {}),
+          ...(event.releaseDate != null ? { releaseDate: event.releaseDate } : {}),
+          ...(event.releaseNotes != null ? { releaseNotes: event.releaseNotes } : {}),
+          ...(event.error != null ? { error: event.error } : {}),
+        });
+        return;
+      }
       applyEvent(event);
       // Terminal run events also refresh the task list (status badges, order).
       if (

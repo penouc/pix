@@ -232,5 +232,29 @@ export const DesktopAgentEventSchema = z.discriminatedUnion('type', [
       finalError: z.string().optional(),
     })
     .merge(EventScopeSchema),
+  /**
+   * App auto-update status (check / download / ready). Not run-scoped — Settings
+   * and a future toast both listen so download percent can render live.
+   */
+  z.object({
+    type: z.literal('update.status'),
+    status: z.enum([
+      'idle',
+      'checking',
+      'available',
+      'downloading',
+      'downloaded',
+      'not-available',
+      'error',
+      'unsupported',
+    ]),
+    currentVersion: z.string(),
+    version: z.string().optional(),
+    progress: z.number().int().min(0).max(100).optional(),
+    releaseDate: z.string().optional(),
+    releaseNotes: z.string().optional(),
+    error: z.string().optional(),
+    timestamp: z.number().int().nonnegative(),
+  }),
 ]);
 export type DesktopAgentEvent = z.infer<typeof DesktopAgentEventSchema>;
