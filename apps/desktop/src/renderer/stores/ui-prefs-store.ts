@@ -4,7 +4,7 @@ export type ThemePreference = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
 export type Density = 'comfortable' | 'compact';
 export type DiffStyle = 'unified' | 'split';
-export type DockTab = 'files' | 'changes' | 'terminal' | 'browser';
+export type DockTab = 'files' | 'changes' | 'todo' | 'terminal' | 'browser';
 
 /** Narrower than this and the terminal wraps every line; wider crowds the thread. */
 export const DOCK_MIN_WIDTH = 300;

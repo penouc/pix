@@ -1,4 +1,11 @@
-import type { DesktopAgentEvent, InputImage, RiskLevel, StoredMessage } from '@pi-desktop/protocol';
+import type {
+  AskOption,
+  DesktopAgentEvent,
+  InputImage,
+  RiskLevel,
+  StoredMessage,
+  TodoItem,
+} from '@pi-desktop/protocol';
 import { create } from 'zustand';
 
 export interface ChatMessage {
@@ -93,6 +100,15 @@ function pruneTokenRateSamples(
   return pruned.length > 200 ? pruned.slice(-200) : pruned;
 }
 
+export interface PendingAsk {
+  askId: string;
+  question: string;
+  options?: AskOption[];
+  allowFreeText?: boolean;
+  /** Session the ask belongs to (for scoping the modal). */
+  sessionId: string;
+}
+
 export interface ApprovalRequest {
   requestId: string;
   toolName: string;
@@ -160,6 +176,11 @@ interface AgentStreamState {
   errorRetryable: boolean;
   approval: ApprovalRequest | null;
   error: string | null;
+  /** #11: the active session's todo checklist, mirrored from todo.updated. */
+  todos: TodoItem[];
+  /** #12: the ask the agent is blocked on, surfaced as a prompt. */
+  pendingAsk: PendingAsk | null;
+  setTodos: (items: TodoItem[]) => void;
   lastSequenceByRun: Record<string, number>;
   queuedMessages: QueuedMessage[];
   addQueuedMessage: (
@@ -191,6 +212,9 @@ function shouldAccept(
     | { type: 'context.updated' }
     | { type: 'compaction.started' }
     | { type: 'compaction.completed' }
+    | { type: 'todo.updated' }
+    | { type: 'ask.pending' }
+    | { type: 'ask.resolved' }
     | { type: 'update.status' }
   >,
 ): boolean {
@@ -395,6 +419,9 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
   errorRetryable: false,
   approval: null,
   error: null,
+  todos: [],
+  pendingAsk: null,
+  setTodos: (items) => set({ todos: items }),
   lastSequenceByRun: {},
   queuedMessages: [],
 
@@ -581,6 +608,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       error: null,
       errorRetryable: false,
       queuedMessages: [],
+      pendingAsk: null,
     });
   },
   resetSessionView: () => {
@@ -606,6 +634,8 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       queuedMessages: [],
       isCompacting: false,
       retry: null,
+      todos: [],
+      pendingAsk: null,
     });
   },
 
@@ -625,6 +655,8 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       tokenRateSamples: [],
       queuedMessages: [],
       isCompacting: false,
+      todos: [],
+      pendingAsk: null,
     });
   },
 
@@ -677,6 +709,39 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       const state = get();
       if (state.activeSessionId && event.sessionId !== state.activeSessionId) return;
       set({ isCompacting: false });
+      return;
+    }
+
+    // #11: the checklist is session-scoped — it can change between runs.
+    if (event.type === 'todo.updated') {
+      const state = get();
+      if (state.activeSessionId && event.sessionId !== state.activeSessionId) return;
+      set({ todos: event.items });
+      return;
+    }
+
+    // #12: an ask blocks the run until answered. Session-scoped so the prompt
+    // can surface over any screen, and cleared by ask.resolved.
+    if (event.type === 'ask.pending') {
+      const state = get();
+      if (state.activeSessionId && event.sessionId !== state.activeSessionId) return;
+      set({
+        pendingAsk: {
+          askId: event.askId,
+          question: event.question,
+          options: event.options,
+          allowFreeText: event.allowFreeText,
+          sessionId: event.sessionId,
+        },
+      });
+      return;
+    }
+
+    if (event.type === 'ask.resolved') {
+      const state = get();
+      if (state.pendingAsk?.askId !== event.askId) return;
+      if (state.activeSessionId && event.sessionId !== state.activeSessionId) return;
+      set({ pendingAsk: null });
       return;
     }
 

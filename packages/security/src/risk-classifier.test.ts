@@ -52,4 +52,24 @@ describe('classifyRisk', () => {
     const t = tool('bash', { command: 'pnpm install' });
     expect(classifyRisk(t).level).toBe('sensitive');
   });
+
+  // #15 — grep / find / ls / glob are first-class read-only search tools.
+  it.each(['grep', 'find', 'ls', 'glob'])('marks %s as safe inside the workspace', (name) => {
+    const t = tool(name, { path: 'src' });
+    expect(classifyRisk(t).level).toBe('safe');
+  });
+
+  it.each(['grep', 'find', 'ls', 'glob'])(
+    'escalates %s to sensitive when the search path escapes the workspace',
+    (name) => {
+      const t = tool(name, { path: '../../etc' });
+      expect(t.escapesWorkspace).toBe(true);
+      expect(classifyRisk(t).level).toBe('sensitive');
+    },
+  );
+
+  it('treats todo and ask as safe (they mutate only in-session state)', () => {
+    expect(classifyRisk(tool('todo', { action: 'create', items: [] })).level).toBe('safe');
+    expect(classifyRisk(tool('ask', { question: 'Which?' })).level).toBe('safe');
+  });
 });

@@ -36,10 +36,17 @@ import type {
   ThinkingLevel,
   ThinkingLevelState,
   SessionMode,
+  TodoItem,
 } from '@pi-desktop/protocol';
 import { PermissionPipeline, type ApprovalMode, type RememberedRule } from '@pi-desktop/security';
 
 import { AutoModelRouter, classifyAutoSwitchError, type AutoRole } from './auto-model.js';
+import {
+  CollaborationService,
+  createAskTool,
+  createTodoTool,
+  type TodoPersistence,
+} from './collab-tools.js';
 
 import {
   describeAuthSources,
@@ -101,6 +108,11 @@ export interface PiAgentRuntimeOptions {
   allowModelNetwork?: boolean;
   /** Apply process.env API keys via setRuntimeApiKey. Default true. */
   hydrateEnvAuth?: boolean;
+  /**
+   * Durable store for the #11 todo checklists. Without it a session's checklist
+   * lives only as long as the runtime instance.
+   */
+  todoPersistence?: TodoPersistence | null;
 }
 
 interface SessionRecord {
@@ -127,6 +139,8 @@ interface SessionRecord {
   modelSelection: ModelSelection;
   /** Auto routing policy, refreshed from Settings on every send. */
   autoConfig: AutoModelConfig | null;
+  /** #11/#12: this session's checklist + pending asks (todo / ask tools). */
+  collab: CollaborationService;
 }
 
 /**
@@ -149,6 +163,7 @@ export class PiAgentRuntime implements AgentRuntime {
   private pendingDefaultWorkMode: SessionMode = 'build';
   private beforeWriteToolHandler: BeforeWriteToolHandler | null = null;
   private afterWriteToolHandler: AfterWriteToolHandler | null = null;
+  private readonly todoPersistence: TodoPersistence | null;
   private disposed = false;
   private initPromise: Promise<void> | null = null;
 
@@ -156,6 +171,7 @@ export class PiAgentRuntime implements AgentRuntime {
     this.agentDir = options.agentDir ?? null;
     this.allowModelNetwork = options.allowModelNetwork ?? false;
     this.hydrateEnvAuth = options.hydrateEnvAuth ?? true;
+    this.todoPersistence = options.todoPersistence ?? null;
   }
 
   /** Non-secret summary of which providers have credentials. */
@@ -179,6 +195,19 @@ export class PiAgentRuntime implements AgentRuntime {
 
     let piSession: PiAgentSession;
     const recordHolder: { value?: SessionRecord } = {};
+    // #11/#12: one collaboration service per session — owns the checklist and
+    // pending asks. The extension factory below registers the todo/ask tools
+    // against it, and the record keeps it so listTodos/answerAsk can reach it.
+    const collab = new CollaborationService({
+      emit: (event) => this.emit(event),
+      scope: () => {
+        const current = recordHolder.value;
+        return current
+          ? { projectId: current.desktop.projectId, sessionId: current.desktop.id }
+          : null;
+      },
+      persistence: this.todoPersistence,
+    });
     try {
       const resourceLoader = new DefaultResourceLoader({
         cwd: options.projectPath,
@@ -212,11 +241,14 @@ export class PiAgentRuntime implements AgentRuntime {
                 emit: (event) => this.emit(event),
               });
               pi.on('tool_call', async (event) => {
-                await permissions.authorize({
+                // The returned result is what Pi honours as `{ block: true }` —
+                // a denied (or un-approved) tool call must not execute.
+                const authorization = await permissions.authorize({
                   toolCallId: event.toolCallId,
                   toolName: event.toolName,
                   input: event.input,
                 });
+                if (authorization.block) return authorization;
                 const toolPath = writeToolPath(event.toolName, event.input);
                 const activeRunId = recordHolder.value?.activeRunId;
                 if (toolPath && activeRunId && this.beforeWriteToolHandler) {
@@ -238,6 +270,13 @@ export class PiAgentRuntime implements AgentRuntime {
                   });
                 }
               });
+            },
+          },
+          {
+            name: 'pi-desktop-collab',
+            factory: (pi) => {
+              pi.registerTool(createTodoTool(collab, desktopId));
+              pi.registerTool(createAskTool(collab, desktopId));
             },
           },
         ],
@@ -296,6 +335,7 @@ export class PiAgentRuntime implements AgentRuntime {
       buildToolNames: null,
       modelSelection: options.model ?? { kind: 'auto' },
       autoConfig: options.autoModel ?? null,
+      collab,
     };
     recordHolder.value = record;
 
@@ -596,8 +636,7 @@ export class PiAgentRuntime implements AgentRuntime {
   async forkSession(
     sessionId: string,
     entryId: string,
-  ): Promise<{ editorText?: string }> {
-    this.assertAlive();
+  ): Promise<{ editorText?: string }> {    this.assertAlive();
     const record = this.requireSession(sessionId);
     if (record.activeRunId) {
       throw new DomainError(
@@ -611,6 +650,36 @@ export class PiAgentRuntime implements AgentRuntime {
     record.desktop.updatedAt = Date.now();
     this.emitContextUsage(record);
     return { ...(result.editorText ? { editorText: result.editorText } : {}) };
+  }
+
+  /** #11: the session's current todo checklist (what the sidebar renders). */
+  async listTodos(sessionId: string): Promise<TodoItem[]> {
+    this.assertAlive();
+    const record = this.requireSession(sessionId);
+    return record.collab.getTodos(sessionId);
+  }
+
+  /** #15: names of the tools currently active on the session. */
+  async listActiveTools(sessionId: string): Promise<string[]> {
+    this.assertAlive();
+    const record = this.requireSession(sessionId);
+    try {
+      return record.pi.getActiveToolNames?.() ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * #12: answer a pending agent `ask`. Resolves the blocked tool call with the
+   * answer so the run resumes. Throws when no session holds that ask.
+   */
+  async answerAsk(askId: string, answer: string): Promise<void> {
+    this.assertAlive();
+    for (const record of this.sessions.values()) {
+      if (record.collab.answerAsk(askId, answer)) return;
+    }
+    throw new DomainError(agentError('ASK_NOT_FOUND', 'Ask request was not found.'));
   }
 
   async compact(sessionId: string, customInstructions?: string): Promise<CompactionResult> {
@@ -1042,6 +1111,8 @@ export class PiAgentRuntime implements AgentRuntime {
     for (const record of this.sessions.values()) {
       try {
         record.unsubscribePi();
+        // Unblock any user-facing ask whose run is going away.
+        record.collab.rejectAllAsks('Session closed while waiting for an answer.');
         if (record.pi.isStreaming) {
           await record.pi.abort();
         }
@@ -1278,7 +1349,10 @@ export class PiAgentRuntime implements AgentRuntime {
   }
 
   private async applySessionMode(record: SessionRecord, mode: SessionMode): Promise<void> {
-    const PLAN_TOOLS = ['read', 'grep', 'find', 'ls'];
+    // Plan Mode keeps the collaboration tools: a planning run should be able to
+    // lay out its steps as a checklist and ask clarifying questions (#11/#12),
+    // while still being unable to write files or run commands.
+    const PLAN_TOOLS = ['read', 'grep', 'find', 'ls', 'todo', 'ask'];
     const BUILD_TOOLS = ['read', 'bash', 'edit', 'write'];
 
     if (mode === 'plan') {

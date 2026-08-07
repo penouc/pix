@@ -12,6 +12,7 @@ import type {
   ThinkingLevel,
   ThinkingLevelState,
   SessionMode,
+  TodoItem,
 } from '@pi-desktop/protocol';
 
 export interface CreateSessionOptions {
@@ -241,6 +242,22 @@ export interface AgentRuntime {
    * only after a successful write/edit and must not expose SDK event types.
    */
   setAfterWriteToolHandler?(handler: AfterWriteToolHandler): void;
+  /**
+   * The current todo checklist for a session (#11), oldest first. Absent on
+   * runtimes without the todo tool; the renderer falls back to an empty list.
+   */
+  listTodos?(sessionId: string): Promise<TodoItem[]>;
+  /**
+   * Tool names currently active on the session (#15 visibility). Lets the UI
+   * and tests confirm first-class tools (grep/find/ls/glob) are wired without
+   * guessing from the model's behaviour.
+   */
+  listActiveTools?(sessionId: string): Promise<string[]>;
+  /**
+   * Answer a pending agent `ask` (#12). Resolves the blocked tool call with the
+   * answer so the run resumes. Rejects when the ask is unknown/expired.
+   */
+  answerAsk?(askId: string, answer: string): Promise<void>;
   subscribe(listener: AgentEventListener): () => void;
   dispose(): Promise<void>;
 }

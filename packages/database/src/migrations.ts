@@ -282,4 +282,16 @@ CREATE INDEX IF NOT EXISTS idx_session_messages_session_sequence
   ON session_messages (session_id, sequence);
 `,
   },
+  {
+    version: 14,
+    name: 'session_todos',
+    sql: `
+CREATE TABLE IF NOT EXISTS session_todos (
+  session_id TEXT PRIMARY KEY NOT NULL,
+  items_json TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
+`,
+  },
 ];

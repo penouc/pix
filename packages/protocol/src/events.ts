@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { ModelRefSchema } from './commands.js';
+import { AskOptionSchema, ModelRefSchema, TodoItemSchema } from './commands.js';
 
 /** Shared scope fields for every agent event (plan §8). */
 export const EventScopeSchema = z.object({
@@ -255,6 +255,47 @@ export const DesktopAgentEventSchema = z.discriminatedUnion('type', [
     releaseNotes: z.string().optional(),
     error: z.string().optional(),
     timestamp: z.number().int().nonnegative(),
+  }),
+  /**
+   * Todo checklist changed (#11). Session-scoped — the agent can rewrite the
+   * list between runs and the sidebar must follow it either way. The full list
+   * is sent every time so a missed event cannot leave a stale sidebar.
+   */
+  z.object({
+    type: z.literal('todo.updated'),
+    projectId: z.string().min(1),
+    sessionId: z.string().min(1),
+    timestamp: z.number().int().nonnegative(),
+    items: z.array(TodoItemSchema).max(500),
+  }),
+  /**
+   * The agent asked a structured question and is blocked waiting for an answer
+   * (#12). Session-scoped so the prompt can surface over any screen. The user
+   * answers through the renderer, which calls `agent.answerAsk`; the answer is
+   * returned to the model as this ask's tool result.
+   */
+  z.object({
+    type: z.literal('ask.pending'),
+    projectId: z.string().min(1),
+    sessionId: z.string().min(1),
+    timestamp: z.number().int().nonnegative(),
+    askId: z.string().min(1),
+    question: z.string().min(1).max(4000),
+    /** Offered answers; omitted when the agent wants free text. */
+    options: z.array(AskOptionSchema).max(20).optional(),
+    /** When false, only the offered options are accepted. Default true. */
+    allowFreeText: z.boolean().optional(),
+  }),
+  /** The user answered an `ask`; the agent's run resumed with this answer. */
+  z.object({
+    type: z.literal('ask.resolved'),
+    projectId: z.string().min(1),
+    sessionId: z.string().min(1),
+    timestamp: z.number().int().nonnegative(),
+    askId: z.string().min(1),
+    /** The chosen option id, when the answer came from the offered options. */
+    optionId: z.string().optional(),
+    answer: z.string().min(1).max(10_000),
   }),
 ]);
 export type DesktopAgentEvent = z.infer<typeof DesktopAgentEventSchema>;

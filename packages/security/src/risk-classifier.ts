@@ -34,6 +34,11 @@ export function classifyRisk(tool: NormalizedToolCall): RiskAssessment {
     case 'find':
     case 'ls':
     case 'glob':
+    case 'todo':
+    case 'ask':
+      // #11/#12: todo and ask only mutate in-session checklist/ask state — no
+      // filesystem, no shell, no network — so they are safe like the read-only
+      // tools and never enter the approval queue.
       if (!tool.escapesWorkspace && !tool.hitsProtectedPath) {
         level = 'safe';
         if (reasons.length === 0) reasons.push('Read-only tool inside workspace');

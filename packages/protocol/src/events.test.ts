@@ -163,3 +163,58 @@ describe('parseIpcCommand', () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe('#11/#12 collaboration events', () => {
+  it('accepts todo.updated with a checklist', () => {
+    expect(
+      DesktopAgentEventSchema.safeParse({
+        type: 'todo.updated',
+        projectId: 'p1',
+        sessionId: 's1',
+        timestamp: Date.now(),
+        items: [
+          { id: 't1', text: 'Inspect the auth module', status: 'in_progress' },
+          { id: 't2', text: 'Fix the token refresh', status: 'pending' },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects todo items with an unknown status', () => {
+    expect(
+      DesktopAgentEventSchema.safeParse({
+        type: 'todo.updated',
+        projectId: 'p1',
+        sessionId: 's1',
+        timestamp: Date.now(),
+        items: [{ id: 't1', text: 'x', status: 'half-done' }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts ask.pending with options and ask.resolved', () => {
+    expect(
+      DesktopAgentEventSchema.safeParse({
+        type: 'ask.pending',
+        projectId: 'p1',
+        sessionId: 's1',
+        timestamp: Date.now(),
+        askId: 'ask-1',
+        question: 'Which approach should I take?',
+        options: [{ id: 'fast', label: 'Fast & cheap' }],
+        allowFreeText: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      DesktopAgentEventSchema.safeParse({
+        type: 'ask.resolved',
+        projectId: 'p1',
+        sessionId: 's1',
+        timestamp: Date.now(),
+        askId: 'ask-1',
+        optionId: 'fast',
+        answer: 'Fast & cheap',
+      }).success,
+    ).toBe(true);
+  });
+});

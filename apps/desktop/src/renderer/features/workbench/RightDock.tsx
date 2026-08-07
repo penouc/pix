@@ -1,4 +1,4 @@
-import { FileCode2, FolderTree, Globe, SquareTerminal } from 'lucide-react';
+import { FileCode2, FolderTree, Globe, ListChecks, SquareTerminal } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { PanelResizer } from '@/components/layout/PanelResizer';
@@ -6,6 +6,7 @@ import { BrowserPanel } from '@/features/browser/BrowserPanel';
 import { ReviewPanel } from '@/features/chat/ReviewPanel';
 import { FileTree } from '@/features/files/FileTree';
 import { TerminalView } from '@/features/terminal/TerminalView';
+import { TodoPanel } from '@/features/todo/TodoPanel';
 import { cn } from '@/lib/utils';
 import {
   useUiPrefsStore,
@@ -20,6 +21,7 @@ const RESIZER_WIDTH = 8;
 const TABS: Array<{ id: DockTab; label: string; icon: ReactNode }> = [
   { id: 'files', label: 'Files', icon: <FolderTree className="h-3.5 w-3.5" /> },
   { id: 'changes', label: 'Changes', icon: <FileCode2 className="h-3.5 w-3.5" /> },
+  { id: 'todo', label: 'Todo', icon: <ListChecks className="h-3.5 w-3.5" /> },
   { id: 'terminal', label: 'Terminal', icon: <SquareTerminal className="h-3.5 w-3.5" /> },
   { id: 'browser', label: 'Browser', icon: <Globe className="h-3.5 w-3.5" /> },
 ];
@@ -110,6 +112,7 @@ export function RightDock({
         <div className="flex min-h-0 flex-1 flex-col">
           {tab === 'files' ? <FileTree onInsertPath={onInsertPath} /> : null}
           {tab === 'changes' ? <ReviewPanel onOpenFullDiff={onOpenFullDiff} /> : null}
+          {tab === 'todo' ? <TodoPanel /> : null}
           {tab === 'browser' ? <BrowserPanel /> : null}
           {terminalTouched.current ? (
             <div className={cn('flex min-h-0 flex-1', tab === 'terminal' ? 'flex' : 'hidden')}>

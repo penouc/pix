@@ -19,6 +19,7 @@ import type {
   ThinkingLevel,
   ThinkingLevelState,
   SessionMode,
+  TodoItem,
 } from '@pi-desktop/protocol';
 
 import { deriveSessionTitle, sanitizeSessionTitle } from './session-title.js';
@@ -47,6 +48,18 @@ interface SessionRecord extends AgentSession {
   sessionMode: SessionMode;
   /** User prompts in order, for the fake fork points (#10). */
   forkablePrompts?: Array<{ entryId: string; text: string }>;
+  /** #11: offline todo checklist, so the sidebar can be exercised without Pi. */
+  todos?: TodoItem[];
+}
+
+/** One pending fake ask awaiting `answerAsk` (#12 demo). */
+interface PendingFakeAsk {
+  askId: string;
+  sessionId: string;
+  projectId: string;
+  question: string;
+  options: Array<{ id: string; label: string }>;
+  resolve: (answer: string, optionId?: string) => void;
 }
 
 interface ActiveRun {
@@ -69,6 +82,7 @@ export class FakeAgentRuntime implements AgentRuntime {
   private readonly sessions = new Map<string, SessionRecord>();
   private readonly runs = new Map<string, ActiveRun>();
   private readonly listeners = new Set<AgentEventListener>();
+  private readonly pendingAsks = new Map<string, PendingFakeAsk>();
   private disposed = false;
 
   async createSession(options: CreateSessionOptions): Promise<AgentSession> {
@@ -306,6 +320,32 @@ export class FakeAgentRuntime implements AgentRuntime {
     return { editorText: target.text };
   }
 
+  /** #11: the session's current todo checklist (fake keeps it in memory). */
+  async listTodos(sessionId: string): Promise<TodoItem[]> {
+    this.assertAlive();
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new DomainError(agentError('SESSION_NOT_FOUND', `Session ${sessionId} not found`));
+    }
+    return session.todos ?? [];
+  }
+
+  /** #15: fake sessions expose the same read/bash/write/grep/find/ls surface. */
+  async listActiveTools(_sessionId: string): Promise<string[]> {
+    return ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls', 'todo', 'ask'];
+  }
+
+  /** #12: answer a pending fake ask; the demo run resumes with the answer. */
+  async answerAsk(askId: string, answer: string): Promise<void> {
+    this.assertAlive();
+    const pending = this.pendingAsks.get(askId);
+    if (!pending) {
+      throw new DomainError(agentError('ASK_NOT_FOUND', 'Ask request was not found.'));
+    }
+    this.pendingAsks.delete(askId);
+    pending.resolve(answer.trim());
+  }
+
   async setAutoCompactionEnabled(enabled: boolean, sessionId?: string): Promise<void> {
     this.assertAlive();
     if (!sessionId) {
@@ -449,6 +489,7 @@ export class FakeAgentRuntime implements AgentRuntime {
       for (const timer of run.timers) clearTimeout(timer);
     }
     this.runs.clear();
+    this.pendingAsks.clear();
     this.listeners.clear();
     this.disposed = true;
   }
@@ -482,6 +523,76 @@ export class FakeAgentRuntime implements AgentRuntime {
     });
 
     if (run.aborted) return;
+
+    // #11 demo: “todo” in the prompt updates the offline checklist so the
+    // sidebar can be exercised without a model.
+    if (/\btodo\b/i.test(userText)) {
+      const items: TodoItem[] = [
+        { id: 'fake-todo-1', text: 'Inspect the current implementation', status: 'in_progress' },
+        { id: 'fake-todo-2', text: 'Write the failing test first', status: 'pending' },
+        { id: 'fake-todo-3', text: 'Implement and run the full suite', status: 'pending' },
+      ];
+      session.todos = items;
+      await this.delay(run, 60);
+      if (run.aborted) return;
+      this.emit({
+        type: 'todo.updated',
+        projectId: session.projectId,
+        sessionId: session.id,
+        timestamp: Date.now(),
+        items,
+      });
+    }
+
+    // #12 demo: “ask” blocks the fake run on a question until answered.
+    let askAnswer: string | null = null;
+    if (/\bask\b/i.test(userText)) {
+      const question = 'Which approach should I take?';
+      const options = [
+        { id: 'fast', label: 'Fast & cheap — ship the minimal fix' },
+        { id: 'thorough', label: 'Thorough — refactor properly' },
+      ];
+      const askId = randomUUID();
+      const answerPromise = new Promise<string>((resolve, reject) => {
+        this.pendingAsks.set(askId, {
+          askId,
+          sessionId: session.id,
+          projectId: session.projectId,
+          question,
+          options,
+          resolve: (answer) => resolve(answer),
+        });
+        // An unanswered ask must not hang the fake run forever.
+        const timer = setTimeout(() => {
+          this.pendingAsks.delete(askId);
+          reject(new Error('Ask timed out (fake).'));
+        }, 300_000);
+        (run.timers as NodeJS.Timeout[]).push(timer);
+      });
+      this.emit({
+        type: 'ask.pending',
+        projectId: session.projectId,
+        sessionId: session.id,
+        timestamp: Date.now(),
+        askId,
+        question,
+        options,
+      });
+      try {
+        askAnswer = await answerPromise;
+      } catch (error) {
+        askAnswer = error instanceof Error ? error.message : String(error);
+      }
+      if (run.aborted) return;
+      this.emit({
+        type: 'ask.resolved',
+        projectId: session.projectId,
+        sessionId: session.id,
+        timestamp: Date.now(),
+        askId,
+        answer: askAnswer,
+      });
+    }
 
     const toolCallId = randomUUID();
     await this.delay(run, 80);
@@ -517,7 +628,9 @@ export class FakeAgentRuntime implements AgentRuntime {
     });
 
     const messageId = randomUUID();
-    const reply = `${DEMO_REPLY}\n\nYou said: "${userText.trim()}"`;
+    const reply =
+      `${DEMO_REPLY}\n\nYou said: "${userText.trim()}"` +
+      (askAnswer ? `\n\n[ask answered: ${askAnswer}]` : '');
     session.lastAssistantText = reply;
     const chunks = chunkText(reply, 24);
 

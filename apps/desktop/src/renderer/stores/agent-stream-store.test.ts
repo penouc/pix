@@ -460,3 +460,123 @@ describe('token rate sampling', () => {
     expect(useAgentStreamStore.getState().tokenRateSamples).toEqual([]);
   });
 });
+
+describe('#11 todo checklist in the stream', () => {
+  beforeEach(() => {
+    useAgentStreamStore.getState().resetSessionView();
+    useAgentStreamStore.getState().setScope('p1', 'agent-session');
+  });
+
+  it('mirrors todo.updated into the sidebar state', () => {
+    useAgentStreamStore.getState().applyEvent({
+      type: 'todo.updated',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      timestamp: Date.now(),
+      items: [
+        { id: 't1', text: 'Inspect', status: 'in_progress' },
+        { id: 't2', text: 'Fix', status: 'pending' },
+      ],
+    });
+    expect(useAgentStreamStore.getState().todos).toHaveLength(2);
+    expect(useAgentStreamStore.getState().todos[0]?.status).toBe('in_progress');
+  });
+
+  it('ignores todo.updated from another session', () => {
+    useAgentStreamStore.getState().applyEvent({
+      type: 'todo.updated',
+      projectId: 'p1',
+      sessionId: 'other-session',
+      timestamp: Date.now(),
+      items: [{ id: 'x', text: 'Nope', status: 'pending' }],
+    });
+    expect(useAgentStreamStore.getState().todos).toEqual([]);
+  });
+
+  it('drops the checklist when the view resets', () => {
+    useAgentStreamStore.getState().applyEvent({
+      type: 'todo.updated',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      timestamp: Date.now(),
+      items: [{ id: 't1', text: 'Inspect', status: 'pending' }],
+    });
+    useAgentStreamStore.getState().resetSessionView();
+    expect(useAgentStreamStore.getState().todos).toEqual([]);
+  });
+});
+
+describe('#12 ask flow in the stream', () => {
+  beforeEach(() => {
+    useAgentStreamStore.getState().resetSessionView();
+    useAgentStreamStore.getState().setScope('p1', 'agent-session');
+  });
+
+  it('surfaces ask.pending and clears it on ask.resolved', () => {
+    useAgentStreamStore.getState().applyEvent({
+      type: 'ask.pending',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      timestamp: Date.now(),
+      askId: 'ask-1',
+      question: 'Which approach?',
+      options: [{ id: 'a', label: 'Fast' }],
+    });
+    expect(useAgentStreamStore.getState().pendingAsk?.askId).toBe('ask-1');
+    expect(useAgentStreamStore.getState().pendingAsk?.options).toEqual([
+      { id: 'a', label: 'Fast' },
+    ]);
+
+    useAgentStreamStore.getState().applyEvent({
+      type: 'ask.resolved',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      timestamp: Date.now(),
+      askId: 'ask-1',
+      optionId: 'a',
+      answer: 'Fast',
+    });
+    expect(useAgentStreamStore.getState().pendingAsk).toBeNull();
+  });
+
+  it('ignores ask events from another session', () => {
+    useAgentStreamStore.getState().applyEvent({
+      type: 'ask.pending',
+      projectId: 'p1',
+      sessionId: 'other-session',
+      timestamp: Date.now(),
+      askId: 'ask-x',
+      question: 'Q',
+    });
+    expect(useAgentStreamStore.getState().pendingAsk).toBeNull();
+  });
+
+  it('does not clear a newer ask when a stale resolution arrives', () => {
+    useAgentStreamStore.getState().applyEvent({
+      type: 'ask.pending',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      timestamp: Date.now(),
+      askId: 'ask-1',
+      question: 'First',
+    });
+    useAgentStreamStore.getState().applyEvent({
+      type: 'ask.pending',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      timestamp: Date.now() + 1,
+      askId: 'ask-2',
+      question: 'Second',
+    });
+    // A late resolution for the older ask must not clear the current one.
+    useAgentStreamStore.getState().applyEvent({
+      type: 'ask.resolved',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      timestamp: Date.now(),
+      askId: 'ask-1',
+      answer: 'old',
+    });
+    expect(useAgentStreamStore.getState().pendingAsk?.askId).toBe('ask-2');
+  });
+});

@@ -24,6 +24,8 @@ export type { SqliteDatabase } from './sqlite-connection.js';
 export { MIGRATIONS } from './migrations.js';
 export type { Migration } from './migrations.js';
 export { SqliteRunMetricsRepository } from './sqlite-run-metrics-repository.js';
+export { SqliteTodoRepository } from './sqlite-todo-repository.js';
+export type { TodoRepository } from './todo-repository.js';
 export { SqliteIndexRepository, toMatchQuery } from './sqlite-index-repository.js';
 export type {
   IndexRepository,

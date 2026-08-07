@@ -39,14 +39,14 @@
 
 | 状态 | 数量 |
 |------|------|
-| 未开始 `[ ]` | 10 |
+| 未开始 `[ ]` | 8 |
 | 进行中 `[~]` | 0 |
-| 完成 `[x]` | 11 |
+| 完成 `[x]` | 13 |
 | 推迟 `[-]` | 0 |
 
-**进度：** 11 / 21  
+**进度：** 13 / 21  
 
-**已完成项测试：** #1 `partial` · #2 `partial` · #3 `unit` · #21 `unit` · #4 `unit` · #6 `unit` · #8 `unit` · #7 `unit` · #10 `unit`
+**已完成项测试：** #1 `partial` · #2 `partial` · #3 `unit` · #21 `unit` · #4 `unit` · #6 `unit` · #8 `unit` · #7 `unit` · #10 `unit` · #11 `unit` · #12 `unit`
 
 ---
 
@@ -85,8 +85,8 @@
 
 | # | 状态 | 测试 | 能力 | 路径 | 完成标准（验收） | 备注 |
 |---|------|------|------|------|------------------|------|
-| 11 | [ ] | — | Todo 步骤清单工具 | 自建 | Agent 可更新 todo；侧栏/时间线可见；风险 `safe`、不进审批队列 | |
-| 12 | [ ] | — | Ask 结构化追问 | 自建 | Agent 可发起选项/填空追问；用户点选后继续 run | |
+| 11 | [x] | unit | Todo 步骤清单工具 | 自建 | Agent 可更新 todo；侧栏/时间线可见；风险 `safe`、不进审批队列 | 实现：2026-08-07。自定义 Pi 工具 `todo`（create/update/clear）注册进会话扩展；每次变更发 `todo.updated` 事件并持久化到 SQLite（`session_todos`）；右侧 Dock 新增 Todo 面板（只读渲染、完成计数）；风险分类器将 `todo` 判为 `safe`。**已测：** collab-tools 单测（reducer/事件/持久化）、protocol schema、risk-classifier、agent-stream-store 事件处理、sqlite-todo-repository。**未测：** 桌面手测真实模型调用 `todo` 工具 |
+| 12 | [x] | unit | Ask 结构化追问 | 自建 | Agent 可发起选项/填空追问；用户点选后继续 run | 实现：2026-08-07。自定义 Pi 工具 `ask`（question/options/allowFreeText）；`execute` 阻塞等待用户回答；`ask.pending` 事件 → 桌面 AskDialog 弹窗（选项按钮 + 填空）；用户作答经 `agent.answerAsk` IPC → 解析阻塞的工具调用 → run 继续；abort signal 时拒绝。**已测：** collab-tools 单测（阻塞/回答/abort/dispose）、protocol schema、agent-stream-store。**未测：** 桌面手测真实模型触发 ask |
 
 ---
 
@@ -153,3 +153,5 @@
 | 2026-08-07 | **#7 完成**：Usage 页增加项目筛选（`usage.projects` IPC + 下拉）；测试=`unit` |
 | 2026-08-07 | **#10 完成**：Session Fork（`agent.forkPoints`/`agent.forkSession` + 工具栏 Fork 菜单 + 回卷）；测试=`unit` |
 | 2026-08-07 | 发版 **v0.2.3**；同步 `omp-capability-borrow.md` 紧急池勾选（#1–10、#21 → `[x]`） |
+| 2026-08-07 | **#11 完成**：`todo` 自定义工具（create/update/clear）+ `todo.updated` 事件 + SQLite 持久化 + Dock Todo 面板；风险 `safe`；测试=`unit` |
+| 2026-08-07 | **#12 完成**：`ask` 自定义工具（选项/填空，阻塞式）+ `ask.pending/resolved` 事件 + AskDialog；`agent.answerAsk` 解析后 run 继续；测试=`unit` |

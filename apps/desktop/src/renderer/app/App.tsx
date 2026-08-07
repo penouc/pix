@@ -8,10 +8,12 @@ import type {
   SessionSummary,
   StoredMessage,
   SkillInfo,
+  TodoItem,
 } from '@pi-desktop/protocol';
 
 import { AppShell } from '@/components/layout/AppShell';
 import { ApprovalDialog } from '@/features/approvals/ApprovalDialog';
+import { AskDialog } from '@/features/ask/AskDialog';
 import { AutomationsView } from '@/features/automations/AutomationsView';
 import { ChatPanel } from '@/features/chat/ChatPanel';
 import { DiffPanel } from '@/features/diff/DiffPanel';
@@ -52,6 +54,8 @@ export function App() {
   const resetSessionView = useAgentStreamStore((s) => s.resetSessionView);
   const setScope = useAgentStreamStore((s) => s.setScope);
   const approval = useAgentStreamStore((s) => s.approval);
+  const pendingAsk = useAgentStreamStore((s) => s.pendingAsk);
+  const setTodos = useAgentStreamStore((s) => s.setTodos);
   const applyEvent = useAgentStreamStore((s) => s.applyEvent);
   const loadHistory = useAgentStreamStore((s) => s.loadHistory);
 
@@ -167,6 +171,18 @@ export function App() {
           loadHistory(history);
         } catch (error) {
           console.error('[app] loading the transcript failed', error);
+        }
+        // #11: seed the sidebar with the persisted checklist (the agent may
+        // not touch `todo` again, so waiting for an event would miss it).
+        try {
+          const { items } = await invoke<{ items: TodoItem[] }>({
+            method: 'agent.listTodos',
+            params: { sessionId: session.id },
+          });
+          if (useWorkspaceStore.getState().session?.id !== session.id) return;
+          setTodos(items);
+        } catch (error) {
+          console.error('[app] loading todos failed', error);
         }
       })();
     },
@@ -335,6 +351,21 @@ export function App() {
     }
   }
 
+  /** #12: answer the agent's question; the blocked run resumes with the answer. */
+  async function answerAsk(answer: string) {
+    if (!pendingAsk) return;
+    try {
+      await invoke({
+        method: 'agent.answerAsk',
+        params: { askId: pendingAsk.askId, answer },
+      });
+      useAgentStreamStore.setState({ pendingAsk: null });
+    } catch (err) {
+      console.error('[app] answering ask failed', err);
+      useAgentStreamStore.setState({ error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
   /** The thread carries its own approval card, so the modal is for every other screen. */
   const showApprovalDialog =
     approval !== null && view !== 'run' && dismissedApproval !== approval.requestId;
@@ -426,6 +457,21 @@ export function App() {
               approval={approval}
               onDecide={(decision) => void decideApproval(decision)}
               onDismiss={() => setDismissedApproval(approval.requestId)}
+            />
+          ) : null}
+          {pendingAsk ? (
+            <AskDialog
+              ask={pendingAsk}
+              onSubmit={(answer) => void answerAsk(answer)}
+              onDismiss={() => {
+                // Aborting the ask means answering nothing: deny is not a
+                // decision, so stop the run instead of pretending an answer.
+                const runId = useAgentStreamStore.getState().activeRunId;
+                if (runId) {
+                  void invoke({ method: 'agent.abort', params: { runId } }).catch(console.error);
+                }
+                useAgentStreamStore.setState({ pendingAsk: null });
+              }}
             />
           ) : null}
         </>

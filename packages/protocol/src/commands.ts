@@ -475,6 +475,39 @@ export const SetAutoCompactionInputSchema = z.object({
 });
 export type SetAutoCompactionInput = z.infer<typeof SetAutoCompactionInputSchema>;
 
+/**
+ * One todo checklist item (#11). The agent owns the list: it creates items with
+ * `todo`, marks progress during the run, and clears the list when done. The UI
+ * renders them read-only, so the sidebar always mirrors what the model sees.
+ */
+export const TodoStatusSchema = z.enum(['pending', 'in_progress', 'completed']);
+export type TodoStatus = z.infer<typeof TodoStatusSchema>;
+
+export const TodoItemSchema = z.object({
+  id: z.string().min(1).max(200),
+  text: z.string().min(1).max(2000),
+  status: TodoStatusSchema,
+});
+export type TodoItem = z.infer<typeof TodoItemSchema>;
+
+/**
+ * One selectable answer to an agent `ask` (#12). The agent may offer options
+ * (each rendered as a button) and/or free text; the user's reply resumes the
+ * blocked run as the tool result.
+ */
+export const AskOptionSchema = z.object({
+  id: z.string().min(1).max(200),
+  label: z.string().min(1).max(200),
+});
+export type AskOption = z.infer<typeof AskOptionSchema>;
+
+export const AnswerAskInputSchema = z.object({
+  askId: z.string().min(1),
+  /** The free-text answer, or the selected option's label. */
+  answer: z.string().min(1).max(10_000),
+});
+export type AnswerAskInput = z.infer<typeof AnswerAskInputSchema>;
+
 export const ContextUsageSchema = z.object({
   tokens: z.number().nonnegative().nullable(),
   contextWindow: z.number().positive(),
@@ -642,6 +675,10 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
     params: z.object({ sessionId: z.string().min(1).optional() }).optional(),
   }),
   z.object({ method: z.literal('agent.abortCompaction'), params: SessionIdInputSchema }),
+  /** #11: the current todo checklist for a session (what the sidebar shows). */
+  z.object({ method: z.literal('agent.listTodos'), params: SessionIdInputSchema }),
+  /** #12: answer a pending agent `ask`; resolves the blocked run. */
+  z.object({ method: z.literal('agent.answerAsk'), params: AnswerAskInputSchema }),
   z.object({ method: z.literal('permissions.listRemembered'), params: z.object({}).optional() }),
   z.object({
     method: z.literal('permissions.clearRemembered'),

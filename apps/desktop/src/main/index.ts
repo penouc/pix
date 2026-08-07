@@ -705,6 +705,18 @@ function ensureRuntime(): AgentRuntime {
       agentDir,
       allowModelNetwork: false,
       forceFake: process.env['PI_DESKTOP_FAKE_RUNTIME'] === '1',
+      // #11: durable todo checklists — the runtime calls back into SQLite on
+      // every change and at first read, so the sidebar survives restarts.
+      todoPersistence: {
+        load: async (sessionId) => {
+          const db = await getDb();
+          return db.todos.load(sessionId);
+        },
+        save: async (sessionId, items) => {
+          const db = await getDb();
+          db.todos.save(sessionId, items);
+        },
+      },
     });
     runtime.subscribe((event) => broadcastEvent(event));
     // Restore the approval mode the user chose in Settings.
@@ -1449,6 +1461,21 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       }
       case 'agent.abortCompaction': {
         await agent.abortCompaction?.(cmd.params.sessionId);
+        return okResult({ ok: true });
+      }
+      case 'agent.listTodos': {
+        const meta = sessions.get(cmd.params.sessionId);
+        if (!meta) return errResult('SESSION_NOT_FOUND', 'Session not found');
+        // A session that has not been hydrated yet has no runtime record; fall
+        // back to the persisted checklist so the sidebar is never empty-wrong.
+        if (!agent.listTodos) return okResult({ items: db.todos.load(cmd.params.sessionId) });
+        return okResult({ items: await agent.listTodos(cmd.params.sessionId) });
+      }
+      case 'agent.answerAsk': {
+        if (!agent.answerAsk) {
+          return errResult('NOT_SUPPORTED', 'Structured asks are not available in this runtime');
+        }
+        await agent.answerAsk(cmd.params.askId, cmd.params.answer);
         return okResult({ ok: true });
       }
       case 'permissions.listRemembered': {

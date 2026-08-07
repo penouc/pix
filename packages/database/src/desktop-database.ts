@@ -10,6 +10,8 @@ import { SqliteProjectRepository } from './sqlite-project-repository.js';
 import { SqliteRunMetricsRepository } from './sqlite-run-metrics-repository.js';
 import { SqliteSessionMessageRepository } from './sqlite-session-message-repository.js';
 import { SqliteSessionRepository } from './sqlite-session-repository.js';
+import { SqliteTodoRepository } from './sqlite-todo-repository.js';
+import type { TodoRepository } from './todo-repository.js';
 
 /**
  * Single SQLite connection for desktop Main process (plan §10).
@@ -23,6 +25,7 @@ export class DesktopDatabase {
   readonly checkpoints: SqliteCheckpointRepository;
   readonly runMetrics: SqliteRunMetricsRepository;
   readonly index: SqliteIndexRepository;
+  readonly todos: SqliteTodoRepository;
   readonly dbPath: string;
 
   private constructor(dbPath: string, db: SqliteDatabase) {
@@ -34,6 +37,7 @@ export class DesktopDatabase {
     this.checkpoints = new SqliteCheckpointRepository(db);
     this.runMetrics = new SqliteRunMetricsRepository(db);
     this.index = new SqliteIndexRepository(db);
+    this.todos = new SqliteTodoRepository(db);
   }
 
   static open(dbPath: string): DesktopDatabase {
@@ -59,4 +63,4 @@ export class DesktopDatabase {
   }
 }
 
-export type { SessionRepository, ProjectRepository, CheckpointRepository };
+export type { SessionRepository, ProjectRepository, CheckpointRepository, TodoRepository };

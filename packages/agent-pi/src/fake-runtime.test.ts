@@ -36,7 +36,10 @@ describe('FakeAgentRuntime', () => {
         event.type === 'session.updated' ||
         event.type === 'context.updated' ||
         event.type === 'compaction.started' ||
-        event.type === 'compaction.completed'
+        event.type === 'compaction.completed' ||
+        event.type === 'todo.updated' ||
+        event.type === 'ask.pending' ||
+        event.type === 'ask.resolved'
       ) {
         continue;
       }
