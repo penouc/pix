@@ -92,25 +92,39 @@ void fetchLatestDmg().then((release) => {
 /**
  * Respect `prefers-reduced-motion`: pause the looping showcase videos and
  * show their posters (static screenshots) instead of playing them.
+ * Otherwise force muted autoplay — posters alone look like the old static site.
  */
 function respectReducedMotion(): void {
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  const kick = (video: HTMLVideoElement) => {
+    video.muted = true;
+    video.playsInline = true;
+    video.setAttribute('autoplay', '');
+    video.setAttribute('muted', '');
+    video.setAttribute('playsinline', '');
+    const tryPlay = () => void video.play().catch(() => undefined);
+    if (video.readyState >= 2) tryPlay();
+    else video.addEventListener('loadeddata', tryPlay, { once: true });
+  };
+
   const apply = () => {
-    const videos = document.querySelectorAll<HTMLVideoElement>('video[autoplay]');
+    const videos = document.querySelectorAll<HTMLVideoElement>('video');
     for (const video of videos) {
       if (reduced.matches) {
         video.pause();
         video.removeAttribute('autoplay');
         video.load();
       } else {
-        video.setAttribute('autoplay', '');
-        video.muted = true;
-        void video.play().catch(() => undefined);
+        kick(video);
       }
     }
   };
+
   apply();
   reduced.addEventListener('change', apply);
+  // Late layout / bfcache returns
+  window.addEventListener('pageshow', apply);
 }
 
 respectReducedMotion();
