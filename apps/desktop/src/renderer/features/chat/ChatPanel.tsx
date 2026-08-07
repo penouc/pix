@@ -1383,57 +1383,80 @@ export function ChatPanel({
                 onClear={clearQueue}
               />
             ) : null}
-            {blank ? (
-              <div className="mb-1.5 flex h-7 items-center gap-1 px-1.5 text-muted">
-                <FolderOpen className="h-3 w-3 flex-none opacity-60" />
-                <SearchableSelect
-                  options={projectOptions}
-                  value={project?.id ?? ''}
-                  onChange={(value) => void selectProject(value)}
-                  placeholder={recentProjects.isLoading ? 'Loading projects…' : 'Choose a project'}
-                  searchPlaceholder="Search projects…"
-                  emptyText="No matching projects."
-                  disabled={projectSwitching}
-                  className="h-6 w-auto min-w-0 max-w-[300px] border-0 bg-transparent px-1.5 py-0 text-[11.5px] shadow-none hover:bg-foreground/[0.035] [&>span]:text-foreground/60 [&>svg]:h-3 [&>svg]:w-3 [&>svg]:opacity-60"
-                />
-                {projectSwitching ? (
-                  <span className="flex-none text-[10.5px] text-muted/70">Opening…</span>
+            {/* Project + git branch sit above the composer so the footer stays
+                free for mode / thinking / usage controls. */}
+            {blank || branch.data?.branch || (!blank && session) ? (
+              <div
+                ref={!blank && session ? forkRootRef : undefined}
+                className="mb-1.5 flex h-7 items-center gap-1.5 px-1.5 text-muted"
+              >
+                {blank ? (
+                  <>
+                    <FolderOpen className="h-3 w-3 flex-none opacity-60" />
+                    <SearchableSelect
+                      options={projectOptions}
+                      value={project?.id ?? ''}
+                      onChange={(value) => void selectProject(value)}
+                      placeholder={
+                        recentProjects.isLoading ? 'Loading projects…' : 'Choose a project'
+                      }
+                      searchPlaceholder="Search projects…"
+                      emptyText="No matching projects."
+                      disabled={projectSwitching}
+                      className="h-6 w-auto min-w-0 max-w-[240px] border-0 bg-transparent px-1.5 py-0 text-[11.5px] shadow-none hover:bg-foreground/[0.035] [&>span]:text-foreground/60 [&>svg]:h-3 [&>svg]:w-3 [&>svg]:opacity-60"
+                    />
+                    {projectSwitching ? (
+                      <span className="flex-none text-[10.5px] text-muted/70">Opening…</span>
+                    ) : null}
+                  </>
+                ) : project ? (
+                  <>
+                    <FolderOpen className="h-3 w-3 flex-none opacity-60" />
+                    <span className="min-w-0 truncate text-[11.5px] text-foreground/60">
+                      {project.name}
+                    </span>
+                  </>
                 ) : null}
-              </div>
-            ) : null}
-            {/* Session Fork (#10) lives in the toolbar above the composer, not on
-                every bubble: a compact trigger keeps the transcript uncluttered. */}
-            {!blank && session ? (
-              <div ref={forkRootRef} className="mb-1.5 flex h-7 items-center gap-1 px-1.5 text-muted">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (running) return;
-                    setForkArm(null);
-                    setForkMenuOpen((open) => !open);
-                  }}
-                  title={
-                    running
-                      ? 'Wait for the current run to finish before forking'
-                      : 'Fork this task at an earlier message — later messages are discarded'
-                  }
-                  className={cn(
-                    'inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-full border-0 bg-foreground/[0.04] px-2.5 text-[11px] hover:bg-foreground/[0.09]',
-                    running && 'cursor-not-allowed opacity-45',
-                    forkMenuOpen && 'bg-foreground/[0.09]',
-                  )}
-                >
-                  <GitBranch className="h-3 w-3 flex-none" />
-                  Fork
-                </button>
-                {forking ? (
-                  <span className="flex-none text-[10.5px] text-muted/70">Forking…</span>
+                {branch.data?.branch ? (
+                  <ContextPill icon={<GitBranch className="h-3 w-3" />}>
+                    {branch.data.branch}
+                  </ContextPill>
                 ) : null}
-                {forkPoints.data && forkPoints.data.points.length ? (
-                  <span className="hidden flex-none text-[10.5px] text-muted/60 sm:inline">
-                    {forkPoints.data.points.length} forkable message
-                    {forkPoints.data.points.length === 1 ? '' : 's'}
-                  </span>
+                {/* Session Fork (#10): compact trigger above the composer. */}
+                {!blank && session ? (
+                  <>
+                    <span className="min-w-0 flex-1" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (running) return;
+                        setForkArm(null);
+                        setForkMenuOpen((open) => !open);
+                      }}
+                      title={
+                        running
+                          ? 'Wait for the current run to finish before forking'
+                          : 'Fork this task at an earlier message — later messages are discarded'
+                      }
+                      className={cn(
+                        'inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-full border-0 bg-foreground/[0.04] px-2.5 text-[11px] hover:bg-foreground/[0.09]',
+                        running && 'cursor-not-allowed opacity-45',
+                        forkMenuOpen && 'bg-foreground/[0.09]',
+                      )}
+                    >
+                      <GitBranch className="h-3 w-3 flex-none" />
+                      Fork
+                    </button>
+                    {forking ? (
+                      <span className="flex-none text-[10.5px] text-muted/70">Forking…</span>
+                    ) : null}
+                    {forkPoints.data && forkPoints.data.points.length ? (
+                      <span className="hidden flex-none text-[10.5px] text-muted/60 sm:inline">
+                        {forkPoints.data.points.length} forkable message
+                        {forkPoints.data.points.length === 1 ? '' : 's'}
+                      </span>
+                    ) : null}
+                  </>
                 ) : null}
               </div>
             ) : null}
@@ -1696,11 +1719,6 @@ export function ChatPanel({
                   disabled={running || sending || setSessionMode.isPending}
                 />
                 <ThinkingLevelPicker disabled={!project || sending} />
-                {branch.data?.branch ? (
-                  <ContextPill icon={<GitBranch className="h-3 w-3" />}>
-                    {branch.data.branch}
-                  </ContextPill>
-                ) : null}
                 <span className="min-w-0 flex-1" />
                 {running ? (
                   <Segmented
