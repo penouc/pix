@@ -206,5 +206,31 @@ export const DesktopAgentEventSchema = z.discriminatedUnion('type', [
       reason: z.enum(['rate-limit', 'timeout', 'quota', 'error']),
     })
     .merge(EventScopeSchema),
+  /**
+   * Auto-retry visibility (#8): the provider/transport layer is retrying the
+   * same model call after a transient failure. Pi emits this before each
+   * backoff sleep — the UI shows “Retrying attempt N/M” instead of looking
+   * frozen. The run itself stays alive.
+   */
+  z
+    .object({
+      type: z.literal('run.retry-started'),
+      /** 1-indexed retry attempt. */
+      attempt: z.number().int().positive(),
+      maxAttempts: z.number().int().positive(),
+      /** Backoff delay before the retried call, in ms. */
+      delayMs: z.number().nonnegative(),
+      errorMessage: z.string().optional(),
+    })
+    .merge(EventScopeSchema),
+  /** The retry loop settled: success on a later call, or exhausted. */
+  z
+    .object({
+      type: z.literal('run.retry-finished'),
+      success: z.boolean(),
+      attempt: z.number().int().positive(),
+      finalError: z.string().optional(),
+    })
+    .merge(EventScopeSchema),
 ]);
 export type DesktopAgentEvent = z.infer<typeof DesktopAgentEventSchema>;

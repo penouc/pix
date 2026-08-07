@@ -14,6 +14,7 @@ export function StatusPanel() {
   const session = useWorkspaceStore((s) => s.session);
   const status = useAgentStreamStore((s) => s.status);
   const usage = useAgentStreamStore((s) => s.usage);
+  const retry = useAgentStreamStore((s) => s.retry);
   const model = useAgentStreamStore((s) => s.model);
   const startedAt = useAgentStreamStore((s) => s.startedAt);
   const tools = useAgentStreamStore((s) => s.tools);
@@ -80,6 +81,12 @@ export function StatusPanel() {
         <section className="space-y-2">
           <SectionTitle>Runtime</SectionTitle>
           <Row label="Status" value={<Badge>{status}</Badge>} />
+          {retry ? (
+            <Row
+              label="Retrying"
+              value={`attempt ${retry.attempt}/${retry.maxAttempts}`}
+            />
+          ) : null}
           <Row label="Run" value={activeRunId ? `${activeRunId.slice(0, 8)}…` : '—'} />
           <Row label="Elapsed" value={startedAt ? formatElapsed(now - startedAt) : '—'} />
           <Row label="Tools" value={tools.length || '—'} />

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState, type ReactNode } from 'react';
 
-import type { UsageByModel, UsageSummary } from '@pi-desktop/protocol';
+import type { UsageByModel, UsageProject, UsageSummary } from '@pi-desktop/protocol';
 
 import { Segmented } from '@/components/ui/segmented';
 import { invoke } from '@/lib/ipc';
@@ -37,11 +37,25 @@ const GAP = 3;
  */
 export function UsageTab() {
   const [range, setRange] = useState<Range>('365');
+  /** Project filter; empty string means every project. */
+  const [projectId, setProjectId] = useState('');
+
+  const projects = useQuery({
+    queryKey: ['usage.projects', range],
+    queryFn: () =>
+      invoke<UsageProject[]>({ method: 'usage.projects', params: { days: Number(range) } }),
+  });
 
   const usage = useQuery({
-    queryKey: ['usage.summary', range],
+    queryKey: ['usage.summary', range, projectId],
     queryFn: () =>
-      invoke<UsageSummary>({ method: 'usage.summary', params: { days: Number(range) } }),
+      invoke<UsageSummary>({
+        method: 'usage.summary',
+        params: {
+          days: Number(range),
+          ...(projectId ? { projectId } : {}),
+        },
+      }),
   });
 
   const data = usage.data;
@@ -111,6 +125,20 @@ export function UsageTab() {
           value={range}
           onChange={setRange}
         />
+        <select
+          aria-label="Filter by project"
+          title="Filter by project"
+          value={projectId}
+          onChange={(event) => setProjectId(event.target.value)}
+          className="h-8 max-w-[260px] rounded-lg border border-border bg-background px-2 text-[11.5px] text-foreground outline-none focus:border-accent"
+        >
+          <option value="">All projects</option>
+          {(projects.data ?? []).map((project) => (
+            <option key={project.projectId} value={project.projectId}>
+              {project.projectName}
+            </option>
+          ))}
+        </select>
         <span className="flex-1" />
         {usage.isFetching ? <span className="text-[11px] text-muted">updating…</span> : null}
       </div>

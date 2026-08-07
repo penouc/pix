@@ -179,4 +179,29 @@ export class SqliteRunMetricsRepository implements RunMetricsRepository {
       byModel,
     };
   }
+
+  projects(input: { from: number; to: number }): {
+    projectId: string;
+    lastUsedAt: number;
+    runs: number;
+  }[] {
+    const rows = this.db
+      .prepare(
+        `SELECT project_id, MAX(started_at) AS last_used_at, COUNT(*) AS runs
+           FROM run_metrics
+          WHERE started_at BETWEEN ? AND ?
+          GROUP BY project_id
+          ORDER BY last_used_at DESC`,
+      )
+      .all(input.from, input.to) as unknown as Array<{
+      project_id: string;
+      last_used_at: number;
+      runs: number;
+    }>;
+    return rows.map((row) => ({
+      projectId: row.project_id,
+      lastUsedAt: row.last_used_at,
+      runs: row.runs,
+    }));
+  }
 }

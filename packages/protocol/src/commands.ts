@@ -232,6 +232,12 @@ export const IndexSearchInputSchema = z.object({
   /** Omit to search every trusted project. */
   projectId: z.string().min(1).optional(),
   limit: z.number().int().positive().max(50).optional(),
+  /**
+   * Drop hits whose absolute path matches a protected-path rule (#4). The
+   * composer's `@` mention must not hand `.env`-style paths to the model as
+   * context, so the caller opts in; the ⌘K palette keeps seeing everything.
+   */
+  excludeProtected: z.boolean().optional(),
 });
 export type IndexSearchInput = z.infer<typeof IndexSearchInputSchema>;
 
@@ -455,6 +461,13 @@ export const CompactSessionInputSchema = z.object({
 });
 export type CompactSessionInput = z.infer<typeof CompactSessionInputSchema>;
 
+export const ForkSessionInputSchema = z.object({
+  sessionId: z.string().min(1),
+  /** Pi entry id of the historical user message to rewind to (#10). */
+  entryId: z.string().min(1),
+});
+export type ForkSessionInput = z.infer<typeof ForkSessionInputSchema>;
+
 export const SetAutoCompactionInputSchema = z.object({
   enabled: z.boolean(),
   /** Omit to change the default applied to new sessions. */
@@ -488,6 +501,16 @@ export const UsageSummaryInputSchema = z.object({
   projectId: z.string().min(1).optional(),
 });
 export type UsageSummaryInput = z.infer<typeof UsageSummaryInputSchema>;
+
+/** One project that recorded runs, for the usage tab's project filter. */
+export const UsageProjectSchema = z.object({
+  projectId: z.string().min(1),
+  projectName: z.string(),
+  projectPath: z.string().optional(),
+  lastUsedAt: z.number().nonnegative(),
+  runs: z.number().int().nonnegative(),
+});
+export type UsageProject = z.infer<typeof UsageProjectSchema>;
 
 export const SetDefaultProjectsFolderInputSchema = z.object({
   /** Empty string clears it back to the OS default. */
@@ -593,6 +616,7 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('settings.pickProjectsFolder'), params: z.object({}).optional() }),
   z.object({ method: z.literal('audit.summary'), params: z.object({}).optional() }),
   z.object({ method: z.literal('usage.summary'), params: UsageSummaryInputSchema.optional() }),
+  z.object({ method: z.literal('usage.projects'), params: UsageSummaryInputSchema.optional() }),
   z.object({ method: z.literal('agent.setApprovalMode'), params: SetApprovalModeInputSchema }),
   z.object({
     method: z.literal('agent.getApprovalMode'),
@@ -610,6 +634,8 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   }),
   z.object({ method: z.literal('agent.getContextUsage'), params: SessionIdInputSchema }),
   z.object({ method: z.literal('agent.compact'), params: CompactSessionInputSchema }),
+  z.object({ method: z.literal('agent.forkPoints'), params: SessionIdInputSchema }),
+  z.object({ method: z.literal('agent.forkSession'), params: ForkSessionInputSchema }),
   z.object({ method: z.literal('agent.setAutoCompaction'), params: SetAutoCompactionInputSchema }),
   z.object({
     method: z.literal('agent.getAutoCompaction'),

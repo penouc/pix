@@ -39,6 +39,8 @@
   /* Sage primary for actions; muted rose for failure — no brown terracotta. */
   --color-success: #5d9e82;
   --color-warning: #8faa72;
+  --color-warning-100: #eef3e4;
+  --color-warning-700: #5c7244;
   --color-danger: #b85c5c;
 
   /* — neutral ramp (light) — */
@@ -167,6 +169,9 @@
   --color-accent-2-700: #93c4ad;
   --color-accent-2-800: #b8dcc8;
   --color-accent-2-900: #d8ebe3;
+
+  --color-warning-100: #2c3325;
+  --color-warning-700: #c0cfa3;
 
   --color-output: #0e100f;
   --color-output-foreground: #d4dad6;
@@ -385,6 +390,10 @@
   .tag-outline {
     border: 1px solid var(--color-accent);
     color: var(--color-accent-700);
+  }
+  .tag-warning {
+    background: var(--color-warning-100);
+    color: var(--color-warning-700);
   }
 
   /* — cards — */

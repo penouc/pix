@@ -137,6 +137,17 @@ interface AgentStreamState {
   contextWindowBySession: Record<string, number>;
   /** True while Pi is compacting the active session. */
   isCompacting: boolean;
+  /**
+   * Auto-retry in flight (#8): Pi is retrying the current model call after a
+   * transient provider/transport failure. Non-null only while a retry is
+   * scheduled; the UI shows the attempt instead of looking frozen.
+   */
+  retry: {
+    attempt: number;
+    maxAttempts: number;
+    delayMs: number;
+    errorMessage?: string;
+  } | null;
   model: { providerId: string; modelId: string } | null;
   startedAt: number | null;
   /**
@@ -371,6 +382,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
   contextTokensBySession: readPersistedContextUsage(),
   contextWindowBySession: {},
   isCompacting: false,
+  retry: null,
   model: null,
   startedAt: null,
   pendingPlan: null,
@@ -589,6 +601,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       lastSequenceByRun: {},
       queuedMessages: [],
       isCompacting: false,
+      retry: null,
     });
   },
 
@@ -679,6 +692,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
           activeProjectId: event.projectId,
           activeSessionId: event.sessionId,
           status: 'running',
+          retry: null,
           // Keep prior tool cards in the thread — clearing them made follow-up
           // runs look like the agent never used any tools. Keep the last known
           // context value visible until this run reports a fresher one.
@@ -700,6 +714,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
         set({
           status: 'completed',
           activeRunId: event.runId,
+          retry: null,
           lastSequenceByRun,
           // Plan Mode (#3): hold the draft until the user approves or
           // discards it; build-mode completions leave a prior plan alone.
@@ -715,6 +730,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
         set({
           status: 'failed',
           activeRunId: event.runId,
+          retry: null,
           approval: null,
           error: event.error.message,
           errorRetryable: event.error.retryable,
@@ -726,6 +742,7 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
         set({
           status: 'cancelled',
           activeRunId: event.runId,
+          retry: null,
           approval: null,
           lastSequenceByRun,
           messages: get().messages.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
@@ -751,6 +768,22 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
             },
           ],
         });
+        break;
+      case 'run.retry-started':
+        // The run keeps going; only the attempt badge changes.
+        set({
+          status: state.status === 'stopping' ? 'stopping' : 'running',
+          retry: {
+            attempt: event.attempt,
+            maxAttempts: event.maxAttempts,
+            delayMs: event.delayMs,
+            ...(event.errorMessage ? { errorMessage: event.errorMessage } : {}),
+          },
+          lastSequenceByRun,
+        });
+        break;
+      case 'run.retry-finished':
+        set({ retry: null, lastSequenceByRun });
         break;
       case 'message.delta': {
         // Coalesce high-frequency token deltas onto animation frames.

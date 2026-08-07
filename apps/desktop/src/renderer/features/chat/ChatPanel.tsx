@@ -46,8 +46,10 @@ import type {
   RunRef,
   SessionMode,
   SkillInfo,
+  StoredMessage,
 } from '@pi-desktop/protocol';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { createPortal } from 'react-dom';
 
 import { SearchableSelect } from '@/components/SearchableSelect';
 import { Badge } from '@/components/ui/badge';
@@ -55,13 +57,20 @@ import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { ApprovalModePicker } from '@/features/chat/ApprovalModePicker';
 import { SessionModePicker } from '@/features/chat/SessionModePicker';
+import {
+  filterSlashCommands,
+  matchSlashQuery,
+  type SlashCommand,
+} from '@/features/chat/slash-commands';
 import { normalizeContextCapacity } from '@/features/chat/context-usage';
 import { ThinkingLevelPicker } from '@/features/chat/ThinkingLevelPicker';
 import { ThinkingPlaceholderRow, ThinkingStreamRow } from '@/features/chat/ThinkingStream';
 import { Markdown } from '@/features/chat/Markdown';
 import { ModelPicker } from '@/features/models/ModelPicker';
+import { AUTO_MODEL_KEY } from '@/features/models/model-key';
 import { useCreateTask } from '@/features/sessions/use-create-task';
 import { invoke, IpcError } from '@/lib/ipc';
+import { useAnchorAbove, useDismiss } from '@/lib/use-dismiss';
 import {
   dotStyle,
   formatDuration,
@@ -129,6 +138,8 @@ interface ChatPanelProps {
   blank: boolean;
   /** Called once the deferred session for a new task has been created. */
   onTaskStarted: () => void;
+  /** `/new` — start a fresh task from the composer. */
+  onNewTask: () => void;
 }
 
 export function ChatPanel({
@@ -138,10 +149,12 @@ export function ChatPanel({
   insert,
   blank,
   onTaskStarted,
+  onNewTask,
 }: ChatPanelProps) {
   const session = useWorkspaceStore((s) => s.session);
   const project = useWorkspaceStore((s) => s.project);
   const selectedModel = useWorkspaceStore((s) => s.selectedModel);
+  const setSelectedModel = useWorkspaceStore((s) => s.setSelectedModel);
   const setProject = useWorkspaceStore((s) => s.setProject);
   const { createTask } = useCreateTask();
   const messages = useAgentStreamStore((s) => s.messages);
@@ -153,6 +166,7 @@ export function ChatPanel({
   const activeRunId = useAgentStreamStore((s) => s.activeRunId);
   const usage = useAgentStreamStore((s) => s.usage);
   const isCompacting = useAgentStreamStore((s) => s.isCompacting);
+  const retryAttempt = useAgentStreamStore((s) => s.retry);
   const model = useAgentStreamStore((s) => s.model);
   const pendingPlan = useAgentStreamStore((s) => s.pendingPlan);
   const startedAt = useAgentStreamStore((s) => s.startedAt);
@@ -170,6 +184,7 @@ export function ChatPanel({
   const popNextQueuedMessage = useAgentStreamStore((s) => s.popNextQueuedMessage);
   const resetSessionView = useAgentStreamStore((s) => s.resetSessionView);
   const setScope = useAgentStreamStore((s) => s.setScope);
+  const loadHistory = useAgentStreamStore((s) => s.loadHistory);
 
   const draftScope = composerDraftScope(session?.id, project?.id);
   const draft = useComposerDraftStore((state) => state.drafts[draftScope] ?? '');
@@ -499,6 +514,10 @@ export function ChatPanel({
    * The composer advertised "@ for files" from the day the design landed and
    * nothing was behind it. The index already knows every tracked file in the
    * project, so this is the same data ⌘K searches.
+   *
+   * `excludeProtected` (#4): the referenced path lands in the model's context,
+   * so `.env`-style paths are not offered — unlike the ⌘K palette, which only
+   * opens a file.
    */
   const fileQuery = /(?:^|\s)@([^\s]*)$/.exec(draft)?.[1];
   const fileHits = useQuery({
@@ -508,7 +527,12 @@ export function ChatPanel({
       invoke<IndexSearchResult>({
         method: 'index.search',
         // Scoped to this project: a path from another one would not resolve here.
-        params: { query: fileQuery ?? '', projectId: project!.id, limit: 6 },
+        params: {
+          query: fileQuery ?? '',
+          projectId: project!.id,
+          limit: 6,
+          excludeProtected: true,
+        },
       }),
   });
   const fileMatches = fileQuery === undefined ? [] : (fileHits.data?.paths ?? []);
@@ -608,6 +632,152 @@ export function ChatPanel({
   const tokenRate =
     showTokenRate && running ? computeTokenRate(tokenRateSamples, rateNow) : null;
 
+  /** Auto model (#21) from the slash menu — mirrors ModelPicker.chooseAuto. */
+  async function chooseAutoModel() {
+    setSelectedModel(AUTO_MODEL_KEY);
+    void invoke({ method: 'settings.setDefaultModel', params: { model: { kind: 'auto' } } })
+      .then(() => void queryClient.invalidateQueries({ queryKey: ['settings.get'] }))
+      .catch(console.error);
+    if (!session) return;
+    await invoke({
+      method: 'agent.setModel',
+      params: { sessionId: session.id, model: { kind: 'auto' } },
+    }).catch(console.error);
+    void queryClient.invalidateQueries({ queryKey: ['agent.getThinkingLevel', session.id] });
+  }
+
+  /**
+   * `/` at a line start offers built-in commands (#6): compact, plan/build
+   * mode, auto model, clear queue, new task. Picking one runs it and drops the
+   * slash text — a command is not something the model should see.
+   */
+  const slashQuery = matchSlashQuery(draft);
+  const slashCommands = useMemo<SlashCommand[]>(
+    () => [
+      {
+        keyword: 'compact',
+        title: 'Compact conversation',
+        description: 'Free context window space now',
+        disabled: !session || running || isCompacting || compacting,
+        run: () => void compactSession(),
+      },
+      {
+        keyword: 'plan',
+        title: 'Plan mode',
+        description: 'Read-only run — nothing is written',
+        disabled: running || sending || setSessionMode.isPending,
+        run: () => void setSessionMode.mutate('plan'),
+      },
+      {
+        keyword: 'build',
+        title: 'Build mode',
+        description: 'Full toolset — read, write, bash',
+        disabled: running || sending || setSessionMode.isPending,
+        run: () => void setSessionMode.mutate('build'),
+      },
+      {
+        keyword: 'auto',
+        title: 'Auto model',
+        description: 'Pick per task & mode; fall back on rate limits',
+        run: () => void chooseAutoModel(),
+      },
+      {
+        keyword: 'clear',
+        title: 'Clear message queue',
+        description: `Drop ${queuedMessages.length} queued message${queuedMessages.length === 1 ? '' : 's'}`,
+        disabled: queuedMessages.length === 0,
+        run: clearQueue,
+      },
+      {
+        keyword: 'new',
+        title: 'New task',
+        description: 'Start a fresh conversation',
+        run: onNewTask,
+      },
+    ],
+    // chooseAutoModel / compactSession are component closures; the commands
+    // read them at run time, so memoizing on them would defeat the memo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      session,
+      running,
+      isCompacting,
+      compacting,
+      sending,
+      setSessionMode,
+      queuedMessages.length,
+      clearQueue,
+      onNewTask,
+    ],
+  );
+  const slashMatches = filterSlashCommands(slashCommands, slashQuery);
+  const slashMenuOpen = slashQuery !== undefined && slashMatches.length > 0;
+
+  function runSlash(command: SlashCommand) {
+    if (command.disabled) return;
+    setDraft('');
+    command.run();
+    composerRef.current?.focus();
+  }
+  /**
+   * Session Fork (#10): rewind to a historical user message from the toolbar
+   * above the composer. The picker lists fork points from the Pi session tree;
+   * choosing one arms a confirm step because everything after it is discarded.
+   */
+  const [forkMenuOpen, setForkMenuOpen] = useState(false);
+  const [forkArm, setForkArm] = useState<{ entryId: string; text: string } | null>(null);
+  const [forking, setForking] = useState(false);
+  const forkRootRef = useRef<HTMLDivElement>(null);
+  const forkMenuRef = useRef<HTMLDivElement>(null);
+  const closeForkMenu = useCallback(() => {
+    setForkMenuOpen(false);
+    setForkArm(null);
+  }, []);
+  useDismiss(forkMenuOpen, [forkRootRef, forkMenuRef], closeForkMenu);
+  const forkAnchor = useAnchorAbove(forkMenuOpen, forkRootRef, 'left');
+
+  const forkPoints = useQuery({
+    queryKey: ['agent.forkPoints', session?.id],
+    enabled: Boolean(session?.id) && !blank,
+    queryFn: () =>
+      invoke<{ points: Array<{ entryId: string; text: string }> }>({
+        method: 'agent.forkPoints',
+        params: { sessionId: session!.id },
+      }),
+  });
+
+  async function forkAt(entryId: string) {
+    if (!session || running || forking) return;
+    setForking(true);
+    try {
+      const result = await invoke<{ editorText?: string }>({
+        method: 'agent.forkSession',
+        params: { sessionId: session.id, entryId },
+      });
+      // Rewind the local thread: the Pi branch is the new source of truth, so
+      // clear the timeline and reload from `session.messages` (stored rows were
+      // dropped in Main — #10).
+      resetSessionView();
+      setScope(session.projectId ?? project?.id ?? null, session.id);
+      const history = await invoke<StoredMessage[]>({
+        method: 'session.messages',
+        params: { sessionId: session.id },
+      });
+      if (useWorkspaceStore.getState().session?.id === session.id) {
+        loadHistory(history);
+      }
+      if (result.editorText) setDraft(result.editorText);
+      closeForkMenu();
+      focusComposer();
+    } catch (err) {
+      useAgentStreamStore.setState({
+        error: err instanceof Error ? err.message : String(err),
+      });
+      closeForkMenu();
+    } finally {
+      setForking(false);
+    }
+  }
 
   /** Messages, reasoning, and tool calls share an arrival counter. */
   const timeline = useMemo(
@@ -853,6 +1023,21 @@ export function ChatPanel({
             Compacting
           </Badge>
         ) : null}
+        {/* Auto-retry visibility (#8): the provider is retrying the same call;
+            the run is alive, but a frozen Working badge made it look stuck. */}
+        {!blank && retryAttempt ? (
+          <Badge
+            tone="warning"
+            className="gap-1.5"
+            title={retryAttempt.errorMessage ?? undefined}
+          >
+            <span
+              className="size-1.5 rounded-full bg-warning"
+              style={{ animation: 'pi-pulse 1.2s ease-in-out infinite' }}
+            />
+            Retrying {retryAttempt.attempt}/{retryAttempt.maxAttempts}
+          </Badge>
+        ) : null}
         {!blank && status !== 'idle' ? (
           <Badge tone={toneBadge[tone]} className="gap-1.5">
             <span style={dotStyle(tone, 6)} />
@@ -898,7 +1083,7 @@ export function ChatPanel({
                   </div>
                   <p className="max-w-[320px] text-[12.5px] leading-relaxed text-muted">
                     {project
-                      ? "Type or attach a screenshot below — @ for a file, $ for a skill, ⌘K for commands. It'll read the project, plan, then ask before running anything risky."
+                      ? "Type or attach a screenshot below — @ for a file, $ for a skill, / for commands, ⌘K to search. It'll read the project, plan, then ask before running anything risky."
                       : 'Choose a project above the composer. You can start typing while it loads.'}
                   </p>
                 </div>
@@ -1161,6 +1346,34 @@ export function ChatPanel({
                 ))}
               </div>
             ) : null}
+            {/* `/` commands (#6): compact, plan/build, auto model, clear queue, new task. */}
+            {slashMenuOpen ? (
+              <div className="mb-1.5 overflow-hidden rounded-[18px] border border-border bg-background shadow-[var(--shadow-md)]">
+                {slashMatches.slice(0, 6).map((command) => (
+                  <button
+                    key={command.keyword}
+                    type="button"
+                    disabled={command.disabled}
+                    onClick={() => runSlash(command)}
+                    title={command.disabled ? 'Not available right now' : undefined}
+                    className={cn(
+                      'flex w-full items-center gap-2.5 border-0 bg-transparent px-3.5 py-2 text-left',
+                      command.disabled
+                        ? 'cursor-not-allowed opacity-45'
+                        : 'cursor-pointer hover:bg-foreground/[0.06]',
+                    )}
+                  >
+                    <span className="rounded-full bg-accent-100 px-2 py-0.5 font-mono text-[11.5px] text-accent-800">
+                      /{command.keyword}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[12.5px]">{command.title}</span>
+                    <span className="max-w-[180px] truncate text-[10.5px] text-muted">
+                      {command.description}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
             {queuedMessages.length > 0 ? (
               <QueuePanel
                 queuedMessages={queuedMessages}
@@ -1188,6 +1401,126 @@ export function ChatPanel({
                 ) : null}
               </div>
             ) : null}
+            {/* Session Fork (#10) lives in the toolbar above the composer, not on
+                every bubble: a compact trigger keeps the transcript uncluttered. */}
+            {!blank && session ? (
+              <div ref={forkRootRef} className="mb-1.5 flex h-7 items-center gap-1 px-1.5 text-muted">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (running) return;
+                    setForkArm(null);
+                    setForkMenuOpen((open) => !open);
+                  }}
+                  title={
+                    running
+                      ? 'Wait for the current run to finish before forking'
+                      : 'Fork this task at an earlier message — later messages are discarded'
+                  }
+                  className={cn(
+                    'inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-full border-0 bg-foreground/[0.04] px-2.5 text-[11px] hover:bg-foreground/[0.09]',
+                    running && 'cursor-not-allowed opacity-45',
+                    forkMenuOpen && 'bg-foreground/[0.09]',
+                  )}
+                >
+                  <GitBranch className="h-3 w-3 flex-none" />
+                  Fork
+                </button>
+                {forking ? (
+                  <span className="flex-none text-[10.5px] text-muted/70">Forking…</span>
+                ) : null}
+                {forkPoints.data && forkPoints.data.points.length ? (
+                  <span className="hidden flex-none text-[10.5px] text-muted/60 sm:inline">
+                    {forkPoints.data.points.length} forkable message
+                    {forkPoints.data.points.length === 1 ? '' : 's'}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+            {forkMenuOpen && forkAnchor && !running
+              ? createPortal(
+                  <div
+                    ref={forkMenuRef}
+                    style={forkAnchor}
+                    className="z-50 flex w-[360px] flex-col overflow-hidden rounded-[16px] border border-border bg-background shadow-[var(--shadow-lg)]"
+                  >
+                    <div className="flex items-center justify-between gap-2 border-b border-border px-3.5 py-2.5">
+                      <span className="text-[12.5px] font-bold">Fork at a message</span>
+                      <span className="text-[10.5px] text-muted">
+                        rewinds the task; later messages are discarded
+                      </span>
+                    </div>
+                    {forkPoints.isLoading ? (
+                      <p className="px-3.5 py-4 text-center text-[12px] text-muted">
+                        Loading fork points…
+                      </p>
+                    ) : (forkPoints.data?.points ?? []).length ? (
+                      <div className="max-h-[240px] min-h-0 flex-1 overflow-y-auto py-1">
+                        {(forkPoints.data?.points ?? []).map((point) => {
+                          const armed = forkArm?.entryId === point.entryId;
+                          return (
+                            <button
+                              key={point.entryId}
+                              type="button"
+                              onClick={() =>
+                                setForkArm(armed ? null : { entryId: point.entryId, text: point.text })
+                              }
+                              className={cn(
+                                'flex w-full items-center gap-2.5 border-0 bg-transparent px-3.5 py-2 text-left',
+                                armed
+                                  ? 'bg-accent-soft'
+                                  : 'hover:bg-foreground/[0.06]',
+                              )}
+                            >
+                              <GitBranch
+                                className={cn(
+                                  'h-3.5 w-3.5 flex-none',
+                                  armed ? 'text-accent-700' : 'text-muted',
+                                )}
+                              />
+                              <span className="min-w-0 flex-1 truncate text-[12px]">
+                                {point.text}
+                              </span>
+                              <span className="flex-none text-[10.5px] text-muted">
+                                {armed ? 'selected' : ''}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="px-3.5 py-4 text-center text-[12px] text-muted">
+                        No messages to fork yet.
+                      </p>
+                    )}
+                    {forkArm ? (
+                      <div className="flex items-center gap-2 border-t border-border px-3.5 py-2.5">
+                        <span className="min-w-0 flex-1 truncate text-[10.5px] text-muted">
+                          Fork at “{forkArm.text.slice(0, 48)}
+                          {forkArm.text.length > 48 ? '…' : ''}”?
+                        </span>
+                        <Button
+                          size="sm"
+                          className="flex-none"
+                          onClick={() => void forkAt(forkArm.entryId)}
+                        >
+                          <GitBranch className="h-3 w-3" />
+                          Fork
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="flex-none"
+                          onClick={() => setForkArm(null)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>,
+                  document.body,
+                )
+              : null}
             {projectSwitchError ? (
               <div className="mb-2 px-2 text-[11px] text-danger">{projectSwitchError}</div>
             ) : null}
@@ -1314,7 +1647,7 @@ export function ChatPanel({
                   if (event.shiftKey) return;
                   event.preventDefault();
                   // With a suggestion list open, Enter takes the first suggestion
-                  // rather than sending a half-typed `$re` or `@src/`.
+                  // rather than sending a half-typed `$re`, `@src/` or `/pla`.
                   if (fileMenuOpen) {
                     if (fileMatches.length) {
                       applyFile(fileMatches[0]!.path);
@@ -1323,6 +1656,11 @@ export function ChatPanel({
                   }
                   if (skillMenuOpen && skillMatches.length) {
                     applySkill(skillMatches[0]!);
+                    return;
+                  }
+                  if (slashMenuOpen) {
+                    const first = slashMatches.find((command) => !command.disabled);
+                    if (first) runSlash(first);
                     return;
                   }
                   void send();

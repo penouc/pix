@@ -10,6 +10,7 @@ import type {
   IndexRepository,
   IndexStateRecord,
 } from '@pi-desktop/database';
+import { isProtectedPath } from '@pi-desktop/security';
 
 const exec = promisify(execFile);
 
@@ -273,8 +274,17 @@ export class IndexService {
   /**
    * Search paths and bodies at once. Scoped to trusted projects even if a stale
    * row survives, and to one project when `projectId` is given.
+   *
+   * `excludeProtected` drops hits whose absolute path matches a protected-path
+   * rule — used by the composer's `@` mention (#4), which puts the referenced
+   * path into the model's context rather than just opening it.
    */
-  search(input: { query: string; projectId?: string; limit?: number }): IndexSearchResult {
+  search(input: {
+    query: string;
+    projectId?: string;
+    limit?: number;
+    excludeProtected?: boolean;
+  }): IndexSearchResult {
     const trusted = this.deps.listProjects().filter((project) => project.trusted);
     const scoped = input.projectId
       ? trusted.filter((project) => project.id === input.projectId)
@@ -291,9 +301,15 @@ export class IndexService {
       labels.get(projectId) ?? { projectName: projectId, projectPath: '' };
     const projectIds = scoped.map((project) => project.id);
     const limit = input.limit ?? 12;
+    const projectRoot = new Map(scoped.map((project) => [project.id, project.path]));
+    const protectedHit = (projectId: string, relative: string): boolean => {
+      const root = projectRoot.get(projectId);
+      return Boolean(root && isProtectedPath(path.join(root, relative)));
+    };
 
     const paths = this.deps.repo
       .searchPaths({ query: input.query, projectIds, limit })
+      .filter((hit) => (input.excludeProtected ? !protectedHit(hit.projectId, hit.path) : true))
       .map((hit) => ({ ...hit, ...labelFor(hit.projectId) }));
 
     const pathSet = new Set(paths.map((hit) => `${hit.projectId}:${hit.path}`));
@@ -301,6 +317,7 @@ export class IndexService {
       .searchContent({ query: input.query, projectIds, limit: limit * 2 })
       // A file already listed by path does not need a second row for its body.
       .filter((hit) => !pathSet.has(`${hit.projectId}:${hit.path}`))
+      .filter((hit) => (input.excludeProtected ? !protectedHit(hit.projectId, hit.path) : true))
       .slice(0, limit)
       .map((hit) => ({ ...hit, ...labelFor(hit.projectId) }));
 

@@ -1211,6 +1211,7 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
             query: cmd.params.query,
             ...(cmd.params.projectId ? { projectId: cmd.params.projectId } : {}),
             ...(cmd.params.limit ? { limit: cmd.params.limit } : {}),
+            ...(cmd.params.excludeProtected ? { excludeProtected: true } : {}),
           }),
         );
       }
@@ -1419,6 +1420,20 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         const result = await agent.compact(cmd.params.sessionId, cmd.params.customInstructions);
         return okResult(result);
       }
+      case 'agent.forkPoints': {
+        const points = (await agent.forkPoints?.(cmd.params.sessionId)) ?? [];
+        return okResult({ points });
+      }
+      case 'agent.forkSession': {
+        if (!agent.forkSession) {
+          return errResult('NOT_SUPPORTED', 'Session fork is not available');
+        }
+        const result = await agent.forkSession(cmd.params.sessionId, cmd.params.entryId);
+        // The stored transcript rows describe the abandoned branch; drop them
+        // so `session.messages` refetches from the rewound Pi branch.
+        await db.sessionMessages.deleteBySession(cmd.params.sessionId);
+        return okResult(result);
+      }
       case 'agent.setAutoCompaction': {
         await agent.setAutoCompactionEnabled?.(cmd.params.enabled, cmd.params.sessionId);
         return okResult({ enabled: cmd.params.enabled });
@@ -1449,6 +1464,25 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
             to,
             ...(cmd.params?.projectId ? { projectId: cmd.params.projectId } : {}),
           }),
+        );
+      }
+      case 'usage.projects': {
+        // Projects that actually recorded runs in the window, so the usage tab
+        // can filter by project without guessing from recently opened folders.
+        const days = cmd.params?.days ?? 365;
+        const to = Date.now();
+        const from = to - days * 24 * 60 * 60 * 1000;
+        await getSessionLogSync().sync();
+        const rows = db.runMetrics.projects({ from, to });
+        const byId = new Map(db.projects.listRecent(100).map((p) => [p.id, p]));
+        return okResult(
+          rows.map((row) => ({
+            projectId: row.projectId,
+            projectName: byId.get(row.projectId)?.name ?? row.projectId,
+            projectPath: byId.get(row.projectId)?.path ?? undefined,
+            lastUsedAt: row.lastUsedAt,
+            runs: row.runs,
+          })),
         );
       }
       case 'audit.summary': {

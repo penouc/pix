@@ -167,6 +167,52 @@ describe('agent stream scoping', () => {
     expect(useAgentStreamStore.getState().messages.some((m) => m.role === 'system')).toBe(true);
   });
 
+  it('shows an auto-retry attempt and clears it when the retry settles', () => {
+    useAgentStreamStore.getState().applyEvent({
+      type: 'run.started',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      runId: 'agent-run-1',
+      sequence: 1,
+      timestamp: Date.now(),
+    } as DesktopAgentEvent);
+
+    useAgentStreamStore.getState().applyEvent({
+      type: 'run.retry-started',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      runId: 'agent-run-1',
+      sequence: 2,
+      timestamp: Date.now(),
+      attempt: 1,
+      maxAttempts: 2,
+      delayMs: 1500,
+      errorMessage: '429 rate limited',
+    } as DesktopAgentEvent);
+
+    expect(useAgentStreamStore.getState().retry).toEqual({
+      attempt: 1,
+      maxAttempts: 2,
+      delayMs: 1500,
+      errorMessage: '429 rate limited',
+    });
+    // The run itself never left the running state — only the badge changed.
+    expect(useAgentStreamStore.getState().status).toBe('running');
+
+    useAgentStreamStore.getState().applyEvent({
+      type: 'run.retry-finished',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      runId: 'agent-run-1',
+      sequence: 3,
+      timestamp: Date.now(),
+      success: true,
+      attempt: 1,
+    } as DesktopAgentEvent);
+
+    expect(useAgentStreamStore.getState().retry).toBeNull();
+  });
+
   it('keeps queued messages when the current run is cancelled', () => {
     useAgentStreamStore.getState().addQueuedMessage('continue with the tests');
     useAgentStreamStore.getState().applyEvent({

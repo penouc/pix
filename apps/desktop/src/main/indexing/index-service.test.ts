@@ -92,6 +92,28 @@ describe('IndexService', () => {
     expect(service.search({ query: 'blob' }).paths.map((hit) => hit.path)).toContain('blob.dat');
   });
 
+  it('drops protected paths from @-mention searches but keeps them for the palette', async () => {
+    // A protected basename that the walk still indexes (dotfiles are skipped,
+    // so `.env` would never appear in the fixture in the first place).
+    await writeFile(path.join(root, 'credentials.json'), '{"token":"secret"}\n');
+    await service.refresh('p1');
+
+    // The palette (no excludeProtected) still sees the file by path.
+    expect(service.search({ query: 'credentials' }).paths.map((hit) => hit.path)).toContain(
+      'credentials.json',
+    );
+
+    // The composer `@` mention opts out of protected paths entirely.
+    const mention = service.search({
+      query: '',
+      projectId: 'p1',
+      excludeProtected: true,
+    });
+    expect(mention.paths.map((hit) => hit.path)).not.toContain('credentials.json');
+    // Ordinary sources survive the filter.
+    expect(mention.paths.map((hit) => hit.path)).toContain('src/alpha.ts');
+  });
+
   it('scopes search to one project when asked', async () => {
     const other = await mkdtemp(path.join(tmpdir(), 'pi-index2-'));
     await writeFile(path.join(other, 'alpha.ts'), 'shared\n');

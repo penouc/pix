@@ -45,6 +45,8 @@ interface SessionRecord extends AgentSession {
   contextTokens: number;
   autoCompactionEnabled: boolean;
   sessionMode: SessionMode;
+  /** User prompts in order, for the fake fork points (#10). */
+  forkablePrompts?: Array<{ entryId: string; text: string }>;
 }
 
 interface ActiveRun {
@@ -132,6 +134,12 @@ export class FakeAgentRuntime implements AgentRuntime {
       session.model = { providerId: 'fake', modelId: 'fake-demo' };
     }
     session.firstUserText ??= input.text.trim();
+    if (input.text.trim()) {
+      session.forkablePrompts = [
+        ...(session.forkablePrompts ?? []),
+        { entryId: `fork-${(session.forkablePrompts?.length ?? 0) + 1}`, text: input.text.trim() },
+      ];
+    }
 
     void this.simulateRun(active, session, input.text);
     return { runId, sessionId };
@@ -259,6 +267,43 @@ export class FakeAgentRuntime implements AgentRuntime {
     });
     session.updatedAt = Date.now();
     return result;
+  }
+
+  async forkPoints(sessionId: string): Promise<Array<{ entryId: string; text: string }>> {
+    this.assertAlive();
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new DomainError(agentError('SESSION_NOT_FOUND', `Session ${sessionId} not found`));
+    }
+    return session.forkablePrompts ?? [];
+  }
+
+  async forkSession(sessionId: string, entryId: string): Promise<{ editorText?: string }> {
+    this.assertAlive();
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new DomainError(agentError('SESSION_NOT_FOUND', `Session ${sessionId} not found`));
+    }
+    const points = session.forkablePrompts ?? [];
+    const target = points.find((point) => point.entryId === entryId);
+    if (!target) {
+      throw new DomainError(agentError('ENTRY_NOT_FOUND', `Fork point ${entryId} not found`));
+    }
+    // Rewind the fake transcript: drop every prompt after the target and emit a
+    // context refresh so the UI reloads the truncated thread.
+    const index = points.indexOf(target);
+    session.forkablePrompts = points.slice(0, index + 1);
+    this.emit({
+      type: 'context.updated',
+      projectId: session.projectId,
+      sessionId: session.id,
+      timestamp: Date.now(),
+      tokens: session.contextTokens,
+      contextWindow: 128_000,
+      percent: Math.min(100, Math.round((session.contextTokens / 128_000) * 100)),
+    });
+    session.updatedAt = Date.now();
+    return { editorText: target.text };
   }
 
   async setAutoCompactionEnabled(enabled: boolean, sessionId?: string): Promise<void> {

@@ -219,4 +219,9 @@ export class SqliteSessionMessageRepository implements SessionMessageRepository 
     }
     return Promise.resolve(sequence);
   }
+
+  deleteBySession(sessionId: string): Promise<void> {
+    this.db.prepare('DELETE FROM session_messages WHERE session_id = ?').run(sessionId);
+    return Promise.resolve();
+  }
 }

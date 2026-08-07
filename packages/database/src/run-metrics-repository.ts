@@ -38,6 +38,13 @@ export interface UsageSummary {
   byModel: UsageByModel[];
 }
 
+export interface UsageProject {
+  projectId: string;
+  /** Most recent run's started_at, for ordering the picker. */
+  lastUsedAt: number;
+  runs: number;
+}
+
 /**
  * Persisted per-run metrics (plan §14 / §26.2 v6-equivalent).
  *
@@ -50,5 +57,7 @@ export interface RunMetricsRepository {
     metrics: RunMetrics & { inputTokens?: number; outputTokens?: number; costUsd?: number },
   ): Promise<void>;
   summary(input: { from: number; to: number; projectId?: string }): UsageSummary;
+  /** Projects that recorded runs in the window, most recent activity first. */
+  projects(input: { from: number; to: number }): UsageProject[];
   close?(): void;
 }

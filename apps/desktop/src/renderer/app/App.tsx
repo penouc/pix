@@ -353,6 +353,7 @@ export function App() {
             insert={composerInsert}
             blank={blankRun}
             onTaskStarted={() => setBlankRun(false)}
+            onNewTask={newTask}
           />
         )}
       </div>

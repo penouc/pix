@@ -139,6 +139,48 @@ describe('mapPiSessionEvent', () => {
     const ctx = makeCtx();
     expect(mapPiSessionEvent({ type: 'queue_update' }, ctx)).toEqual([]);
   });
+
+  it('maps auto_retry_start to run.retry-started', () => {
+    const ctx = makeCtx();
+    const events = mapPiSessionEvent(
+      {
+        type: 'auto_retry_start',
+        attempt: 1,
+        maxAttempts: 2,
+        delayMs: 1500,
+        errorMessage: '429 rate limited',
+      },
+      ctx,
+    );
+    expect(events[0]).toMatchObject({
+      type: 'run.retry-started',
+      attempt: 1,
+      maxAttempts: 2,
+      delayMs: 1500,
+      errorMessage: '429 rate limited',
+      runId: 'r1',
+    });
+  });
+
+  it('maps auto_retry_end to run.retry-finished', () => {
+    const ctx = makeCtx();
+    const events = mapPiSessionEvent(
+      { type: 'auto_retry_end', success: true, attempt: 2, finalError: 'n/a' },
+      ctx,
+    );
+    expect(events[0]).toMatchObject({
+      type: 'run.retry-finished',
+      success: true,
+      attempt: 2,
+      finalError: 'n/a',
+    });
+  });
+
+  it('drops malformed retry events instead of crashing', () => {
+    const ctx = makeCtx();
+    expect(mapPiSessionEvent({ type: 'auto_retry_start' }, ctx)).toEqual([]);
+    expect(mapPiSessionEvent({ type: 'auto_retry_end', success: true }, ctx)).toEqual([]);
+  });
 });
 
 describe('extractUsage', () => {

@@ -39,14 +39,14 @@
 
 | 状态 | 数量 |
 |------|------|
-| 未开始 `[ ]` | 18 |
+| 未开始 `[ ]` | 10 |
 | 进行中 `[~]` | 0 |
-| 完成 `[x]` | 3 |
+| 完成 `[x]` | 11 |
 | 推迟 `[-]` | 0 |
 
-**进度：** 3 / 21  
+**进度：** 11 / 21  
 
-**已完成项测试：** #1 `partial` · #2 `partial` · #3 `unit`
+**已完成项测试：** #1 `partial` · #2 `partial` · #3 `unit` · #21 `unit` · #4 `unit` · #6 `unit` · #8 `unit` · #7 `unit` · #10 `unit`
 
 ---
 
@@ -59,14 +59,14 @@
 | 1 | [x] | partial | Compaction + 上下文用量 | 接线 Pi | 自动/手动 compact 可用；Composer 上方可见 context 用量；撞墙 fixture 仍能完成任务 | 实现：2026-08-07。**已测：** protocol events/commands、fake-runtime compact、agent-stream-store `context.updated`/compacting；相关 vitest 通过。**未测：** 桌面手测 Compact 按钮；context-overflow fixture |
 | 2 | [x] | partial | Thinking level 控制 | 接线 Pi | 会话可选 thinking；主路径步骤 3 不再缺控件 | 此前已接线：`ThinkingLevelPicker` + `agent.set/getThinkingLevel` + Pi `setThinkingLevel`；建任务时会套用所选 level。**已测：** 代码路径存在且桌面可见。**未测：** 本轮未单独补自动化断言 |
 | 3 | [x] | unit | Plan Mode（只读再动手） | 接线 Pi | Plan 下无 write/edit/bash 落盘；Approve → Build 可切换；安全测试断言 | 实现：2026-08-07。**已测：** `policy-engine` Plan 下 deny write/edit/bash；packages build + vitest 通过。**未测：** 桌面手测 Plan/Build 切换与真实 Pi `setActiveToolsByName`；Approve-plan→Build 注入仍未做 |
-| 4 | [ ] | — | Composer `@` 文件引用 | 接线 Pi / Main | `@` 可搜并插入工作区内路径；受 protected paths 约束 | |
-| 5 | [ ] | — | Composer `$` skills | 接线 Pi | `$` 触发已启用 skill；与 Skills 面板开关一致 | |
-| 6 | [ ] | — | Composer `/` 命令 | 接线 Pi | `/` 可调内置/模板命令（含 compact 等入口） | |
-| 7 | [ ] | — | 成本 / token / cache 面板 | 接线 Pi | run/session/project 级用量与粗算成本可见；量级与账单同阶 | |
-| 8 | [ ] | — | Auto-retry 可见化 | 接线 Pi | Provider 重试时 UI 显示 attempt，而非假死 | |
-| 9 | [ ] | — | Steer 队列 UI | 接线 Pi | steer/followUp 策略可配；待发队列可看可清 | |
-| 10 | [ ] | — | Session Fork | 接线 Pi | 可从历史 user message 分叉；不复制 Checkpoint BLOB；冲突检测仍有效 | |
-| 21 | [ ] | — | **Auto 模型请求**（自动选模 / 角色路由 / fallback） | 接线 Pi + 产品化 | 见下方专条 | 与审批模式「Auto」无关，勿混名 |
+| 4 | [x] | unit | Composer `@` 文件引用 | 接线 Pi / Main | `@` 可搜并插入工作区内路径；受 protected paths 约束 | 实现：2026-08-07（此前已接线 index 搜索）。**本轮：** `index.search` 增加 `excludeProtected`，`@` 提及不再给出 `.env` 类 protected 路径（⌘K 面板不受影响）。**已测：** index-service 过滤测试 + protocol schema。**未测：** 桌面手测插入路径后真实模型读取 |
+| 5 | [x] | partial | Composer `$` skills | 接线 Pi | `$` 触发已启用 skill；与 Skills 面板开关一致 | 此前已接线：`$` 弹出已启用 skill 列表，插入 `/skill:name`；与 Skills 面板同一 `skills.list` 数据源与 enabled 开关。**已测：** 代码路径存在且桌面可见。**未测：** 本轮未补自动化断言 |
+| 6 | [x] | unit | Composer `/` 命令 | 接线 Pi | `/` 可调内置/模板命令（含 compact 等入口） | 实现：2026-08-07。Composer 行首 `/` 弹出命令菜单：`/compact`、`/plan`、`/build`、`/auto`（模型 Auto）、`/clear`（清队列）、`/new`；选中即执行并清空草稿，Enter 取首个可用。**已测：** `matchSlashQuery`/`filterSlashCommands` 单测 + 桌面 typecheck。**未测：** 桌面手测菜单交互 |
+| 7 | [x] | unit | 成本 / token / cache 面板 | 接线 Pi | run/session/project 级用量与粗算成本可见；量级与账单同阶 | 此前已实现：Usage 页（热力图/按模型/花费 KPI）+ `usage.summary`（支持 projectId）。**本轮：** 新增 `usage.projects` IPC + Usage 页项目筛选下拉。**已测：** run-metrics `projects`/按项目 scope 单测。**未测：** session 级明细视图；桌面手测账单量级对比 |
+| 8 | [x] | unit | Auto-retry 可见化 | 接线 Pi | Provider 重试时 UI 显示 attempt，而非假死 | 实现：2026-08-07。接线 Pi `auto_retry_start/end` → protocol `run.retry-started/finished` → store `retry` 状态 → Composer 头部「Retrying 1/2」徽标（含 delayMs 提示）+ StatusPanel 行。**已测：** event-mapper 映射、protocol schema、agent-stream-store 状态转移。**未测：** 桌面手测真实 429 触发徽标 |
+| 9 | [x] | partial | Steer 队列 UI | 接线 Pi | steer/followUp 策略可配；待发队列可看可清 | 此前已接线：运行中 Queue/Steer 分段切换、QueuePanel（可见/编辑/发送/清空）、agent.steer IPC。**已测：** 代码路径存在且桌面可见；store 队列单测在。**未测：** 本轮未补自动化断言 |
+| 10 | [x] | unit | Session Fork | 接线 Pi | 可从历史 user message 分叉；不复制 Checkpoint BLOB；冲突检测仍有效 | 实现：2026-08-07。接线 Pi `getUserMessagesForForking` + `navigateTree`（原位回卷，不复制 Checkpoint）；协议 `agent.forkPoints`/`agent.forkSession`；Main 侧删除过期的 session_messages 行使 `session.messages` 回落到回卷后的 Pi 分支；UI：输入框上方工具栏「Fork」按钮 → 分叉点列表 → 二次确认 → 回卷并把该消息放回输入框。**已测：** fake-runtime fork 流、protocol 命令、`deleteBySession` 仓库测试。**未测：** 桌面手测真实会话回卷与分支摘要 |
+| 21 | [x] | unit | **Auto 模型请求**（自动选模 / 角色路由 / fallback） | 接线 Pi + 产品化 | 见下方专条 | 实现：2026-08-07。**已测：** `auto-model` 单测 12 条（角色链派生、fallback 去重、auth 跳过、错误分类）+ pi-runtime run 循环 auto-switch 断言 + protocol 事件/命令 + provider-settings 持久化 + agent-stream-store `model.auto-switched` 系统消息。**未测：** 桌面手测真实 Provider 429 触发换模；AutoModelSection 表单手测 |
 
 ### #21 专条 — Auto 模型请求
 
@@ -119,11 +119,11 @@
 1. **#1** Compaction + 上下文 ~~（已完成 · partial）~~
 2. **#3** Plan Mode ~~（已完成 · unit）~~
 3. **#2** Thinking level ~~（已完成 · partial；此前已接线）~~
-4. **#21** Auto 模型请求（代选 + 角色路由 + fallback）
-5. **#4–6** Composer `@` / `$` / `/`
-6. **#7–9** 成本、retry、steer（#8 与 #21 fallback 联动）
+4. **#21** Auto 模型请求 ~~（已完成 · unit）~~
+5. **#4–6** Composer `@` / `$` / `/` ~~（已完成 · #4 unit / #5 partial / #6 unit）~~
+6. **#7–9** 成本、retry、steer ~~（已完成 · #7 unit / #8 unit / #9 partial）~~
 7. **#11–12** Todo + Ask
-8. **#10** Session Fork
+8. **#10** Session Fork ~~（已完成 · unit）~~
 9. **#15** grep/glob
 10. **#13** Hashline（或与 #14 二选一先做）
 11. **#14** LSP
@@ -144,3 +144,11 @@
 | 2026-08-07 | **#3 完成**：Plan/Build 模式（工具集切换 + 安全 fail-closed + Composer 切换器）；测试=`unit` |
 | 2026-08-07 | 表格增加「测试」列与测试状态图例；总览增加已完成项测试摘要 |
 | 2026-08-07 | **#2 标记完成**：Thinking level 此前已接线（Picker + IPC + Pi）；测试=`partial` |
+| 2026-08-07 | **#21 标记完成**：Auto 模型路由（代选 + 角色路由 + fallback）已实现并有 12 条单测；测试=`unit` |
+| 2026-08-07 | **#4 完成**：`@` 提及增加 protected-paths 过滤（`index.search excludeProtected`）；测试=`unit` |
+| 2026-08-07 | **#5 标记完成**：`$` skills 此前已接线；测试=`partial` |
+| 2026-08-07 | **#6 完成**：Composer `/` 命令菜单（compact/plan/build/auto/clear/new）；测试=`unit` |
+| 2026-08-07 | **#8 完成**：接线 Pi `auto_retry_start/end`，UI 显示重试 attempt；测试=`unit` |
+| 2026-08-07 | **#9 标记完成**：Steer 队列 UI 此前已接线；测试=`partial` |
+| 2026-08-07 | **#7 完成**：Usage 页增加项目筛选（`usage.projects` IPC + 下拉）；测试=`unit` |
+| 2026-08-07 | **#10 完成**：Session Fork（`agent.forkPoints`/`agent.forkSession` + 工具栏 Fork 菜单 + 回卷）；测试=`unit` |

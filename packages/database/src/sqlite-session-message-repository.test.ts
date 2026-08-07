@@ -164,4 +164,20 @@ describe('SqliteSessionMessageRepository', () => {
     const again = await repo.backfill('s1', [{ kind: 'message', role: 'user', text: 'ignored' }]);
     expect(again).toBe(0);
   });
+
+  it('deletes a session transcript so the Pi branch becomes the source again', async () => {
+    const repo = await setup();
+    await repo.backfill('s1', [
+      { kind: 'message', role: 'user', text: 'keep me' },
+      { kind: 'message', role: 'assistant', text: 'abandoned branch' },
+    ]);
+    expect(repo.list('s1')).toHaveLength(2);
+
+    await repo.deleteBySession('s1');
+    expect(repo.list('s1')).toHaveLength(0);
+    // The write must be a full wipe: a backfill after the fork restores only
+    // what the rewound Pi session reports.
+    await repo.backfill('s1', [{ kind: 'message', role: 'user', text: 'rewound prompt' }]);
+    expect(repo.list('s1')).toHaveLength(1);
+  });
 });

@@ -176,6 +176,42 @@ export function mapPiSessionEvent(
         },
       ];
 
+    /** Auto-retry visibility (#8): provider/transport retry, same model. */
+    case 'auto_retry_start': {
+      const attempt = numberField(event['attempt']);
+      const maxAttempts = numberField(event['maxAttempts']);
+      const delayMs = numberField(event['delayMs']);
+      if (attempt == null || maxAttempts == null || delayMs == null) return [];
+      return [
+        {
+          type: 'run.retry-started',
+          ...base(),
+          attempt,
+          maxAttempts,
+          delayMs,
+          ...(typeof event['errorMessage'] === 'string'
+            ? { errorMessage: event['errorMessage'].slice(0, 300) }
+            : {}),
+        },
+      ];
+    }
+
+    case 'auto_retry_end': {
+      const attempt = numberField(event['attempt']);
+      if (attempt == null) return [];
+      return [
+        {
+          type: 'run.retry-finished',
+          ...base(),
+          success: event['success'] === true,
+          attempt,
+          ...(typeof event['finalError'] === 'string'
+            ? { finalError: event['finalError'].slice(0, 300) }
+            : {}),
+        },
+      ];
+    }
+
     default:
       return [];
   }
@@ -239,4 +275,8 @@ function safeJson(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+function numberField(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }

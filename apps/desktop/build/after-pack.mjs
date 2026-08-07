@@ -8,6 +8,8 @@
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, statSync } from 'node:fs';
+
+/* global console */
 import path from 'node:path';
 
 /** Privacy keys Electron templates with and that PiX does not need. */

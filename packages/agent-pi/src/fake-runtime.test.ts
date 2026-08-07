@@ -87,6 +87,33 @@ describe('FakeAgentRuntime', () => {
     expect(events.some((e) => e.type === 'run.completed')).toBe(false);
     await runtime.dispose();
   });
+
+  it('lists fork points and rewinds the transcript at one', async () => {
+    const runtime = new FakeAgentRuntime();
+
+    const session = await runtime.createSession({
+      projectId: 'proj-1',
+      projectPath: '/tmp/demo',
+    });
+    await runtime.sendMessage(session.id, { text: 'first idea' });
+    await runtime.sendMessage(session.id, { text: 'second idea' });
+    await runtime.sendMessage(session.id, { text: 'third idea' });
+
+    const points = await runtime.forkPoints(session.id);
+    expect(points.map((p) => p.text)).toEqual(['first idea', 'second idea', 'third idea']);
+
+    // Fork at the second message: later messages are discarded and the editor
+    // text comes back for re-sending.
+    const result = await runtime.forkSession(session.id, points[1]!.entryId);
+    expect(result.editorText).toBe('second idea');
+    expect((await runtime.forkPoints(session.id)).map((p) => p.text)).toEqual([
+      'first idea',
+      'second idea',
+    ]);
+
+    await expect(runtime.forkSession(session.id, 'nope')).rejects.toThrow();
+    await runtime.dispose();
+  });
 });
 
 function waitFor(predicate: () => boolean, timeoutMs: number): Promise<void> {

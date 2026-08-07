@@ -210,6 +210,17 @@ export interface AgentRuntime {
    * agent still had it in context.
    */
   listMessages?(sessionId: string): Promise<StoredMessage[]>;
+  /**
+   * Session Fork (#10): the user messages a session can be rewound to, with
+   * their Pi entry ids. Absent for runtimes without a session tree.
+   */
+  forkPoints?(sessionId: string): Promise<Array<{ entryId: string; text: string }>>;
+  /**
+   * Fork the session at a historical user message: rewind the transcript to
+   * that point (in place — no checkpoint blobs are copied) and return the
+   * message text so the UI can re-send it. Rejects while a run is active.
+   */
+  forkSession?(sessionId: string, entryId: string): Promise<{ editorText?: string }>;
   /** Optional: which providers currently have usable credentials (no secrets). */
   getAuthStatus?(): Promise<Array<{ providerId: string; hasAuth: boolean; source: string }>>;
   /** Optional: choose a default model when the session has none. */

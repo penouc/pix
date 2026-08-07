@@ -575,6 +575,44 @@ export class PiAgentRuntime implements AgentRuntime {
     return this.readContextUsage(record);
   }
 
+  /** Session Fork (#10): every user message the session can be rewound to. */
+  async forkPoints(sessionId: string): Promise<Array<{ entryId: string; text: string }>> {
+    this.assertAlive();
+    const record = this.requireSession(sessionId);
+    try {
+      return record.pi.getUserMessagesForForking();
+    } catch (error) {
+      // A session without a tree (or an older SDK build) has no fork points.
+      console.warn('[PiAgentRuntime] forkPoints unavailable', error);
+      return [];
+    }
+  }
+
+  /**
+   * Fork at a historical user message: rewind the transcript in place to that
+   * message (no checkpoint blobs are copied — #10) and return its text so the
+   * UI can re-send it. The abandoned branch stays in the session file.
+   */
+  async forkSession(
+    sessionId: string,
+    entryId: string,
+  ): Promise<{ editorText?: string }> {
+    this.assertAlive();
+    const record = this.requireSession(sessionId);
+    if (record.activeRunId) {
+      throw new DomainError(
+        agentError('RUN_ACTIVE', 'Wait for the current run to finish before forking.'),
+      );
+    }
+    const result = await record.pi.navigateTree(entryId, { summarize: false });
+    if (result.cancelled) {
+      throw new DomainError(agentError('FORK_CANCELLED', 'Fork was cancelled.'));
+    }
+    record.desktop.updatedAt = Date.now();
+    this.emitContextUsage(record);
+    return { ...(result.editorText ? { editorText: result.editorText } : {}) };
+  }
+
   async compact(sessionId: string, customInstructions?: string): Promise<CompactionResult> {
     this.assertAlive();
     const record = this.requireSession(sessionId);

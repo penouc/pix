@@ -159,4 +159,26 @@ describe('Compaction IPC commands', () => {
       }).success,
     ).toBe(true);
   });
+
+  it('accepts session fork commands', () => {
+    expect(
+      parseIpcCommand({
+        method: 'agent.forkPoints',
+        params: { sessionId: 'session-1' },
+      }).success,
+    ).toBe(true);
+    expect(
+      parseIpcCommand({
+        method: 'agent.forkSession',
+        params: { sessionId: 'session-1', entryId: 'entry-7' },
+      }).success,
+    ).toBe(true);
+    // The entry id is required: rewinding a session is a scoped action.
+    expect(
+      parseIpcCommand({
+        method: 'agent.forkSession',
+        params: { sessionId: 'session-1' },
+      }).success,
+    ).toBe(false);
+  });
 });

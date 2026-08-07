@@ -59,6 +59,35 @@ describe('DesktopAgentEventSchema', () => {
     ).toBe(true);
   });
 
+  it('accepts run.retry-started and run.retry-finished', () => {
+    expect(
+      DesktopAgentEventSchema.safeParse({
+        type: 'run.retry-started',
+        projectId: 'p1',
+        sessionId: 's1',
+        runId: 'r1',
+        sequence: 2,
+        timestamp: Date.now(),
+        attempt: 1,
+        maxAttempts: 2,
+        delayMs: 1500,
+        errorMessage: '429 rate limited',
+      }).success,
+    ).toBe(true);
+    expect(
+      DesktopAgentEventSchema.safeParse({
+        type: 'run.retry-finished',
+        projectId: 'p1',
+        sessionId: 's1',
+        runId: 'r1',
+        sequence: 3,
+        timestamp: Date.now(),
+        success: true,
+        attempt: 1,
+      }).success,
+    ).toBe(true);
+  });
+
   it('accepts session.updated without a run scope', () => {
     const result = DesktopAgentEventSchema.safeParse({
       type: 'session.updated',

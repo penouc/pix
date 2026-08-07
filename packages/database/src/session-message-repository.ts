@@ -18,4 +18,10 @@ export interface SessionMessageRepository {
   list(sessionId: string): StoredMessage[];
   /** Import Pi transcript rows when SQLite has none yet. */
   backfill(sessionId: string, messages: StoredMessage[]): Promise<number>;
+  /**
+   * Drop a session's stored transcript. Session Fork (#10) rewinds the Pi
+   * session; the stored rows describe the abandoned branch and must go so
+   * `list` falls through to the Pi branch again.
+   */
+  deleteBySession(sessionId: string): Promise<void>;
 }
