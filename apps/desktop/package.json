@@ -1,6 +1,6 @@
 {
   "name": "@pi-desktop/desktop",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "author": "PiX",
   "description": "PiX — local desktop coding agent",
