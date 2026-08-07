@@ -96,6 +96,7 @@ describe('McpBridge', () => {
     // Broken server contributed nothing, good server worked.
     expect(errors).toEqual(['broken']);
     expect(bridge.toolNames().sort()).toEqual(['mcp__good__add', 'mcp__good__echo']);
+    expect(pi.registered.length).toBe(2);
   });
 
   it('dispose kills the child process', async () => {
