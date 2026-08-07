@@ -183,4 +183,29 @@ describe('remembered rules', () => {
     expect(cleared).toBe(1);
     expect(engine.evaluate(write, ctx).action).toBe('require-approval');
   });
+
+  it('denies write/edit/bash in Plan Mode even under Auto approval', () => {
+    const engine = new PolicyEngine({ defaultMode: 'auto-reads' });
+    engine.setSessionWorkMode('s1', 'plan');
+    for (const toolName of ['write', 'edit', 'bash'] as const) {
+      const tool = normalizeToolCall({
+        toolCallId: '1',
+        toolName,
+        args: toolName === 'bash' ? { command: 'ls' } : { path: 'a.ts', content: 'x' },
+        workspaceRoot: workspace,
+      });
+      const d = engine.evaluate(tool, ctx);
+      expect(d.action).toBe('deny');
+      if (d.action === 'deny') {
+        expect(d.message).toMatch(/Plan Mode/);
+      }
+    }
+    const read = normalizeToolCall({
+      toolCallId: '2',
+      toolName: 'read',
+      args: { path: 'a.ts' },
+      workspaceRoot: workspace,
+    });
+    expect(engine.evaluate(read, ctx).action).toBe('allow');
+  });
 });

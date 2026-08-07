@@ -35,6 +35,9 @@ export interface RunUsage {
   totalTokens?: number;
   /** Tokens in the latest model call, used for context-window occupancy. */
   contextTokens?: number;
+  /** From context.updated when available — preferred over model-catalogue capacity. */
+  contextWindow?: number;
+  contextPercent?: number;
   costUsd?: number;
 }
 
@@ -130,6 +133,10 @@ interface AgentStreamState {
   tokenRateSamples: TokenRateSample[];
   /** Last reported context occupancy per task, persisted across restarts. */
   contextTokensBySession: Record<string, number>;
+  /** Context window size from the latest context.updated (preferred over model catalogue). */
+  contextWindowBySession: Record<string, number>;
+  /** True while Pi is compacting the active session. */
+  isCompacting: boolean;
   model: { providerId: string; modelId: string } | null;
   startedAt: number | null;
   lastUserText: string | null;
@@ -162,7 +169,10 @@ function shouldAccept(
     AgentStreamState,
     'lastSequenceByRun' | 'activeRunId' | 'activeProjectId' | 'activeSessionId'
   >,
-  event: Exclude<DesktopAgentEvent, { type: 'session.updated' }>,
+  event: Exclude<
+    DesktopAgentEvent,
+    { type: 'session.updated' } | { type: 'context.updated' } | { type: 'compaction.started' } | { type: 'compaction.completed' }
+  >,
 ): boolean {
   if (state.activeProjectId && event.projectId !== state.activeProjectId) return false;
 
@@ -342,6 +352,8 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
   usage: null,
   tokenRateSamples: [],
   contextTokensBySession: readPersistedContextUsage(),
+  contextWindowBySession: {},
+  isCompacting: false,
   model: null,
   startedAt: null,
   lastUserText: null,
@@ -556,17 +568,26 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
       error: null,
       lastSequenceByRun: {},
       queuedMessages: [],
+      isCompacting: false,
     });
   },
 
   setScope: (projectId, sessionId) => {
     const remembered = sessionId ? get().contextTokensBySession[sessionId] : undefined;
+    const rememberedWindow = sessionId ? get().contextWindowBySession[sessionId] : undefined;
     set({
       activeProjectId: projectId,
       activeSessionId: sessionId,
-      usage: remembered == null ? null : { contextTokens: remembered },
+      usage:
+        remembered == null
+          ? null
+          : {
+              contextTokens: remembered,
+              ...(rememberedWindow != null ? { contextWindow: rememberedWindow } : {}),
+            },
       tokenRateSamples: [],
       queuedMessages: [],
+      isCompacting: false,
     });
   },
 
@@ -575,8 +596,50 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
   },
 
   applyEvent: (event) => {
-    // Metadata events are handled by the shell (sidebar / active session title).
+    // Metadata / session-scoped events — not run-sequence gated.
     if (event.type === 'session.updated') return;
+
+    if (event.type === 'context.updated') {
+      const state = get();
+      if (state.activeSessionId && event.sessionId !== state.activeSessionId) return;
+      if (state.activeProjectId && event.projectId !== state.activeProjectId) return;
+      const contextTokensBySession =
+        event.tokens == null
+          ? state.contextTokensBySession
+          : {
+              ...state.contextTokensBySession,
+              [event.sessionId]: event.tokens,
+            };
+      if (event.tokens != null) persistContextUsage(contextTokensBySession);
+      set({
+        contextTokensBySession,
+        contextWindowBySession: {
+          ...state.contextWindowBySession,
+          [event.sessionId]: event.contextWindow,
+        },
+        usage: {
+          ...state.usage,
+          contextTokens: event.tokens ?? state.usage?.contextTokens,
+          contextWindow: event.contextWindow,
+          contextPercent: event.percent ?? undefined,
+        },
+      });
+      return;
+    }
+
+    if (event.type === 'compaction.started') {
+      const state = get();
+      if (state.activeSessionId && event.sessionId !== state.activeSessionId) return;
+      set({ isCompacting: true });
+      return;
+    }
+
+    if (event.type === 'compaction.completed') {
+      const state = get();
+      if (state.activeSessionId && event.sessionId !== state.activeSessionId) return;
+      set({ isCompacting: false });
+      return;
+    }
 
     const state = get();
     if (!shouldAccept(state, event)) {

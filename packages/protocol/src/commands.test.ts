@@ -90,3 +90,32 @@ describe('Provider settings IPC commands', () => {
     ).toBe(false);
   });
 });
+
+describe('Compaction IPC commands', () => {
+  it('accepts getContextUsage, compact, and auto-compaction toggles', () => {
+    expect(
+      parseIpcCommand({
+        method: 'agent.getContextUsage',
+        params: { sessionId: 'session-1' },
+      }).success,
+    ).toBe(true);
+    expect(
+      parseIpcCommand({
+        method: 'agent.compact',
+        params: { sessionId: 'session-1', customInstructions: 'keep auth' },
+      }).success,
+    ).toBe(true);
+    expect(
+      parseIpcCommand({
+        method: 'agent.setAutoCompaction',
+        params: { enabled: true, sessionId: 'session-1' },
+      }).success,
+    ).toBe(true);
+    expect(
+      parseIpcCommand({
+        method: 'agent.getAutoCompaction',
+        params: { sessionId: 'session-1' },
+      }).success,
+    ).toBe(true);
+  });
+});

@@ -148,6 +148,42 @@ describe('agent stream scoping', () => {
     expect(useAgentStreamStore.getState().usage?.contextTokens).toBe(1_700);
   });
 
+  it('prefers context.updated occupancy over billing totals and tracks compacting', () => {
+    useAgentStreamStore.getState().applyEvent({
+      type: 'context.updated',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      timestamp: Date.now(),
+      tokens: 42_000,
+      contextWindow: 200_000,
+      percent: 21,
+    });
+    expect(useAgentStreamStore.getState().usage).toMatchObject({
+      contextTokens: 42_000,
+      contextWindow: 200_000,
+      contextPercent: 21,
+    });
+
+    useAgentStreamStore.getState().applyEvent({
+      type: 'compaction.started',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      timestamp: Date.now(),
+      reason: 'auto',
+    });
+    expect(useAgentStreamStore.getState().isCompacting).toBe(true);
+
+    useAgentStreamStore.getState().applyEvent({
+      type: 'compaction.completed',
+      projectId: 'p1',
+      sessionId: 'agent-session',
+      timestamp: Date.now(),
+      aborted: false,
+      reason: 'auto',
+    });
+    expect(useAgentStreamStore.getState().isCompacting).toBe(false);
+  });
+
   it('keeps a turn interactive while assistant content is streaming', () => {
     useAgentStreamStore.setState({ status: 'completed' });
     useAgentStreamStore.getState().applyEvent({

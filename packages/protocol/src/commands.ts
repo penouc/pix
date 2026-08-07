@@ -352,6 +352,10 @@ export const SetUiSettingInputSchema = z.object({
 export const ApprovalModeSchema = z.enum(['ask', 'auto-reads', 'read-only']);
 export type ApprovalMode = z.infer<typeof ApprovalModeSchema>;
 
+/** Agent work mode: plan = read-only tools; build = full coding tools. */
+export const SessionModeSchema = z.enum(['plan', 'build']);
+export type SessionMode = z.infer<typeof SessionModeSchema>;
+
 /** Pi reasoning depth — off through max. Only meaningful on reasoning-capable models. */
 export const ThinkingLevelSchema = z.enum([
   'off',
@@ -378,11 +382,50 @@ export const SetApprovalModeInputSchema = z.object({
 });
 export type SetApprovalModeInput = z.infer<typeof SetApprovalModeInputSchema>;
 
+export const SetSessionModeInputSchema = z.object({
+  mode: SessionModeSchema,
+  sessionId: z.string().min(1).optional(),
+});
+export type SetSessionModeInput = z.infer<typeof SetSessionModeInputSchema>;
+
 export const SetThinkingLevelInputSchema = z.object({
   level: ThinkingLevelSchema,
   sessionId: z.string().min(1).optional(),
 });
 export type SetThinkingLevelInput = z.infer<typeof SetThinkingLevelInputSchema>;
+
+export const SessionIdInputSchema = z.object({
+  sessionId: z.string().min(1),
+});
+export type SessionIdInput = z.infer<typeof SessionIdInputSchema>;
+
+export const CompactSessionInputSchema = z.object({
+  sessionId: z.string().min(1),
+  /** Optional hint for the summarizer (e.g. "keep auth-module context"). */
+  customInstructions: z.string().max(4_000).optional(),
+});
+export type CompactSessionInput = z.infer<typeof CompactSessionInputSchema>;
+
+export const SetAutoCompactionInputSchema = z.object({
+  enabled: z.boolean(),
+  /** Omit to change the default applied to new sessions. */
+  sessionId: z.string().min(1).optional(),
+});
+export type SetAutoCompactionInput = z.infer<typeof SetAutoCompactionInputSchema>;
+
+export const ContextUsageSchema = z.object({
+  tokens: z.number().nonnegative().nullable(),
+  contextWindow: z.number().positive(),
+  percent: z.number().min(0).max(100).nullable(),
+});
+export type ContextUsage = z.infer<typeof ContextUsageSchema>;
+
+export const CompactionResultSchema = z.object({
+  summary: z.string(),
+  tokensBefore: z.number().nonnegative(),
+  estimatedTokensAfter: z.number().nonnegative().optional(),
+});
+export type CompactionResult = z.infer<typeof CompactionResultSchema>;
 
 export const ClearRememberedInputSchema = z.object({
   scope: z.enum(['session', 'project']).optional(),
@@ -504,11 +547,24 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
     method: z.literal('agent.getApprovalMode'),
     params: z.object({ sessionId: z.string().min(1).optional() }).optional(),
   }),
+  z.object({ method: z.literal('agent.setSessionMode'), params: SetSessionModeInputSchema }),
+  z.object({
+    method: z.literal('agent.getSessionMode'),
+    params: z.object({ sessionId: z.string().min(1).optional() }).optional(),
+  }),
   z.object({ method: z.literal('agent.setThinkingLevel'), params: SetThinkingLevelInputSchema }),
   z.object({
     method: z.literal('agent.getThinkingLevel'),
     params: z.object({ sessionId: z.string().min(1).optional() }).optional(),
   }),
+  z.object({ method: z.literal('agent.getContextUsage'), params: SessionIdInputSchema }),
+  z.object({ method: z.literal('agent.compact'), params: CompactSessionInputSchema }),
+  z.object({ method: z.literal('agent.setAutoCompaction'), params: SetAutoCompactionInputSchema }),
+  z.object({
+    method: z.literal('agent.getAutoCompaction'),
+    params: z.object({ sessionId: z.string().min(1).optional() }).optional(),
+  }),
+  z.object({ method: z.literal('agent.abortCompaction'), params: SessionIdInputSchema }),
   z.object({ method: z.literal('permissions.listRemembered'), params: z.object({}).optional() }),
   z.object({
     method: z.literal('permissions.clearRemembered'),

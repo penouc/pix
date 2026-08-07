@@ -1,5 +1,7 @@
 import type {
   ApprovalDecision,
+  CompactionResult,
+  ContextUsage,
   DesktopAgentEvent,
   InputImage,
   ModelRef,
@@ -7,6 +9,7 @@ import type {
   StoredMessage,
   ThinkingLevel,
   ThinkingLevelState,
+  SessionMode,
 } from '@pi-desktop/protocol';
 
 export interface CreateSessionOptions {
@@ -136,6 +139,14 @@ export interface AgentRuntime {
   setModel(sessionId: string, model: ModelRef): Promise<void>;
   setThinkingLevel?(sessionId: string, level: ThinkingLevel): Promise<void>;
   getThinkingLevel?(sessionId: string): Promise<ThinkingLevelState>;
+  /** Live context-window occupancy (Pi `getContextUsage`). */
+  getContextUsage?(sessionId: string): Promise<ContextUsage | null>;
+  /** Manually compact the session transcript. */
+  compact?(sessionId: string, customInstructions?: string): Promise<CompactionResult>;
+  /** Toggle Pi auto-compaction for a session (or default when sessionId omitted). */
+  setAutoCompactionEnabled?(enabled: boolean, sessionId?: string): Promise<void>;
+  getAutoCompactionEnabled?(sessionId?: string): Promise<boolean>;
+  abortCompaction?(sessionId: string): Promise<void>;
   configureProvider?(providerId: string, apiKey: string): Promise<void>;
   /**
    * Approval policy. Omitting `sessionId` sets the default for new sessions.
@@ -143,6 +154,9 @@ export interface AgentRuntime {
    */
   setApprovalMode?(mode: 'ask' | 'auto-reads' | 'read-only', sessionId?: string): Promise<void>;
   getApprovalMode?(sessionId?: string): Promise<'ask' | 'auto-reads' | 'read-only'>;
+  /** Plan = read-only toolset; Build = coding tools. Distinct from approval mode. */
+  setSessionMode?(mode: SessionMode, sessionId?: string): Promise<void>;
+  getSessionMode?(sessionId?: string): Promise<SessionMode>;
   /** Remembered allow-session / allow-project rules, for display. No secrets. */
   listRememberedDecisions?(): Promise<
     Array<{

@@ -154,5 +154,37 @@ export const DesktopAgentEventSchema = z.discriminatedUnion('type', [
     title: z.string().min(1),
     timestamp: z.number().int().nonnegative(),
   }),
+  /**
+   * Live context-window occupancy from Pi `getContextUsage()`.
+   * Session-scoped — compaction can fire outside an active run.
+   * `tokens` / `percent` are null right after compaction until the next LLM reply.
+   */
+  z.object({
+    type: z.literal('context.updated'),
+    projectId: z.string().min(1),
+    sessionId: z.string().min(1),
+    timestamp: z.number().int().nonnegative(),
+    tokens: z.number().nonnegative().nullable(),
+    contextWindow: z.number().positive(),
+    percent: z.number().min(0).max(100).nullable(),
+  }),
+  z.object({
+    type: z.literal('compaction.started'),
+    projectId: z.string().min(1),
+    sessionId: z.string().min(1),
+    timestamp: z.number().int().nonnegative(),
+    reason: z.enum(['manual', 'auto']).optional(),
+  }),
+  z.object({
+    type: z.literal('compaction.completed'),
+    projectId: z.string().min(1),
+    sessionId: z.string().min(1),
+    timestamp: z.number().int().nonnegative(),
+    aborted: z.boolean(),
+    reason: z.enum(['manual', 'auto']).optional(),
+    summary: z.string().optional(),
+    tokensBefore: z.number().nonnegative().optional(),
+    estimatedTokensAfter: z.number().nonnegative().optional(),
+  }),
 ]);
 export type DesktopAgentEvent = z.infer<typeof DesktopAgentEventSchema>;

@@ -25,12 +25,15 @@ import type {
 import { DomainError, agentError } from '@pi-desktop/agent-domain';
 import type {
   ApprovalDecision,
+  CompactionResult,
+  ContextUsage,
   DesktopAgentEvent,
   ModelRef,
   RunRef,
   StoredMessage,
   ThinkingLevel,
   ThinkingLevelState,
+  SessionMode,
 } from '@pi-desktop/protocol';
 import { PermissionPipeline, type ApprovalMode, type RememberedRule } from '@pi-desktop/security';
 
@@ -95,6 +98,11 @@ interface SessionRecord {
   promptTask: Promise<void> | null;
   abortedRunIds: Set<string>;
   currentMessageId: string | null;
+  /** Last compaction reason for pairing start/end events. */
+  compactionReason: 'manual' | 'auto' | null;
+  sessionMode: SessionMode;
+  /** Tool names to restore when leaving Plan Mode. */
+  buildToolNames: string[] | null;
 }
 
 /**
@@ -114,6 +122,7 @@ export class PiAgentRuntime implements AgentRuntime {
   /** Mode chosen before the pipeline exists; applied when it is constructed. */
   private pendingDefaultMode: ApprovalMode | null = null;
   private readonly pendingSessionModes = new Map<string, ApprovalMode>();
+  private pendingDefaultWorkMode: SessionMode = 'build';
   private beforeWriteToolHandler: BeforeWriteToolHandler | null = null;
   private afterWriteToolHandler: AfterWriteToolHandler | null = null;
   private disposed = false;
@@ -254,14 +263,30 @@ export class PiAgentRuntime implements AgentRuntime {
       promptTask: null,
       abortedRunIds: new Set(),
       currentMessageId: null,
+      compactionReason: null,
+      sessionMode: 'build',
+      buildToolNames: null,
     };
     recordHolder.value = record;
+
+    // Product guarantee: auto-compaction stays on (Pi default is already true).
+    try {
+      piSession.setAutoCompactionEnabled(true);
+    } catch {
+      // Older SDK builds without the setter should not block session create.
+    }
 
     record.unsubscribePi = piSession.subscribe((event) => {
       this.onPiEvent(record, event as PiSessionEventLike);
     });
 
     this.sessions.set(desktopId, record);
+    if (this.pendingDefaultWorkMode !== 'build') {
+      await this.applySessionMode(record, this.pendingDefaultWorkMode);
+    } else {
+      this.permissionPipeline?.policy.setSessionWorkMode(desktopId, 'build');
+    }
+    this.emitContextUsage(record);
     return { ...desktop };
   }
 
@@ -495,6 +520,94 @@ export class PiAgentRuntime implements AgentRuntime {
     };
   }
 
+  async getContextUsage(sessionId: string): Promise<ContextUsage | null> {
+    this.assertAlive();
+    const record = this.requireSession(sessionId);
+    return this.readContextUsage(record);
+  }
+
+  async compact(sessionId: string, customInstructions?: string): Promise<CompactionResult> {
+    this.assertAlive();
+    const record = this.requireSession(sessionId);
+    record.compactionReason = 'manual';
+    try {
+      const result = await record.pi.compact(customInstructions);
+      // Pi subscribe events usually cover start/end; emit a completed event if
+      // the SDK returned without a matching compaction_end (tests / older builds).
+      if (record.compactionReason === 'manual') {
+        this.emit({
+          type: 'compaction.completed',
+          projectId: record.desktop.projectId,
+          sessionId: record.desktop.id,
+          timestamp: Date.now(),
+          aborted: false,
+          reason: 'manual',
+          summary: result.summary,
+          tokensBefore: result.tokensBefore,
+          ...(result.estimatedTokensAfter != null
+            ? { estimatedTokensAfter: result.estimatedTokensAfter }
+            : {}),
+        });
+      }
+      this.emitContextUsage(record);
+      record.desktop.updatedAt = Date.now();
+      return {
+        summary: result.summary,
+        tokensBefore: result.tokensBefore,
+        ...(result.estimatedTokensAfter != null
+          ? { estimatedTokensAfter: result.estimatedTokensAfter }
+          : {}),
+      };
+    } catch (error) {
+      this.emit({
+        type: 'compaction.completed',
+        projectId: record.desktop.projectId,
+        sessionId: record.desktop.id,
+        timestamp: Date.now(),
+        aborted: true,
+        reason: 'manual',
+        summary: error instanceof Error ? error.message : String(error),
+      });
+      throw new DomainError(
+        agentError(
+          'PI_COMPACT_FAILED',
+          error instanceof Error ? error.message : String(error),
+          { details: error },
+        ),
+      );
+    } finally {
+      record.compactionReason = null;
+    }
+  }
+
+  async setAutoCompactionEnabled(enabled: boolean, sessionId?: string): Promise<void> {
+    this.assertAlive();
+    if (!sessionId) {
+      // Applied when sessions are created; also update every live session.
+      for (const record of this.sessions.values()) {
+        record.pi.setAutoCompactionEnabled(enabled);
+      }
+      return;
+    }
+    const record = this.requireSession(sessionId);
+    record.pi.setAutoCompactionEnabled(enabled);
+  }
+
+  async getAutoCompactionEnabled(sessionId?: string): Promise<boolean> {
+    this.assertAlive();
+    if (sessionId) {
+      return this.requireSession(sessionId).pi.autoCompactionEnabled;
+    }
+    const first = this.sessions.values().next().value as SessionRecord | undefined;
+    return first?.pi.autoCompactionEnabled ?? true;
+  }
+
+  async abortCompaction(sessionId: string): Promise<void> {
+    this.assertAlive();
+    const record = this.requireSession(sessionId);
+    record.pi.abortCompaction();
+  }
+
   async setApprovalMode(mode: ApprovalMode, sessionId?: string): Promise<void> {
     if (!sessionId) {
       this.pendingDefaultMode = mode;
@@ -514,6 +627,30 @@ export class PiAgentRuntime implements AgentRuntime {
       return this.pendingSessionModes.get(sessionId)!;
     }
     return this.pendingDefaultMode ?? 'auto-reads';
+  }
+
+  async setSessionMode(mode: SessionMode, sessionId?: string): Promise<void> {
+    this.assertAlive();
+    if (!sessionId) {
+      this.pendingDefaultWorkMode = mode;
+      this.permissionPipeline?.policy.setDefaultWorkMode(mode);
+      for (const record of this.sessions.values()) {
+        await this.applySessionMode(record, mode);
+      }
+      return;
+    }
+    const record = this.requireSession(sessionId);
+    await this.applySessionMode(record, mode);
+  }
+
+  async getSessionMode(sessionId?: string): Promise<SessionMode> {
+    this.assertAlive();
+    if (sessionId) {
+      const record = this.sessions.get(sessionId);
+      // Session may exist in SQLite but not yet be hydrated into the runtime.
+      return record?.sessionMode ?? this.pendingDefaultWorkMode;
+    }
+    return this.pendingDefaultWorkMode;
   }
 
   async listRememberedDecisions(): Promise<RememberedRule[]> {
@@ -880,6 +1017,46 @@ export class PiAgentRuntime implements AgentRuntime {
   }
 
   private onPiEvent(record: SessionRecord, event: PiSessionEventLike): void {
+    // Compaction can fire outside an active run (threshold between turns).
+    if (event.type === 'compaction_start') {
+      const reason = record.compactionReason ?? 'auto';
+      if (!record.compactionReason) record.compactionReason = 'auto';
+      this.emit({
+        type: 'compaction.started',
+        projectId: record.desktop.projectId,
+        sessionId: record.desktop.id,
+        timestamp: Date.now(),
+        reason,
+      });
+      return;
+    }
+    if (event.type === 'compaction_end') {
+      const reason = record.compactionReason ?? 'auto';
+      const result = event['result'] as
+        | {
+            summary?: string;
+            tokensBefore?: number;
+            estimatedTokensAfter?: number;
+          }
+        | undefined;
+      this.emit({
+        type: 'compaction.completed',
+        projectId: record.desktop.projectId,
+        sessionId: record.desktop.id,
+        timestamp: Date.now(),
+        aborted: Boolean(event['aborted']),
+        reason,
+        ...(typeof result?.summary === 'string' ? { summary: result.summary } : {}),
+        ...(typeof result?.tokensBefore === 'number' ? { tokensBefore: result.tokensBefore } : {}),
+        ...(typeof result?.estimatedTokensAfter === 'number'
+          ? { estimatedTokensAfter: result.estimatedTokensAfter }
+          : {}),
+      });
+      record.compactionReason = null;
+      this.emitContextUsage(record);
+      return;
+    }
+
     const runId = record.activeRunId;
     if (!runId || record.abortedRunIds.has(runId)) return;
 
@@ -901,11 +1078,89 @@ export class PiAgentRuntime implements AgentRuntime {
       this.emit(desktopEvent);
     }
 
+    if (event.type === 'message_end' || event.type === 'agent_end' || event.type === 'agent_settled') {
+      this.emitContextUsage(record);
+    }
+
     if (event.type === 'agent_end' || event.type === 'agent_settled') {
       if (record.activeRunId === runId) {
         record.activeRunId = null;
       }
     }
+  }
+
+  private readContextUsage(record: SessionRecord): ContextUsage | null {
+    try {
+      const usage = record.pi.getContextUsage();
+      if (!usage || typeof usage.contextWindow !== 'number' || usage.contextWindow <= 0) {
+        return null;
+      }
+      return {
+        tokens: usage.tokens == null ? null : usage.tokens,
+        contextWindow: usage.contextWindow,
+        percent: usage.percent == null ? null : usage.percent,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private emitContextUsage(record: SessionRecord): void {
+    const usage = this.readContextUsage(record);
+    if (!usage) return;
+    this.emit({
+      type: 'context.updated',
+      projectId: record.desktop.projectId,
+      sessionId: record.desktop.id,
+      timestamp: Date.now(),
+      tokens: usage.tokens,
+      contextWindow: usage.contextWindow,
+      percent: usage.percent,
+    });
+  }
+
+  private async applySessionMode(record: SessionRecord, mode: SessionMode): Promise<void> {
+    const PLAN_TOOLS = ['read', 'grep', 'find', 'ls'];
+    const BUILD_TOOLS = ['read', 'bash', 'edit', 'write'];
+
+    if (mode === 'plan') {
+      if (record.sessionMode !== 'plan') {
+        try {
+          record.buildToolNames = record.pi.getActiveToolNames?.() ?? BUILD_TOOLS;
+        } catch {
+          record.buildToolNames = BUILD_TOOLS;
+        }
+      }
+      try {
+        record.pi.setActiveToolsByName(PLAN_TOOLS);
+      } catch (error) {
+        throw new DomainError(
+          agentError(
+            'PI_SESSION_MODE_FAILED',
+            error instanceof Error ? error.message : String(error),
+            { details: error },
+          ),
+        );
+      }
+    } else {
+      const restore = record.buildToolNames?.length ? record.buildToolNames : BUILD_TOOLS;
+      try {
+        record.pi.setActiveToolsByName(restore);
+      } catch (error) {
+        throw new DomainError(
+          agentError(
+            'PI_SESSION_MODE_FAILED',
+            error instanceof Error ? error.message : String(error),
+            { details: error },
+          ),
+        );
+      }
+      record.buildToolNames = null;
+    }
+
+    record.sessionMode = mode;
+    this.permissionPipeline?.policy.setSessionWorkMode(record.desktop.id, mode);
+    record.desktop.updatedAt = Date.now();
   }
 
   private async applyModel(session: PiAgentSession, ref: ModelRef): Promise<void> {

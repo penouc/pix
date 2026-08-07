@@ -10,11 +10,14 @@ import type {
 import { DomainError, agentError } from '@pi-desktop/agent-domain';
 import type {
   ApprovalDecision,
+  CompactionResult,
+  ContextUsage,
   DesktopAgentEvent,
   ModelRef,
   RunRef,
   ThinkingLevel,
   ThinkingLevelState,
+  SessionMode,
 } from '@pi-desktop/protocol';
 
 import { deriveSessionTitle, sanitizeSessionTitle } from './session-title.js';
@@ -36,6 +39,9 @@ interface SessionRecord extends AgentSession {
   /** First user prompt — used for offline auto-naming. */
   firstUserText?: string;
   lastAssistantText?: string;
+  contextTokens: number;
+  autoCompactionEnabled: boolean;
+  sessionMode: SessionMode;
 }
 
 interface ActiveRun {
@@ -72,6 +78,9 @@ export class FakeAgentRuntime implements AgentRuntime {
       updatedAt: options.updatedAt ?? now,
       model: options.model,
       thinkingLevel: 'medium',
+      contextTokens: 12_000,
+      autoCompactionEnabled: true,
+      sessionMode: 'build',
     };
     this.sessions.set(session.id, session);
     return this.toPublic(session);
@@ -175,6 +184,98 @@ export class FakeAgentRuntime implements AgentRuntime {
     };
   }
 
+  async getContextUsage(sessionId: string): Promise<ContextUsage | null> {
+    this.assertAlive();
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new DomainError(agentError('SESSION_NOT_FOUND', `Session ${sessionId} not found`));
+    }
+    const contextWindow = 128_000;
+    return {
+      tokens: session.contextTokens,
+      contextWindow,
+      percent: Math.min(100, Math.round((session.contextTokens / contextWindow) * 100)),
+    };
+  }
+
+  async compact(sessionId: string, _customInstructions?: string): Promise<CompactionResult> {
+    this.assertAlive();
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new DomainError(agentError('SESSION_NOT_FOUND', `Session ${sessionId} not found`));
+    }
+    const tokensBefore = session.contextTokens;
+    this.emit({
+      type: 'compaction.started',
+      projectId: session.projectId,
+      sessionId: session.id,
+      timestamp: Date.now(),
+      reason: 'manual',
+    });
+    session.contextTokens = Math.max(2_000, Math.floor(session.contextTokens * 0.35));
+    const result: CompactionResult = {
+      summary: 'Fake compaction kept the recent turns and dropped older tool noise.',
+      tokensBefore,
+      estimatedTokensAfter: session.contextTokens,
+    };
+    this.emit({
+      type: 'compaction.completed',
+      projectId: session.projectId,
+      sessionId: session.id,
+      timestamp: Date.now(),
+      aborted: false,
+      reason: 'manual',
+      summary: result.summary,
+      tokensBefore,
+      estimatedTokensAfter: session.contextTokens,
+    });
+    this.emit({
+      type: 'context.updated',
+      projectId: session.projectId,
+      sessionId: session.id,
+      timestamp: Date.now(),
+      tokens: session.contextTokens,
+      contextWindow: 128_000,
+      percent: Math.min(100, Math.round((session.contextTokens / 128_000) * 100)),
+    });
+    session.updatedAt = Date.now();
+    return result;
+  }
+
+  async setAutoCompactionEnabled(enabled: boolean, sessionId?: string): Promise<void> {
+    this.assertAlive();
+    if (!sessionId) {
+      for (const session of this.sessions.values()) {
+        session.autoCompactionEnabled = enabled;
+      }
+      return;
+    }
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new DomainError(agentError('SESSION_NOT_FOUND', `Session ${sessionId} not found`));
+    }
+    session.autoCompactionEnabled = enabled;
+  }
+
+  async getAutoCompactionEnabled(sessionId?: string): Promise<boolean> {
+    this.assertAlive();
+    if (sessionId) {
+      const session = this.sessions.get(sessionId);
+      if (!session) {
+        throw new DomainError(agentError('SESSION_NOT_FOUND', `Session ${sessionId} not found`));
+      }
+      return session.autoCompactionEnabled;
+    }
+    return true;
+  }
+
+  async abortCompaction(sessionId: string): Promise<void> {
+    this.assertAlive();
+    if (!this.sessions.has(sessionId)) {
+      throw new DomainError(agentError('SESSION_NOT_FOUND', `Session ${sessionId} not found`));
+    }
+  }
+
   private approvalMode: 'ask' | 'auto-reads' | 'read-only' = 'auto-reads';
 
   async setApprovalMode(
@@ -186,6 +287,34 @@ export class FakeAgentRuntime implements AgentRuntime {
 
   async getApprovalMode(): Promise<'ask' | 'auto-reads' | 'read-only'> {
     return this.approvalMode;
+  }
+
+  private sessionMode: SessionMode = 'build';
+
+  async setSessionMode(mode: SessionMode, sessionId?: string): Promise<void> {
+    this.assertAlive();
+    this.sessionMode = mode;
+    if (!sessionId) {
+      for (const session of this.sessions.values()) {
+        session.sessionMode = mode;
+      }
+      return;
+    }
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      // No live runtime session yet — keep as default for the next create.
+      return;
+    }
+    session.sessionMode = mode;
+  }
+
+  async getSessionMode(sessionId?: string): Promise<SessionMode> {
+    this.assertAlive();
+    if (sessionId) {
+      const session = this.sessions.get(sessionId);
+      return session?.sessionMode ?? this.sessionMode;
+    }
+    return this.sessionMode;
   }
 
   async listRememberedDecisions(): Promise<[]> {

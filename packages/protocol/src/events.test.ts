@@ -38,6 +38,42 @@ describe('DesktopAgentEventSchema', () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it('accepts context.updated and compaction events without a run scope', () => {
+    expect(
+      DesktopAgentEventSchema.safeParse({
+        type: 'context.updated',
+        projectId: 'p1',
+        sessionId: 's1',
+        timestamp: Date.now(),
+        tokens: 40_000,
+        contextWindow: 128_000,
+        percent: 31,
+      }).success,
+    ).toBe(true);
+    expect(
+      DesktopAgentEventSchema.safeParse({
+        type: 'compaction.started',
+        projectId: 'p1',
+        sessionId: 's1',
+        timestamp: Date.now(),
+        reason: 'auto',
+      }).success,
+    ).toBe(true);
+    expect(
+      DesktopAgentEventSchema.safeParse({
+        type: 'compaction.completed',
+        projectId: 'p1',
+        sessionId: 's1',
+        timestamp: Date.now(),
+        aborted: false,
+        reason: 'manual',
+        summary: 'Kept recent turns',
+        tokensBefore: 90_000,
+        estimatedTokensAfter: 22_000,
+      }).success,
+    ).toBe(true);
+  });
 });
 
 describe('parseIpcCommand', () => {

@@ -40,7 +40,10 @@ export class PolicyEngine {
   private readonly sessionAllows = new Map<string, Set<string>>();
   private readonly projectAllows = new Map<string, Set<string>>();
   private readonly sessionModes = new Map<string, ApprovalMode>();
+  /** Plan vs build — orthogonal to approval mode. */
+  private readonly sessionWorkModes = new Map<string, 'plan' | 'build'>();
   private defaultMode: ApprovalMode;
+  private defaultWorkMode: 'plan' | 'build' = 'build';
 
   constructor(options: PolicyEngineOptions = {}) {
     this.defaultMode =
@@ -63,6 +66,19 @@ export class PolicyEngine {
   getMode(sessionId?: string): ApprovalMode {
     if (sessionId) return this.sessionModes.get(sessionId) ?? this.defaultMode;
     return this.defaultMode;
+  }
+
+  setSessionWorkMode(sessionId: string, mode: 'plan' | 'build'): void {
+    this.sessionWorkModes.set(sessionId, mode);
+  }
+
+  setDefaultWorkMode(mode: 'plan' | 'build'): void {
+    this.defaultWorkMode = mode;
+  }
+
+  getWorkMode(sessionId?: string): 'plan' | 'build' {
+    if (sessionId) return this.sessionWorkModes.get(sessionId) ?? this.defaultWorkMode;
+    return this.defaultWorkMode;
   }
 
   /** Remembered allow rules, for the Settings screen. Never includes secrets. */
@@ -113,6 +129,22 @@ export class PolicyEngine {
 
     const assessment = classifyRisk(tool);
     const mode = this.getMode(ctx.sessionId);
+    const workMode = this.getWorkMode(ctx.sessionId);
+
+    // Plan Mode fail-closed: even if a write tool somehow remains registered,
+    // refuse mutations instead of queuing them for approval.
+    if (workMode === 'plan' && isPlanForbiddenTool(tool.toolName)) {
+      return {
+        action: 'deny',
+        assessment: {
+          level: assessment.level === 'safe' ? 'workspace-write' : assessment.level,
+          reasons: [...assessment.reasons, 'Session is in Plan Mode'],
+          rememberable: false,
+        },
+        message:
+          'This session is in Plan Mode. Switch to Build before writing files or running shell commands.',
+      };
+    }
 
     // Read-only refuses rather than queues: the point of the mode is that
     // nothing can be written even by answering a prompt. Checked before the
@@ -209,4 +241,16 @@ function requireApproval(tool: NormalizedToolCall, assessment: RiskAssessment): 
       rememberable: assessment.rememberable,
     },
   };
+}
+
+function isPlanForbiddenTool(toolName: string): boolean {
+  const name = toolName.toLowerCase();
+  return (
+    name === 'write' ||
+    name === 'edit' ||
+    name === 'bash' ||
+    name === 'shell' ||
+    name === 'apply_patch' ||
+    name === 'applypatch'
+  );
 }

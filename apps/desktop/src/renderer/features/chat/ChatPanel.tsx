@@ -44,6 +44,7 @@ import type {
   ModelInfo,
   ProjectSummary,
   RunRef,
+  SessionMode,
   SkillInfo,
 } from '@pi-desktop/protocol';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -53,6 +54,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { ApprovalModePicker } from '@/features/chat/ApprovalModePicker';
+import { SessionModePicker } from '@/features/chat/SessionModePicker';
 import { normalizeContextCapacity } from '@/features/chat/context-usage';
 import { ThinkingLevelPicker } from '@/features/chat/ThinkingLevelPicker';
 import { ThinkingPlaceholderRow, ThinkingStreamRow } from '@/features/chat/ThinkingStream';
@@ -150,6 +152,7 @@ export function ChatPanel({
   const showTokenRate = useUiPrefsStore((s) => s.showTokenRate);
   const activeRunId = useAgentStreamStore((s) => s.activeRunId);
   const usage = useAgentStreamStore((s) => s.usage);
+  const isCompacting = useAgentStreamStore((s) => s.isCompacting);
   const model = useAgentStreamStore((s) => s.model);
   const startedAt = useAgentStreamStore((s) => s.startedAt);
   const approval = useAgentStreamStore((s) => s.approval);
@@ -187,6 +190,7 @@ export function ChatPanel({
   const [attachments, setAttachments] = useState<InputImage[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [draggingImages, setDraggingImages] = useState(false);
+  const [compacting, setCompacting] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const composerDockRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -304,6 +308,40 @@ export function ChatPanel({
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['agent.getApprovalMode'] }),
   });
 
+  const sessionMode = useQuery({
+    queryKey: ['agent.getSessionMode', session?.id],
+    queryFn: () =>
+      invoke<{ mode: SessionMode }>({
+        method: 'agent.getSessionMode',
+        params: session?.id ? { sessionId: session.id } : {},
+      }),
+  });
+  const setSessionMode = useMutation({
+    mutationFn: (mode: SessionMode) =>
+      invoke({
+        method: 'agent.setSessionMode',
+        params: session?.id ? { mode, sessionId: session.id } : { mode },
+      }),
+    onMutate: async (mode) => {
+      await queryClient.cancelQueries({ queryKey: ['agent.getSessionMode', session?.id] });
+      const previous = queryClient.getQueryData<{ mode: SessionMode }>([
+        'agent.getSessionMode',
+        session?.id,
+      ]);
+      queryClient.setQueryData(['agent.getSessionMode', session?.id], { mode });
+      return { previous };
+    },
+    onError: (err, _mode, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['agent.getSessionMode', session?.id], context.previous);
+      }
+      useAgentStreamStore.setState({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    },
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: ['agent.getSessionMode'] }),
+  });
+
   const models = useQuery({
     queryKey: ['agent.models'],
     queryFn: () => invoke<ModelInfo[]>({ method: 'agent.listModels' }),
@@ -312,8 +350,54 @@ export function ChatPanel({
   const activeModel = models.data?.find(
     (entry) => `${entry.providerId}/${entry.modelId}` === activeModelKey,
   );
-  const contextWindow = normalizeContextCapacity(activeModel?.contextWindow);
+  const contextWindow =
+    usage?.contextWindow ?? normalizeContextCapacity(activeModel?.contextWindow);
   const imageInputUnavailable = activeModel?.supportsImages === false;
+
+  // Prefer Pi getContextUsage over last-turn billing totals once a session is open.
+  useEffect(() => {
+    if (!session?.id) return;
+    void invoke<{
+      tokens: number | null;
+      contextWindow: number;
+      percent: number | null;
+    } | null>({
+      method: 'agent.getContextUsage',
+      params: { sessionId: session.id },
+    })
+      .then((usageNow) => {
+        if (!usageNow) return;
+        const projectId = session.projectId ?? project?.id;
+        if (!projectId) return;
+        useAgentStreamStore.getState().applyEvent({
+          type: 'context.updated',
+          projectId,
+          sessionId: session.id,
+          timestamp: Date.now(),
+          tokens: usageNow.tokens,
+          contextWindow: usageNow.contextWindow,
+          percent: usageNow.percent,
+        });
+      })
+      .catch(() => {
+        // Session may not be resumed yet; stream events will catch up.
+      });
+  }, [session?.id, session?.projectId, project?.id]);
+
+  async function compactSession() {
+    if (!session?.id || compacting || isCompacting || running) return;
+    setCompacting(true);
+    try {
+      await invoke({
+        method: 'agent.compact',
+        params: { sessionId: session.id },
+      });
+    } catch (err) {
+      setAttachmentError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCompacting(false);
+    }
+  }
 
   async function addImageFiles(files: File[]) {
     setAttachmentError(null);
@@ -741,6 +825,12 @@ export function ChatPanel({
           ) : null}
         </div>
         {blank ? <Badge tone="neutral">not started</Badge> : null}
+        {!blank && (isCompacting || compacting) ? (
+          <Badge tone="accent-2" className="gap-1.5">
+            <span style={dotStyle('wait', 6)} />
+            Compacting
+          </Badge>
+        ) : null}
         {!blank && status !== 'idle' ? (
           <Badge tone={toneBadge[tone]} className="gap-1.5">
             <span style={dotStyle(tone, 6)} />
@@ -1199,6 +1289,11 @@ export function ChatPanel({
                   mode={approvalMode.data?.mode ?? 'auto-reads'}
                   onChange={(mode) => setApprovalMode.mutate(mode)}
                 />
+                <SessionModePicker
+                  mode={sessionMode.data?.mode ?? 'build'}
+                  onChange={(mode) => setSessionMode.mutate(mode)}
+                  disabled={running || sending || setSessionMode.isPending}
+                />
                 <ThinkingLevelPicker disabled={!project || sending} />
                 {branch.data?.branch ? (
                   <ContextPill icon={<GitBranch className="h-3 w-3" />}>
@@ -1218,7 +1313,22 @@ export function ChatPanel({
                     onChange={(val) => setQueueMode(val as 'queue' | 'steer')}
                   />
                 ) : null}
-                <ContextUsageRing used={usage?.contextTokens} capacity={contextWindow} />
+                <ContextUsageRing
+                  used={usage?.contextTokens}
+                  capacity={contextWindow}
+                  compacting={isCompacting || compacting}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-[30px] px-2 text-[11px] text-muted"
+                  disabled={!session || running || isCompacting || compacting}
+                  title="Compact conversation context to free window space"
+                  onClick={() => void compactSession()}
+                >
+                  Compact
+                </Button>
                 {/* Model choice belongs with the send button: it is a property of the
                     message you are about to send, not of the window. */}
                 <ModelPicker />
@@ -1621,7 +1731,15 @@ function ToolCard({
   );
 }
 
-function ContextUsageRing({ used, capacity }: { used?: number; capacity?: number }) {
+function ContextUsageRing({
+  used,
+  capacity,
+  compacting = false,
+}: {
+  used?: number;
+  capacity?: number;
+  compacting?: boolean;
+}) {
   // Providers report usage only after a model call finishes. Before the first
   // response there is still useful information: the whole context window is
   // available, so show 100% remaining instead of an unexplained dash.
@@ -1630,18 +1748,23 @@ function ContextUsageRing({ used, capacity }: { used?: number; capacity?: number
   const remainingPercent = Math.round(remainingRatio * 100);
   const radius = 10;
   const circumference = 2 * Math.PI * radius;
-  const label = !capacity
-    ? 'Context capacity is loading'
-    : used == null
-      ? `${formatTokens(capacity)} context available · 100% remaining`
-      : `${formatTokens(remaining)} context remaining of ${formatTokens(capacity)} · ${remainingPercent}%`;
+  const label = compacting
+    ? 'Compacting conversation context…'
+    : !capacity
+      ? 'Context capacity is loading'
+      : used == null
+        ? `${formatTokens(capacity)} context available · 100% remaining`
+        : `${formatTokens(remaining)} context remaining of ${formatTokens(capacity)} · ${remainingPercent}%`;
 
   return (
     <div
       role="img"
       aria-label={label}
       title={label}
-      className="relative flex h-[30px] w-[30px] flex-none items-center justify-center text-[8px] font-semibold tabular-nums text-muted"
+      className={cn(
+        'relative flex h-[30px] w-[30px] flex-none items-center justify-center text-[8px] font-semibold tabular-nums text-muted',
+        compacting && 'animate-pulse text-warning',
+      )}
     >
       <svg
         className="absolute inset-0 h-full w-full -rotate-90"
@@ -1671,10 +1794,11 @@ function ContextUsageRing({ used, capacity }: { used?: number; capacity?: number
             'text-accent transition-[stroke-dashoffset] duration-300',
             remainingPercent <= 10 && 'text-danger',
             remainingPercent > 10 && remainingPercent <= 25 && 'text-warning',
+            compacting && 'text-warning',
           )}
         />
       </svg>
-      <span>{capacity ? remainingPercent : '—'}</span>
+      <span>{compacting ? '…' : capacity ? remainingPercent : '—'}</span>
     </div>
   );
 }

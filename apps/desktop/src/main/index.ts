@@ -1350,6 +1350,34 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
           getProviderSettings().getDefaultApprovalMode();
         return okResult({ mode });
       }
+      case 'agent.setSessionMode': {
+        if (cmd.params.sessionId) {
+          const meta = sessions.get(cmd.params.sessionId);
+          if (!meta) {
+            return errResult('SESSION_NOT_FOUND', `Session ${cmd.params.sessionId} not found`);
+          }
+          const project = projects.get(meta.projectId);
+          if (!project) {
+            return errResult('PROJECT_NOT_FOUND', `Project ${meta.projectId} not found`);
+          }
+          await ensurePersistedRuntimeSession(agent, meta, project.path);
+        }
+        await agent.setSessionMode?.(cmd.params.mode, cmd.params.sessionId);
+        return okResult({ mode: cmd.params.mode });
+      }
+      case 'agent.getSessionMode': {
+        if (cmd.params?.sessionId) {
+          const meta = sessions.get(cmd.params.sessionId);
+          if (meta) {
+            const project = projects.get(meta.projectId);
+            if (project) {
+              await ensurePersistedRuntimeSession(agent, meta, project.path);
+            }
+          }
+        }
+        const mode = (await agent.getSessionMode?.(cmd.params?.sessionId)) ?? 'build';
+        return okResult({ mode });
+      }
       case 'agent.setThinkingLevel': {
         if (!cmd.params.sessionId) {
           return errResult('INVALID_INPUT', 'sessionId is required');
@@ -1366,6 +1394,29 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
           return errResult('NOT_SUPPORTED', 'Thinking level is not available');
         }
         return okResult(state);
+      }
+      case 'agent.getContextUsage': {
+        const usage = await agent.getContextUsage?.(cmd.params.sessionId);
+        return okResult(usage ?? null);
+      }
+      case 'agent.compact': {
+        if (!agent.compact) {
+          return errResult('NOT_SUPPORTED', 'Compaction is not available');
+        }
+        const result = await agent.compact(cmd.params.sessionId, cmd.params.customInstructions);
+        return okResult(result);
+      }
+      case 'agent.setAutoCompaction': {
+        await agent.setAutoCompactionEnabled?.(cmd.params.enabled, cmd.params.sessionId);
+        return okResult({ enabled: cmd.params.enabled });
+      }
+      case 'agent.getAutoCompaction': {
+        const enabled = (await agent.getAutoCompactionEnabled?.(cmd.params?.sessionId)) ?? true;
+        return okResult({ enabled });
+      }
+      case 'agent.abortCompaction': {
+        await agent.abortCompaction?.(cmd.params.sessionId);
+        return okResult({ ok: true });
       }
       case 'permissions.listRemembered': {
         return okResult((await agent.listRememberedDecisions?.()) ?? []);

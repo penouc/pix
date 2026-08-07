@@ -30,10 +30,43 @@ describe('FakeAgentRuntime', () => {
     for (const event of events) {
       expect(event.projectId).toBe('proj-1');
       expect(event.sessionId).toBe(session.id);
-      if (event.type === 'session.updated') continue;
+      if (
+        event.type === 'session.updated' ||
+        event.type === 'context.updated' ||
+        event.type === 'compaction.started' ||
+        event.type === 'compaction.completed'
+      ) {
+        continue;
+      }
       expect(event.runId).toBe(ref.runId);
       expect(event.sequence).toBeGreaterThan(0);
     }
+
+    await runtime.dispose();
+  });
+
+  it('compacts context and emits session-scoped events', async () => {
+    const runtime = new FakeAgentRuntime();
+    const events: DesktopAgentEvent[] = [];
+    runtime.subscribe((e) => events.push(e));
+
+    const session = await runtime.createSession({
+      projectId: 'proj-1',
+      projectPath: '/tmp/demo',
+    });
+    const before = await runtime.getContextUsage(session.id);
+    expect(before?.tokens).toBeGreaterThan(0);
+
+    const result = await runtime.compact(session.id);
+    expect(result.tokensBefore).toBe(before?.tokens);
+    expect(result.estimatedTokensAfter).toBeLessThan(result.tokensBefore);
+
+    expect(events.some((e) => e.type === 'compaction.started')).toBe(true);
+    expect(events.some((e) => e.type === 'compaction.completed')).toBe(true);
+    expect(events.some((e) => e.type === 'context.updated')).toBe(true);
+
+    const after = await runtime.getContextUsage(session.id);
+    expect(after?.tokens).toBe(result.estimatedTokensAfter);
 
     await runtime.dispose();
   });
