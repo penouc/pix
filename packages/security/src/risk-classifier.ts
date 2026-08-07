@@ -34,11 +34,15 @@ export function classifyRisk(tool: NormalizedToolCall): RiskAssessment {
     case 'find':
     case 'ls':
     case 'glob':
+    case 'hash_lines':
+    case 'lsp_diagnostics':
+    case 'lsp_references':
     case 'todo':
     case 'ask':
-      // #11/#12: todo and ask only mutate in-session checklist/ask state — no
-      // filesystem, no shell, no network — so they are safe like the read-only
-      // tools and never enter the approval queue.
+      // #11/#12: todo and ask only mutate in-session checklist/ask state; #13:
+      // hash_lines only reads and hashes a file; #14: lsp_diagnostics and
+      // lsp_references only read — no filesystem writes, shell, or network —
+      // so all are safe like the read-only tools and never enter the queue.
       if (!tool.escapesWorkspace && !tool.hitsProtectedPath) {
         level = 'safe';
         if (reasons.length === 0) reasons.push('Read-only tool inside workspace');
@@ -47,6 +51,7 @@ export function classifyRisk(tool: NormalizedToolCall): RiskAssessment {
     case 'write':
     case 'edit':
     case 'apply_patch':
+    case 'lsp_rename':
       raise('workspace-write', 'Modifies workspace files');
       break;
     case 'bash':

@@ -208,4 +208,28 @@ describe('remembered rules', () => {
     });
     expect(engine.evaluate(read, ctx).action).toBe('allow');
   });
+
+  it('#14: denies lsp_rename in Plan Mode while allowing read-only LSP tools', () => {
+    const engine = new PolicyEngine({ defaultMode: 'auto-reads' });
+    engine.setSessionWorkMode('s1', 'plan');
+    const rename = normalizeToolCall({
+      toolCallId: 'r',
+      toolName: 'lsp_rename',
+      args: { path: 'src/a.ts', symbol: 'x', newName: 'y' },
+      workspaceRoot: workspace,
+    });
+    const denied = engine.evaluate(rename, ctx);
+    expect(denied.action).toBe('deny');
+    if (denied.action === 'deny') expect(denied.message).toMatch(/Plan Mode/);
+
+    for (const toolName of ['lsp_diagnostics', 'lsp_references'] as const) {
+      const read = normalizeToolCall({
+        toolCallId: 'd',
+        toolName,
+        args: { path: 'src/a.ts', symbol: 'x' },
+        workspaceRoot: workspace,
+      });
+      expect(engine.evaluate(read, ctx).action).toBe('allow');
+    }
+  });
 });

@@ -72,4 +72,19 @@ describe('classifyRisk', () => {
     expect(classifyRisk(tool('todo', { action: 'create', items: [] })).level).toBe('safe');
     expect(classifyRisk(tool('ask', { question: 'Which?' })).level).toBe('safe');
   });
+
+  // #13 — hash_lines is read-only; #14 — diagnostics/references are read-only,
+  // rename rewrites files.
+  it('treats hash_lines and lsp_diagnostics / lsp_references as safe', () => {
+    expect(classifyRisk(tool('hash_lines', { path: 'src/a.ts' })).level).toBe('safe');
+    expect(classifyRisk(tool('lsp_diagnostics', { path: 'src/a.ts' })).level).toBe('safe');
+    expect(classifyRisk(tool('lsp_references', { path: 'src/a.ts', symbol: 'x' })).level).toBe(
+      'safe',
+    );
+  });
+
+  it('treats lsp_rename as workspace-write', () => {
+    const t = tool('lsp_rename', { path: 'src/a.ts', symbol: 'x', newName: 'y' });
+    expect(classifyRisk(t).level).toBe('workspace-write');
+  });
 });

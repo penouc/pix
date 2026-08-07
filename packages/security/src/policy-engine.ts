@@ -251,6 +251,8 @@ function isPlanForbiddenTool(toolName: string): boolean {
     name === 'bash' ||
     name === 'shell' ||
     name === 'apply_patch' ||
-    name === 'applypatch'
+    name === 'applypatch' ||
+    // #14: lsp_rename rewrites files, so it is a mutation like edit.
+    name === 'lsp_rename'
   );
 }

@@ -9,7 +9,7 @@
 
 ## 紧急可选池（21 条）
 
-**已确认：原 20 条 + #21 Auto 模型请求全部纳入。** 权威进度在 [`omp-capability-todo.md`](./omp-capability-todo.md)；下表勾选与之同步（Batch A+B 已完成 13/21）。
+**已确认：原 20 条 + #21 Auto 模型请求全部纳入。** 权威进度在 [`omp-capability-todo.md`](./omp-capability-todo.md)；下表勾选与之同步（Batch A+B+C 已完成 16/21）。
 
 下表保留编号与说明；排序按「个人日用紧急度 × 投入产出」。
 
@@ -27,9 +27,9 @@
 | 10 | [x] **Session Fork** | 试探分支不毁主线对话 | 接线 Pi | M |
 | 11 | [x] **Todo 步骤清单工具** | 长任务可跟踪；Pi 无内置 | 自建 `defineTool` | S |
 | 12 | [x] **Ask 结构化追问** | 减少瞎猜；可点选回答 | 自建 | S |
-| 13 | [ ] **Hashline / 锚点编辑** | OMP 最大编辑收益；少坏 patch | 移植思路 | M–L |
-| 14 | [ ] **LSP 工具（诊断/引用/重命名）** | `@symbol` 与重构质量跃迁 | 自建 | L |
-| 15 | [ ] **grep/glob 一等工具** | 少靠 bash 搜；更稳更省 token | 接线 Pi / 自建 | M |
+| 13 | [x] **Hashline / 锚点编辑** | OMP 最大编辑收益；少坏 patch | 移植思路 | M–L |
+| 14 | [x] **LSP 工具（诊断/引用/重命名）** | `@symbol` 与重构质量跃迁 | 自建 | L |
+| 15 | [x] **grep/glob 一等工具** | 少靠 bash 搜；更稳更省 token | 接线 Pi / 自建 | M |
 | 16 | [ ] **结构化 Git 工具**（status/diff/hunk） | Agent 看变更不靠糊 bash | 自建 | M |
 | 17 | [ ] **智能拆 commit（需审批）** | 日用收尾；永不自动 push | 移植思路 | M |
 | 18 | [ ] **web_search（单 provider 起步）** | 查文档/报错；须走外部副作用审批 | 自建 | M |

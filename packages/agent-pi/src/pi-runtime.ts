@@ -47,6 +47,12 @@ import {
   createTodoTool,
   type TodoPersistence,
 } from './collab-tools.js';
+import { createAnchoredEditTool, createHashLinesTool } from './hashline-edit.js';
+import {
+  createLspDiagnosticsTool,
+  createLspReferencesTool,
+  createLspRenameTool,
+} from './lsp-tools.js';
 
 import {
   describeAuthSources,
@@ -79,8 +85,33 @@ export function resolveRunTimeoutMs(value: string | undefined): number {
 
 const RUN_TIMEOUT_MS = resolveRunTimeoutMs(process.env['PI_DESKTOP_RUN_TIMEOUT_MS']);
 
+/**
+ * The session's full tool allowlist (#15). Pi's `tools` option is an allowlist
+ * — only names listed here are exposed — so this enumerates the built-ins
+ * (including the first-class grep/find/ls) plus every custom tool the extension
+ * factories register (todo/ask from #11/#12, hashline edit + hash_lines from
+ * #13, lsp_* from #14).
+ */
+const DEFAULT_SESSION_TOOLS = [
+  'read',
+  'bash',
+  'edit',
+  'write',
+  'grep',
+  'find',
+  'ls',
+  'todo',
+  'ask',
+  'hash_lines',
+  'lsp_diagnostics',
+  'lsp_references',
+  'lsp_rename',
+];
+
 export function writeToolPath(toolName: string, input: unknown): string | undefined {
-  if (toolName !== 'write' && toolName !== 'edit') return undefined;
+  if (toolName !== 'write' && toolName !== 'edit' && toolName !== 'lsp_rename') {
+    return undefined;
+  }
   if (!input || typeof input !== 'object') return undefined;
   const value = (input as { path?: unknown }).path;
   return typeof value === 'string' ? value : undefined;
@@ -279,6 +310,27 @@ export class PiAgentRuntime implements AgentRuntime {
               pi.registerTool(createAskTool(collab, desktopId));
             },
           },
+          {
+            // #13 — hashline anchored editing: replaces Pi's built-in `edit`
+            // (extension tools override built-ins of the same name) and adds
+            // `hash_lines` so the model can anchor precisely.
+            name: 'pi-desktop-hashline',
+            factory: (pi) => {
+              pi.registerTool(createAnchoredEditTool());
+              pi.registerTool(createHashLinesTool());
+            },
+          },
+          {
+            // #14 — LSP tools on TypeScript's in-process language service.
+            // diagnostics/references are read-only (safe); rename writes files
+            // (workspace-write, approval-gated, Plan-Mode-blocked).
+            name: 'pi-desktop-lsp',
+            factory: (pi) => {
+              pi.registerTool(createLspDiagnosticsTool());
+              pi.registerTool(createLspReferencesTool());
+              pi.registerTool(createLspRenameTool());
+            },
+          },
         ],
       });
       await resourceLoader.reload();
@@ -288,6 +340,11 @@ export class PiAgentRuntime implements AgentRuntime {
         modelRuntime: this.modelRuntime!,
         sessionManager: this.sessionManagerFor(desktopId, options.projectPath),
         resourceLoader,
+        // #15: grep/find/ls are first-class search tools — the agent should
+        // reach for them instead of bash. `tools` is an allowlist in the SDK,
+        // so every tool we expose must be enumerated here (built-ins + the
+        // custom tools registered by the extension factories below).
+        tools: DEFAULT_SESSION_TOOLS,
       });
       piSession = result.session;
     } catch (error) {
@@ -1349,10 +1406,21 @@ export class PiAgentRuntime implements AgentRuntime {
   }
 
   private async applySessionMode(record: SessionRecord, mode: SessionMode): Promise<void> {
-    // Plan Mode keeps the collaboration tools: a planning run should be able to
-    // lay out its steps as a checklist and ask clarifying questions (#11/#12),
-    // while still being unable to write files or run commands.
-    const PLAN_TOOLS = ['read', 'grep', 'find', 'ls', 'todo', 'ask'];
+    // Plan Mode keeps the collaboration tools (#11/#12) and read-only LSP
+    // tools (#14): a planning run can lay out steps, ask clarifying questions,
+    // and check diagnostics/references — while still being unable to write
+    // files, run commands, or rename symbols.
+    const PLAN_TOOLS = [
+      'read',
+      'grep',
+      'find',
+      'ls',
+      'todo',
+      'ask',
+      'hash_lines',
+      'lsp_diagnostics',
+      'lsp_references',
+    ];
     const BUILD_TOOLS = ['read', 'bash', 'edit', 'write'];
 
     if (mode === 'plan') {

@@ -39,14 +39,14 @@
 
 | 状态 | 数量 |
 |------|------|
-| 未开始 `[ ]` | 8 |
+| 未开始 `[ ]` | 5 |
 | 进行中 `[~]` | 0 |
-| 完成 `[x]` | 13 |
+| 完成 `[x]` | 16 |
 | 推迟 `[-]` | 0 |
 
-**进度：** 13 / 21  
+**进度：** 16 / 21  
 
-**已完成项测试：** #1 `partial` · #2 `partial` · #3 `unit` · #21 `unit` · #4 `unit` · #6 `unit` · #8 `unit` · #7 `unit` · #10 `unit` · #11 `unit` · #12 `unit`
+**已完成项测试：** #1 `partial` · #2 `partial` · #3 `unit` · #21 `unit` · #4 `unit` · #6 `unit` · #8 `unit` · #7 `unit` · #10 `unit` · #11 `unit` · #12 `unit` · #13 `unit` · #14 `unit` · #15 `unit`
 
 ---
 
@@ -94,9 +94,9 @@
 
 | # | 状态 | 测试 | 能力 | 路径 | 完成标准（验收） | 备注 |
 |---|------|------|------|------|------------------|------|
-| 13 | [ ] | — | Hashline / 锚点编辑 | 移植思路 | edit 成功率相对 baseline 提升；stale anchor 拒绝且不写坏文件；Checkpoint 路径抽取仍正确 | |
-| 14 | [ ] | — | LSP 工具 | 自建 | diagnostics / refs / rename（至少一种语言）经权限管线可用 | |
-| 15 | [ ] | — | grep / glob 一等工具 | 接线 Pi / 自建 | Agent 可直接 grep/glob，不必事事 bash；结果受 workspace 约束 | |
+| 13 | [x] | unit | Hashline / 锚点编辑 | 移植思路 | edit 成功率相对 baseline 提升；stale anchor 拒绝且不写坏文件；Checkpoint 路径抽取仍正确 | 实现：2026-08-07。自定义 `edit` 工具覆盖 Pi 内置（扩展工具按同名覆盖内置——已验证 SDK 注册表合并逻辑），保留 exact-once 契约并叠加 hashline：`lineHash` 按行 sha256 锚点（同名文本重复时仍唯一、抗空白/引号漂移）、`oldHash` 全文件 sha256 陈旧校验（自上次读取后文件变了就拒绝）、全量先验证后落盘（一个坏锚点整个拒绝，绝不半写）、保留 CRLF/末尾换行。新增 `hash_lines` 工具给模型提供行哈希与文件哈希（只读、`safe`）。工具名仍为 `edit`，Checkpoint 快照/权限（workspace-write）/Plan Mode 阻断全部不变；`lsp_rename` 也纳入 checkpoint 路径抽取。**已测：** hashline-edit 16 条（stale 拒绝/lineHash/歧义/重叠/原子性/CRLF）、risk-classifier、writeToolPath。**未测：** 桌面手测真实模型编辑成功率对比 |
+| 14 | [x] | unit | LSP 工具 | 自建 | diagnostics / refs / rename（至少一种语言）经权限管线可用 | 实现：2026-08-07。基于 TypeScript 进程内语言服务（无需外部 LSP server）：`lsp_diagnostics`（语法+类型错误）、`lsp_references`（跨文件引用）、`lsp_rename`（跨文件改名并写回）。权限管线：diagnostics/references 只读=`safe`；rename 改写文件=`workspace-write`（ask 模式需审批，Plan Mode 阻断）；Plan Mode 保留只读 LSP 工具。**已测：** lsp-tools 7 条（真实 TS fixture 项目：错误诊断、跨文件引用、改名+import 重写）、policy-engine Plan 阻断、risk-classifier、writeToolPath。**未测：** 桌面手测真实模型调用 |
+| 15 | [x] | unit | grep / glob 一等工具 | 接线 Pi / 自建 | Agent 可直接 grep/glob，不必事事 bash；结果受 workspace 约束 | 实现：2026-08-07。发现并修复：Pi 默认工具集只有 read/bash/edit/write——grep/find/ls 默认未启用！`createAgentSession` 传 `tools` 全量白名单（内置 + 自建共 13 个）后，grep/find/ls 一等可用（Pi 内置 `grep` 带 glob 过滤、`find` 按 glob 找文件、`ls` 列目录，均 workspace 约束、尊重 .gitignore）。新增 `listActiveTools` 运行时方法供 UI/测试确认。**已测：** pi-session.smoke 真实 Pi 会话断言 13 个工具全部 active、risk-classifier 对 grep/find/ls/glob 的 workspace 约束（逃逸→sensitive）。**未测：** 桌面手测真实模型是否改用 grep 而非 bash |
 
 ---
 
@@ -122,11 +122,11 @@
 4. **#21** Auto 模型请求 ~~（已完成 · unit）~~
 5. **#4–6** Composer `@` / `$` / `/` ~~（已完成 · #4 unit / #5 partial / #6 unit）~~
 6. **#7–9** 成本、retry、steer ~~（已完成 · #7 unit / #8 unit / #9 partial）~~
-7. **#11–12** Todo + Ask
+7. **#11–12** Todo + Ask ~~（已完成 · #11 unit / #12 unit）~~
 8. **#10** Session Fork ~~（已完成 · unit）~~
-9. **#15** grep/glob
-10. **#13** Hashline（或与 #14 二选一先做）
-11. **#14** LSP
+9. **#15** grep/glob ~~（已完成 · unit）~~
+10. **#13** Hashline ~~（已完成 · unit）~~
+11. **#14** LSP ~~（已完成 · unit）~~
 12. **#16–17** Git 工具与拆 commit
 13. **#18** web_search
 14. **#19** MCP
@@ -155,3 +155,6 @@
 | 2026-08-07 | 发版 **v0.2.3**；同步 `omp-capability-borrow.md` 紧急池勾选（#1–10、#21 → `[x]`） |
 | 2026-08-07 | **#11 完成**：`todo` 自定义工具（create/update/clear）+ `todo.updated` 事件 + SQLite 持久化 + Dock Todo 面板；风险 `safe`；测试=`unit` |
 | 2026-08-07 | **#12 完成**：`ask` 自定义工具（选项/填空，阻塞式）+ `ask.pending/resolved` 事件 + AskDialog；`agent.answerAsk` 解析后 run 继续；测试=`unit` |
+| 2026-08-07 | **#13 完成**：hashline `edit` 覆盖 Pi 内置（lineHash 锚点 + oldHash 陈旧校验 + 全量原子应用）+ `hash_lines` 工具；测试=`unit` |
+| 2026-08-07 | **#14 完成**：TS 进程内语言服务 LSP 工具（diagnostics/references/rename），rename 走 workspace-write 审批、Plan 阻断；测试=`unit` |
+| 2026-08-07 | **#15 完成**：修复 grep/find/ls 默认未启用（`createAgentSession` 全量工具白名单）+ `listActiveTools` 可见性；测试=`unit` |

@@ -101,3 +101,38 @@ describe('PiAgentRuntime session create (no provider call)', () => {
     }
   }, 30_000);
 });
+
+describe('first-class search + quality tools (#15 / #13 / #14)', () => {
+  it('registers grep/find/ls and the custom toolset on a fresh session', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'pi-desktop-tools-'));
+    try {
+      await writeFile(path.join(root, 'README.md'), '# fixture\n', 'utf8');
+      const runtime = new PiAgentRuntime({
+        agentDir: path.join(root, 'agent-state'),
+        allowModelNetwork: false,
+        hydrateEnvAuth: false,
+      });
+      const session = await runtime.createSession({
+        projectId: 'tools-project',
+        projectPath: root,
+        title: 'Tools',
+      });
+
+      // #15: Pi ships grep/find/ls as first-class tools — no bash needed.
+      const tools = await runtime.listActiveTools?.(session.id);
+      expect(tools).toBeDefined();
+      for (const name of ['read', 'grep', 'find', 'ls', 'edit', 'write']) {
+        expect(tools).toContain(name);
+      }
+
+      // #13/#14: our custom tools are registered too.
+      for (const name of ['todo', 'ask', 'hash_lines', 'lsp_diagnostics', 'lsp_references', 'lsp_rename']) {
+        expect(tools).toContain(name);
+      }
+
+      await runtime.dispose();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+});

@@ -11,6 +11,18 @@ describe('Pi write tool bridge', () => {
     expect(writeToolPath('read', { path: 'src/a.ts' })).toBeUndefined();
     expect(writeToolPath('write', { file: 'src/a.ts' })).toBeUndefined();
   });
+
+  it('#13/#14: keeps checkpoint path extraction working for the custom write tools', () => {
+    // The hashline `edit` keeps the name 'edit' so existing extraction holds.
+    expect(writeToolPath('edit', { path: 'src/a.ts', edits: [{ oldText: 'a', newText: 'b' }] })).toBe(
+      'src/a.ts',
+    );
+    // lsp_rename rewrites files, so its primary path must snapshot too.
+    expect(
+      writeToolPath('lsp_rename', { path: 'src/a.ts', symbol: 'x', newName: 'y' }),
+    ).toBe('src/a.ts');
+    expect(writeToolPath('lsp_diagnostics', { path: 'src/a.ts' })).toBeUndefined();
+  });
 });
 
 describe('resolveRunTimeoutMs', () => {
