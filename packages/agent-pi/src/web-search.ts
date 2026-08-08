@@ -28,7 +28,6 @@ export interface SearchOptions {
 }
 
 const SEARCH_TIMEOUT_MS = 15_000;
-const MAX_RESULTS = 6;
 
 const searchSchema = Type.Object({
   query: Type.String({ description: 'Search query' }),
@@ -92,14 +91,10 @@ export function parseDuckDuckGoResults(html: string): SearchResult[] {
     const snippetRaw = extractBetween(block, 'class="result__snippet"', '</a>')[0];
     if (!link || !titleRaw) continue;
     // Title is everything after the anchor's `>` up to `</a>`.
-    const title = decodeEntities(
-      titleRaw.slice(titleRaw.indexOf('>') + 1),
-    ).trim();
+    const title = decodeEntities(titleRaw.slice(titleRaw.indexOf('>') + 1)).trim();
     // DDG redirect wrapper: `//duckduckgo.com/l/?uddg=<encoded-target>&rut=…`
     const uddg = /[?&]uddg=([^&]+)/.exec(link);
-    const finalUrl = uddg
-      ? decodeURIComponent(uddg[1] ?? '')
-      : decodeEntities(link);
+    const finalUrl = uddg ? decodeURIComponent(uddg[1] ?? '') : decodeEntities(link);
     results.push({
       title,
       url: finalUrl,
@@ -151,9 +146,7 @@ export function createWebSearchTool(options: SearchOptions = {}) {
         });
         if (!response.ok) {
           return {
-            content: [
-              { type: 'text', text: `Search failed: HTTP ${response.status}` },
-            ],
+            content: [{ type: 'text', text: `Search failed: HTTP ${response.status}` }],
             details: { results: [] },
           };
         }
@@ -166,7 +159,10 @@ export function createWebSearchTool(options: SearchOptions = {}) {
           };
         }
         const text = results
-          .map((result, index) => `${index + 1}. ${result.title}\n   ${result.url}\n   ${result.snippet}`)
+          .map(
+            (result, index) =>
+              `${index + 1}. ${result.title}\n   ${result.url}\n   ${result.snippet}`,
+          )
           .join('\n');
         return {
           content: [{ type: 'text', text }],

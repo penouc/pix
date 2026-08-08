@@ -13,6 +13,11 @@ directories:
   output: release
   buildResources: build
 
+# Uniform artifact names so macOS and Windows ZIPs never collide on the same
+# Release (plan: Windows support). DMG keeps its default name; NSIS overrides
+# below so installers read as setup files.
+artifactName: PiX-${version}-${os}-${arch}.${ext}
+
 # Strip Electron's default Camera/Mic/Bluetooth privacy strings from every
 # Info.plist before signing. See build/after-pack.mjs.
 afterPack: build/after-pack.mjs
@@ -25,9 +30,9 @@ files:
 # Keep native / large Pi deps outside asar where possible.
 asar: true
 asarUnpack:
-  - "**/*.node"
-  - "**/node_modules/@earendil-works/**"
-  - "**/node_modules/@silvia-odwyer/**"
+  - '**/*.node'
+  - '**/node_modules/@earendil-works/**'
+  - '**/node_modules/@silvia-odwyer/**'
 
 extraMetadata:
   main: dist-electron/main/index.js
@@ -68,6 +73,34 @@ dmg:
   window:
     width: 540
     height: 380
+
+# Windows x64 first release. electron-builder converts build/icon.png → .ico
+# (PNG must be square and ≥256px; build/icon.png is 1024×1024). NSIS is the
+# target electron-updater needs — latest.yml is only emitted for NSIS builds —
+# and the zip is a portable, no-install download.
+win:
+  icon: build/icon.png
+  # `win.artifactName` covers the zip; the NSIS block overrides with a setup
+  # name below. Keeps every Windows artifact prefixed `PiX-…-windows-…`.
+  artifactName: PiX-${version}-windows-${arch}.${ext}
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: zip
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: PiX
+  # Per-user install (no admin/UAC); keep user data (projects, sessions,
+  # provider keys) on uninstall so removing the app does not orphan work.
+  deleteAppDataOnUninstall: false
+  artifactName: PiX-${version}-windows-${arch}-setup.${ext}
 
 linux:
   icon: build/icon.png

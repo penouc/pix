@@ -12,6 +12,7 @@
 <p align="center">
   <a href="https://github.com/penouc/pix/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/penouc/pix/actions/workflows/ci.yml/badge.svg" /></a>
   <img alt="macOS Apple Silicon" src="https://img.shields.io/badge/macOS-Apple%20Silicon-1f2722?logo=apple" />
+  <img alt="Windows x64" src="https://img.shields.io/badge/Windows-x64-1f2722?logo=windows" />
   <img alt="Electron" src="https://img.shields.io/badge/Electron-36-445c52?logo=electron" />
   <img alt="Pi Agent SDK" src="https://img.shields.io/badge/Pi%20Agent%20SDK-0.83.0-d97941" />
   <a href="https://pix.penglei.dev"><img alt="Website" src="https://img.shields.io/badge/Website-pix.penglei.dev-718662" /></a>
@@ -46,7 +47,11 @@ PiX 是一个运行在本机的 Coding Agent 工作台。它使用 Pi 处理多 
 它不是一个完整 IDE，也不试图把执行过程藏在聊天框后面。PiX 的重点是让真实的编码任务保持**可见、可控、可审查、可恢复**。
 
 > [!IMPORTANT]
-> PiX 目前处于积极开发阶段，优先支持 **macOS Apple Silicon**。请从 [Releases](https://github.com/penouc/pix/releases) 或 [官网](https://pix.penglei.dev) 下载已签名并公证的安装包；不建议把开发构建当作无人监管的生产执行器。
+> PiX 目前处于积极开发阶段，优先支持 **macOS Apple Silicon** 与 **Windows 10/11 x64**（Beta）。
+> 请从 [Releases](https://github.com/penouc/pix/releases) 或 [官网](https://pix.penglei.dev) 下载安装包；
+> 不建议把开发构建当作无人监管的生产执行器。
+>
+> Windows Beta 安装包暂未签名，SmartScreen 可能会警告：选择「更多信息 → 仍要运行」。
 
 ## 核心能力
 
@@ -90,7 +95,8 @@ PiX 是一个运行在本机的 Coding Agent 工作台。它使用 Pi 处理多 
 
 ### 环境要求
 
-- macOS（当前打包目标为 Apple Silicon）
+- macOS（Apple Silicon）或 Windows 10/11 x64
+- Windows 需要 [Git for Windows](https://git-scm.com/download/win)（Agent 命令与终端都通过 Git Bash 执行）
 - Node.js 20 或更高版本
 - pnpm 10.15.0
 - Git
@@ -121,13 +127,24 @@ PI_DESKTOP_FAKE_RUNTIME=1 pnpm dev
 
 ## 自动发布
 
-仓库通过 [Release workflow](./.github/workflows/release.yml) 自动生成 GitHub Release。推送符合语义化版本格式的 `v*` Tag 后，GitHub Actions 会依次：
+仓库通过 [Release workflow](./.github/workflows/release.yml) 自动生成 GitHub Release。推送符合语义化版本格式的 `v*` Tag 后，GitHub Actions 会并行构建两个平台，再由同一个 Publish Job 统一发布：
+
+**macOS（Apple Silicon）**
 
 1. 安装锁定依赖并运行 TypeScript 与测试检查。
 2. 构建 workspace packages 与 Desktop。
-3. 用 Developer ID 签名并公证 Apple Silicon DMG / ZIP，把 Tag 版本写入应用 metadata。
+3. 用 Developer ID 签名并公证 DMG / ZIP，把 Tag 版本写入应用 metadata。
 4. 验证 app bundle、asar 和 native modules。
-5. 创建 GitHub Release、自动生成 Release Notes，并上传 DMG、ZIP、`latest-mac.yml`（供应用内自动更新）。
+
+**Windows x64**
+
+1. 安装锁定依赖并运行 TypeScript 与测试检查（`windows-latest`）。
+2. 构建 workspace packages 与 Desktop。
+3. 生成 NSIS 安装包、便携 ZIP 和 `latest.yml`（应用内自动更新依赖它）。
+4. 配置 `WIN_CSC_LINK` / `WIN_CSC_KEY_PASSWORD` secrets 后自动签名；未配置时发布未签名 Beta 包（SmartScreen 会警告）。
+5. 验证 `win-unpacked`、asar 和 NSIS 产物。
+
+最终 Release 包含：`PiX-<ver>-mac-arm64.dmg`、`PiX-<ver>-mac-arm64.zip`、`latest-mac.yml`、`PiX-<ver>-windows-x64-setup.exe`、`PiX-<ver>-windows-x64.zip`、`latest.yml` 及对应 blockmap。
 
 发布新版本：
 
@@ -141,7 +158,7 @@ git push origin v0.2.0
 版本 Tag 必须类似 `v0.2.0` 或 `v0.2.0-beta.1`。Release 仅由 Tag 触发，普通的 `main` 提交不会产生安装包。
 
 > [!IMPORTANT]
-> Release 需要 GitHub Actions secrets：`CSC_LINK`、`CSC_KEY_PASSWORD`、`APPLE_API_KEY_BASE64`、`APPLE_API_KEY_ID`、`APPLE_API_ISSUER`。完整步骤见 [macOS Signing](./docs/macos-signing.md)。
+> macOS Release 需要 GitHub Actions secrets：`CSC_LINK`、`CSC_KEY_PASSWORD`、`APPLE_API_KEY_BASE64`、`APPLE_API_KEY_ID`、`APPLE_API_ISSUER`。完整步骤见 [macOS Signing](./docs/macos-signing.md)。Windows 正式签名需要 `WIN_CSC_LINK` 与 `WIN_CSC_KEY_PASSWORD`（.pfx 或等效证书）。
 ## 安全模型
 
 PiX 不把 Renderer 当作可信执行环境：
@@ -224,7 +241,10 @@ Pi SDK 类型只允许出现在 `packages/agent-pi`，Renderer 不直接依赖 P
 | `pnpm eval:fixture` | 运行真实模型的代码修改评测 |
 | `pnpm test:e2e` | 构建并运行 Playwright E2E |
 | `pnpm package:dir` | 生成 macOS arm64 `.app` |
+| `pnpm package:win` | 生成 Windows x64 NSIS 安装包 + ZIP（在 Windows 上执行） |
+| `pnpm package:win:dir` | 生成 Windows x64 `win-unpacked` 目录 |
 | `pnpm verify:packaged` | 验证 app bundle、asar、native modules 与 DMG |
+| `pnpm verify:packaged:win` | 验证 Windows `win-unpacked`、asar、NSIS 与 `latest.yml` |
 | `pnpm smoke:runtime` | Fake Runtime 的无头流式 smoke test |
 | `pnpm smoke:runtime:pi` | 真实 Pi Session 创建 smoke test |
 

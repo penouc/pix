@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Smoke-check packaged macOS app contents (plan §7.2 / M1).
+ * Smoke-check packaged app contents (plan §7.2 / M1).
  * Does not require GUI interaction.
  *
- * Usage: node scripts/smoke-packaged.mjs
+ * Usage: node scripts/smoke-packaged.mjs [--platform win32]
  */
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -12,12 +12,18 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const appRoot = path.join(
-  root,
-  'apps/desktop/release/mac-arm64/PiX.app',
-);
-const asarPath = path.join(appRoot, 'Contents/Resources/app.asar');
-const binary = path.join(appRoot, 'Contents/MacOS/PiX');
+
+const platformIdx = process.argv.indexOf('--platform');
+const platform = platformIdx !== -1 ? process.argv[platformIdx + 1] : 'darwin';
+const isWin = platform === 'win32';
+
+const appRoot = isWin
+  ? path.join(root, 'apps/desktop/release/win-unpacked')
+  : path.join(root, 'apps/desktop/release/mac-arm64/PiX.app');
+const asarPath = isWin
+  ? path.join(appRoot, 'resources/app.asar')
+  : path.join(appRoot, 'Contents/Resources/app.asar');
+const binary = isWin ? path.join(appRoot, 'PiX.exe') : path.join(appRoot, 'Contents/MacOS/PiX');
 
 function fail(msg) {
   console.error(`FAIL: ${msg}`);
@@ -29,7 +35,9 @@ function ok(msg) {
 }
 
 if (!existsSync(appRoot)) {
-  fail(`Packaged app not found at ${appRoot}. Run: pnpm package:dir`);
+  fail(
+    `Packaged app not found at ${appRoot}. Run: ${isWin ? 'pnpm package:win:dir' : 'pnpm package:dir'}`,
+  );
 }
 ok(`app bundle exists`);
 
@@ -43,10 +51,7 @@ ok(`app.asar exists (${statSync(asarPath).size} bytes)`);
 const require = createRequire(import.meta.url);
 let asar;
 try {
-  asar = require(path.join(
-    root,
-    'node_modules/.pnpm/node_modules/@electron/asar/lib/asar.js',
-  ));
+  asar = require(path.join(root, 'node_modules/.pnpm/node_modules/@electron/asar/lib/asar.js'));
 } catch {
   try {
     asar = require('@electron/asar');
@@ -66,7 +71,9 @@ const files = asar.listPackage(asarPath).map(String);
 checkList(files);
 
 // Pi unpack path
-const unpacked = path.join(appRoot, 'Contents/Resources/app.asar.unpacked/node_modules/@earendil-works');
+const unpacked = isWin
+  ? path.join(appRoot, 'resources/app.asar.unpacked/node_modules/@earendil-works')
+  : path.join(appRoot, 'Contents/Resources/app.asar.unpacked/node_modules/@earendil-works');
 if (existsSync(unpacked)) {
   ok(`Pi packages unpacked: ${readdirSync(unpacked).join(', ')}`);
 } else {

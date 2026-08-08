@@ -39,8 +39,11 @@ afterEach(() => {
   rmSync(repo, { recursive: true, force: true });
 });
 
-async function runTool(tool: { execute: (...args: any[]) => Promise<any> }, params: unknown) {
-  return tool.execute('call-1', params, undefined, undefined, { cwd: repo }) as Promise<{
+async function runTool(tool: unknown, params: unknown) {
+  // The SDK's ToolDefinition execute is contravariant in its params, so a
+  // structural signature cannot accept every tool — narrow with a cast.
+  const execute = (tool as { execute: (...args: unknown[]) => Promise<unknown> }).execute;
+  return execute('call-1', params, undefined, undefined, { cwd: repo }) as Promise<{
     content: Array<{ type: string; text?: string }>;
     details?: unknown;
   }>;
@@ -130,7 +133,8 @@ describe('git_diff tool', () => {
     expect(stagedFiles?.[0]?.path).toBe('a.txt');
     // Default (vs HEAD) includes staged changes too — same as the Diff panel.
     const working = await runTool(tool, {});
-    const workingFiles = (working.details as { files?: Array<{ path: string }> } | undefined)?.files;
+    const workingFiles = (working.details as { files?: Array<{ path: string }> } | undefined)
+      ?.files;
     expect(workingFiles?.[0]?.path).toBe('a.txt');
   });
 
@@ -159,7 +163,7 @@ describe('git_log tool', () => {
     git(['commit', '-q', '-m', 'feat: second']);
     const tool = createGitLogTool();
     const result = await runTool(tool, { limit: 5 });
-    const commits = ((result.details as { commits?: string[] } | undefined)?.commits) ?? [];
+    const commits = (result.details as { commits?: string[] } | undefined)?.commits ?? [];
     expect(commits.length).toBe(2);
     expect(commits[0]).toContain('feat: second');
     expect(commits[1]).toContain('feat: initial');

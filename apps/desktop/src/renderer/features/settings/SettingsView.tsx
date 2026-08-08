@@ -20,6 +20,7 @@ import { Switch } from '@/components/ui/switch';
 import { SettingsPanel } from '@/features/settings/SettingsPanel';
 import { UsageTab } from '@/features/settings/UsageTab';
 import { invoke } from '@/lib/ipc';
+import { credentialStorageLabel } from '@/lib/platform';
 import { cn } from '@/lib/utils';
 import { useUiPrefsStore } from '@/stores/ui-prefs-store';
 
@@ -39,7 +40,7 @@ const TABS: Array<{ id: TabId; name: string; title: string; desc: string }> = [
     id: 'providers',
     name: 'Providers & models',
     title: 'Providers & models',
-    desc: 'API keys are encrypted with the macOS Keychain and never shown again.',
+    desc: `API keys are encrypted with ${credentialStorageLabel()} and never shown again.`,
   },
   {
     id: 'permissions',
@@ -670,7 +671,9 @@ function UpdatesTab() {
       </Group>
       <Group label="Release">
         <Row
-          name={state?.version ? `PiX ${state.version} is ready` : `PiX ${state?.currentVersion ?? '—'}`}
+          name={
+            state?.version ? `PiX ${state.version} is ready` : `PiX ${state?.currentVersion ?? '—'}`
+          }
           desc={updateDescription(state)}
         >
           <Button
@@ -760,6 +763,21 @@ function AboutTab() {
         </Row>
         <Row name="Platform" desc="">
           <Mono>{info.data?.platform ?? '—'}</Mono>
+        </Row>
+        <Row name="Git" desc="Found on PATH; required for diff/checkpoint services.">
+          <Mono>
+            {info.data?.preflight?.git?.version ?? (info.data?.preflight ? 'not found' : '—')}
+          </Mono>
+        </Row>
+        <Row name="Bash" desc="Agent + Terminal commands run through bash (Git Bash on Windows).">
+          <Mono>
+            {info.data?.preflight?.bash?.path ??
+              (info.data?.preflight?.bash?.required && !info.data?.preflight?.bash?.available
+                ? 'missing — install Git for Windows'
+                : info.data?.preflight
+                  ? 'system default'
+                  : '—')}
+          </Mono>
         </Row>
         <Row name="Runtime mode" desc="`fake` renders the UI with no provider calls.">
           <Mono>{info.data?.runtimeMode ?? '—'}</Mono>

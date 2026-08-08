@@ -66,6 +66,7 @@ import {
 import { AutomationStore } from './automations/automation-store.js';
 import { AutomationScheduler } from './automations/automation-scheduler.js';
 import { UpdateService } from './updates/update-service.js';
+import { runPreflight } from './platform/environment.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -306,9 +307,14 @@ function createWindow(): void {
     ...(iconPath ? { icon: iconPath } : {}),
     // Organic ground (--color-bg) — avoids a flash of a different colour on show.
     backgroundColor: '#f8faf8',
-    titleBarStyle: 'hiddenInset',
+    // macOS gets the hidden-inset title bar with custom traffic-light spacing;
+    // Windows keeps the native frame so close/minimise/drag behave like every
+    // other Windows app (plan: Windows support).
     ...(process.platform === 'darwin'
-      ? { trafficLightPosition: { x: 14, y: 9 } as { x: number; y: number } }
+      ? {
+          titleBarStyle: 'hiddenInset' as const,
+          trafficLightPosition: { x: 14, y: 9 } as { x: number; y: number },
+        }
       : {}),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.mjs'),
@@ -802,6 +808,7 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
             terminalTimeoutSeconds: TERMINAL_TIMEOUT_MS / 1000,
             terminalOutputCapBytes: TERMINAL_OUTPUT_CAP_BYTES,
           },
+          preflight: await runPreflight(),
         });
       }
       case 'update.getStatus':

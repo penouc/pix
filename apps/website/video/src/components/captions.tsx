@@ -1,6 +1,6 @@
 import React from 'react';
 import { AbsoluteFill, interpolate, useCurrentFrame } from 'remotion';
-import { fontStack, theme } from '../theme';
+import { fontStack } from '../theme';
 
 export type CaptionCue = {
   /** Inclusive start frame. */

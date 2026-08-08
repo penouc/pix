@@ -9,8 +9,26 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    name: Build and publish macOS release
+  # Parse and validate the tag once; both build jobs consume the version.
+  validate-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - name: Resolve version
+        id: resolve
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Tag must be a semantic version such as v0.2.0" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  build-macos:
+    name: Build macOS release
+    needs: validate-version
     runs-on: macos-latest
 
     steps:
@@ -24,16 +42,6 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-
-      - name: Resolve version
-        shell: bash
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Tag must be a semantic version such as v0.2.0" >&2
-            exit 1
-          fi
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Install
         run: pnpm install --frozen-lockfile
@@ -61,6 +69,7 @@ jobs:
 
       - name: Package Apple Silicon release and update feed
         env:
+          VERSION: ${{ needs.validate-version.outputs.version }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
@@ -85,15 +94,113 @@ jobs:
       - name: Verify package
         run: pnpm verify:packaged
 
-      - name: Publish GitHub Release
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          if-no-files-found: error
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*-mac.yml
+            apps/desktop/release/*.blockmap
+
+  build-windows:
+    name: Build Windows release
+    needs: validate-version
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        shell: bash
+        run: pnpm install --frozen-lockfile
+
+      - name: Check
+        shell: bash
+        run: |
+          pnpm typecheck
+          pnpm test
+
+      - name: Build desktop
+        shell: bash
+        run: pnpm build
+
+      # Sign only when a Windows certificate is configured. Beta releases ship
+      # unsigned (SmartScreen will warn); once WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD
+      # secrets exist, forceCodeSigning turns the check on so a missing cert
+      # fails the build instead of silently shipping an unsigned installer.
+      - name: Package Windows release and update feed
+        shell: bash
+        env:
+          VERSION: ${{ needs.validate-version.outputs.version }}
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          pnpm --filter @pi-desktop/desktop exec electron-builder \
+            --win nsis zip \
+            --x64 \
+            --config electron-builder.yml \
+            --publish never \
+            --config.extraMetadata.version="$VERSION" \
+            --config.forceCodeSigning=${{ secrets.WIN_CSC_LINK != '' }}
+
+      - name: Verify package
+        shell: bash
+        run: pnpm verify:packaged:win
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          if-no-files-found: error
+          path: |
+            apps/desktop/release/*-setup.exe
+            apps/desktop/release/*.zip
+            apps/desktop/release/latest.yml
+            apps/desktop/release/*.exe.blockmap
+
+  # One job creates the Release and uploads every platform's artifacts, so two
+  # concurrent build jobs can never race each other on the same tag.
+  publish:
+    name: Publish GitHub Release
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-macos
+          path: release-macos
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-windows
+          path: release-windows
+
+      - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            apps/desktop/release/*.dmg \
-            apps/desktop/release/*.zip \
-            apps/desktop/release/*.yml \
-            apps/desktop/release/*.blockmap \
+            release-macos/*.dmg \
+            release-macos/*.zip \
+            release-macos/*-mac.yml \
+            release-macos/*.blockmap \
+            release-windows/*-setup.exe \
+            release-windows/*.zip \
+            release-windows/latest.yml \
+            release-windows/*.exe.blockmap \
             --verify-tag \
             --title "PiX $GITHUB_REF_NAME" \
             --generate-notes

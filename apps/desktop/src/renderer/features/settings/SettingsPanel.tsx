@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { SearchableSelect } from '@/components/SearchableSelect';
 import { useOfferedModels } from '@/features/models/use-offered-models';
 import { FavoriteModelsSection } from '@/features/models/FavoriteModelsSection';
+import { credentialStorageLabel } from '@/lib/platform';
 import { SubscriptionsSection } from '@/features/settings/SubscriptionsSection';
 import { AutoModelSection } from '@/features/settings/AutoModelSection';
 import { invoke } from '@/lib/ipc';
@@ -158,7 +159,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
             </p>
             <h1 className="mt-2 text-xl font-semibold text-foreground">Providers & models</h1>
             <p className="mt-1.5 max-w-md text-sm leading-6 text-muted">
-              API keys are encrypted with macOS Keychain and never shown again.
+              API keys are encrypted with {credentialStorageLabel()} and never shown again.
             </p>
           </div>
           {onClose ? (

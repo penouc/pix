@@ -18,6 +18,7 @@ import { AutomationsView } from '@/features/automations/AutomationsView';
 import { ChatPanel } from '@/features/chat/ChatPanel';
 import { DiffPanel } from '@/features/diff/DiffPanel';
 import { ProjectSidebar } from '@/features/projects/ProjectSidebar';
+import { PreflightBanner } from '@/features/preflight/PreflightBanner';
 import { SearchPalette, type PaletteCommand } from '@/features/search/SearchPalette';
 import { SettingsView } from '@/features/settings/SettingsView';
 import { SkillsView } from '@/features/skills/SkillsView';
@@ -218,7 +219,7 @@ export function App() {
         }
       })();
     },
-    [ensureProjectForSession, setSession, resetSessionView, setScope, loadHistory],
+    [ensureProjectForSession, setSession, resetSessionView, setScope, loadHistory, setTodos],
   );
 
   const goBackFromRun = useCallback(() => {
@@ -404,6 +405,7 @@ export function App() {
 
   const main = (
     <div className="flex h-full min-h-0 flex-col">
+      <PreflightBanner />
       <div className="flex min-h-0 min-w-0 flex-1">
         {view === 'settings' ? (
           <SettingsView onClose={() => setView('run')} />

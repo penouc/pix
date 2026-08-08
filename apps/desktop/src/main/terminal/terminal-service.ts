@@ -12,6 +12,9 @@ import {
   type PolicyContext,
 } from '@pi-desktop/security';
 
+import { resolveBashPath } from '../platform/environment.js';
+import { killProcessTree } from '../platform/process-tree.js';
+
 /** UI keeps the tail; anything longer is cut with an explicit marker (plan §14.1). */
 export const MAX_OUTPUT_BYTES = 256 * 1024;
 export const DEFAULT_TIMEOUT_MS = 120_000;
@@ -233,14 +236,40 @@ export class TerminalService {
     command: string,
     cwd: string,
   ): Promise<{ exitCode: number | null; output: string; truncated: boolean }> {
-    return new Promise((resolve) => {
-      const child = spawn(command, {
-        cwd,
-        shell: true,
-        // Own process group so a timeout can take the whole tree down (M8-1).
-        detached: true,
-        env: { ...process.env, TERM: 'dumb', CI: '1', NO_COLOR: '1' },
+    // Windows: run through Git Bash so the user's Terminal speaks the same
+    // dialect as the agent's bash tool (plan: Windows support). The same policy
+    // classifier therefore recognises `rm -rf`, `curl`, `git push` … whether
+    // typed or issued by the model. cmd.exe/PowerShell syntax would slip past
+    // those rules. When bash is genuinely absent, fail loudly instead of
+    // silently switching to cmd.
+    const bashPath = process.platform === 'win32' ? resolveBashPath() : null;
+    if (process.platform === 'win32' && !bashPath) {
+      return Promise.resolve({
+        exitCode: null,
+        output:
+          'PiX needs Git Bash to run commands. Install Git for Windows: ' +
+          'https://git-scm.com/download/win',
+        truncated: false,
       });
+    }
+
+    return new Promise((resolve) => {
+      const child =
+        process.platform === 'win32'
+          ? spawn(bashPath as string, ['-c', command], {
+              cwd,
+              // Own process tree so a timeout can take everything down (M8-1).
+              detached: true,
+              windowsHide: true,
+              env: { ...process.env, TERM: 'dumb', CI: '1', NO_COLOR: '1' },
+            })
+          : spawn(command, {
+              cwd,
+              shell: true,
+              // Own process group so a timeout can take the whole tree down (M8-1).
+              detached: true,
+              env: { ...process.env, TERM: 'dumb', CI: '1', NO_COLOR: '1' },
+            });
 
       const chunks: Buffer[] = [];
       let size = 0;
@@ -268,26 +297,12 @@ export class TerminalService {
       };
 
       const timer = setTimeout(() => {
-        killTree(child.pid);
+        killProcessTree(child.pid);
         finish(null, `… killed after ${DEFAULT_TIMEOUT_MS / 1000}s`);
       }, DEFAULT_TIMEOUT_MS);
 
       child.on('error', (error) => finish(null, `failed to start: ${error.message}`));
       child.on('close', (code) => finish(code));
     });
-  }
-}
-
-function killTree(pid: number | undefined) {
-  if (pid == null) return;
-  try {
-    // Negative pid targets the whole process group created by `detached`.
-    process.kill(-pid, 'SIGKILL');
-  } catch {
-    try {
-      process.kill(pid, 'SIGKILL');
-    } catch {
-      /* already gone */
-    }
   }
 }

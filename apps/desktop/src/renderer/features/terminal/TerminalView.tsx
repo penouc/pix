@@ -44,8 +44,12 @@ function parseCd(command: string): { target: string } | null {
 function promptLabel(project: ProjectSummary | null, cwd: string): string {
   const name = project?.name ?? 'no project';
   if (!project || cwd === '.' || cwd === project.path) return name;
-  if (cwd.startsWith(`${project.path}/`)) {
-    return `${name}/${cwd.slice(project.path.length + 1)}`;
+  // Windows separators: compare and slice on a slash-normalised form so a
+  // `C:\repo` project labels its subdirectories the same way as a macOS one.
+  const normalizedCwd = cwd.replace(/\\/g, '/');
+  const normalizedProject = project.path.replace(/\\/g, '/');
+  if (normalizedCwd.startsWith(`${normalizedProject}/`)) {
+    return `${name}/${normalizedCwd.slice(normalizedProject.length + 1)}`;
   }
   return cwd;
 }

@@ -891,7 +891,7 @@ Pi customTools → tool_call hook → tool-normalizer → risk-classifier → po
 | Session export | `exportToHtml` / `exportToJsonl` + redaction before export | — |
 | Parallel multi-Agent | Prerequisite is worktree isolation + event routing (already scoped by projectId/sessionId/runId); a sub-Agent spawns a new Session via `customTool`, and the parent session only gets the summary | Requires an ADR |
 | Signing / Notarization / auto-update | Developer ID signing + notarytool + electron-updater; the update source and signature-verification policy must be documented | Requires an ADR |
-| Cross-platform | Windows/Linux need rework: `node:sqlite` availability, Keychain → `safeStorage`, process-tree termination (`taskkill /T` vs. pgid), and path case/symlink semantics | Requires an ADR |
+| Cross-platform | Windows x64 shipped (ADR-0004): Git Bash as the single shell dialect, `taskkill /T` process-tree termination, `safeStorage`/DPAPI copy, LF checkouts via `.gitattributes`, parallel mac/win CI + release. Linux remains open | Addressed — ADR-0004 |
 
 
 # 25. Feature Candidate List and Priority
@@ -938,7 +938,7 @@ Pi customTools → tool_call hook → tool-normalizer → risk-classifier → po
 | # | Feature | Cost | Prerequisite |
 |---|------|------|----------|
 | C1 | Signing + Notarization + auto-update | Medium | Only matters once distributing externally |
-| C2 | Windows / Linux support | High | Needs an ADR to define the platform-abstraction boundary first |
+| C2 | Windows x64 (Beta) | Medium | Shipped — see [ADR-0004](./decisions/0004-windows-support.md); Windows ARM64 / Linux / Store still open |
 | C3 | Mac + 4090 remote inference node | Medium | §24.6 security review |
 | C4 | Remote Workspace / SSH | High | Requires a major Main-side FS/exec abstraction rework |
 | C5 | Multi-Agent orchestration (parent/child task decomposition) | High | Depends on B6's worktree isolation |

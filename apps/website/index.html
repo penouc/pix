@@ -74,12 +74,23 @@
               <a
                 class="btn btn-primary"
                 data-download
+                data-os="macos"
                 href="https://github.com/penouc/pix/releases/latest"
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                <span data-i18n="download.cta">Download for macOS · Apple Silicon</span>
+                <span data-i18n="download.ctaMac">Download for macOS · Apple Silicon</span>
                 <span class="download-version" data-download-version hidden></span>
+              </a>
+              <a
+                class="btn btn-primary"
+                data-download
+                data-os="windows"
+                href="https://github.com/penouc/pix/releases/latest"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span data-i18n="download.ctaWindows">Download for Windows · x64</span>
               </a>
               <a
                 class="btn btn-ghost"
@@ -90,6 +101,8 @@
                 >View on GitHub</a
               >
             </div>
+            <p class="download-note" data-download-note data-i18n="download.noteMac" hidden></p>
+            <p class="download-latest" data-download-latest hidden></p>
           </div>
           <div class="hero-visual">
             <div class="hero-screen">
@@ -107,8 +120,8 @@
                 data-i18n-aria="preview.w1"
                 aria-label="PiX workbench interface"
               >
-                <source src="/videos/workbench.webm?v=3" type="video/webm" />
-                <source src="/videos/workbench.mp4?v=3" type="video/mp4" />
+                <source src="/videos/workbench.mp4?v=4" type="video/mp4" />
+                <source src="/videos/workbench.webm?v=4" type="video/webm" />
               </video>
             </div>
           </div>
@@ -237,8 +250,8 @@
                 width="1280"
                 height="800"
                 role="img"
-                data-src-webm="/videos/workbench.webm?v=3"
-                data-src-mp4="/videos/workbench.mp4?v=3"
+                data-src-mp4="/videos/workbench.mp4?v=4"
+                data-src-webm="/videos/workbench.webm?v=4"
                 data-i18n-aria="preview.w1"
                 aria-label=""
               ></video>
@@ -258,8 +271,8 @@
                 width="1280"
                 height="800"
                 role="img"
-                data-src-webm="/videos/agent-run.webm?v=3"
-                data-src-mp4="/videos/agent-run.mp4?v=3"
+                data-src-mp4="/videos/agent-run.mp4?v=4"
+                data-src-webm="/videos/agent-run.webm?v=4"
                 data-i18n-aria="preview.w2"
                 aria-label=""
               ></video>
@@ -279,8 +292,8 @@
                 width="1280"
                 height="800"
                 role="img"
-                data-src-webm="/videos/usage.webm?v=3"
-                data-src-mp4="/videos/usage.mp4?v=3"
+                data-src-mp4="/videos/usage.mp4?v=4"
+                data-src-webm="/videos/usage.webm?v=4"
                 data-i18n-aria="preview.w3"
                 aria-label=""
               ></video>

@@ -1,4 +1,12 @@
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Search, Sparkles, Star } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  Sparkles,
+  Star,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -94,12 +102,13 @@ export function ModelPicker() {
     [models, favorites],
   );
   const providers = useMemo(() => groupByProvider(models), [models]);
-  const drilled = provider ? models.filter((model) => model.providerId === provider) : [];
+  const drilled = useMemo(
+    () => (provider ? models.filter((model) => model.providerId === provider) : []),
+    [models, provider],
+  );
 
   type NavItem =
-    | { kind: 'auto' }
-    | { kind: 'model'; model: ModelInfo }
-    | { kind: 'provider'; id: string };
+    { kind: 'auto' } | { kind: 'model'; model: ModelInfo } | { kind: 'provider'; id: string };
 
   const navItems = useMemo((): NavItem[] => {
     if (needle) return searchHits.map((model) => ({ kind: 'model' as const, model }));
@@ -149,7 +158,11 @@ export function ModelPicker() {
     void queryClient.invalidateQueries({ queryKey: ['agent.getThinkingLevel', session.id] });
   }
 
-  const { cursor, setCursor, onKeyDown: onListKeyDown } = useListKeyboard({
+  const {
+    cursor,
+    setCursor,
+    onKeyDown: onListKeyDown,
+  } = useListKeyboard({
     open,
     count: navItems.length,
     resetKey: `${needle}|${provider ?? ''}|${navItems.length}`,
@@ -165,9 +178,7 @@ export function ModelPicker() {
 
   useEffect(() => {
     if (!open) return;
-    menuRef.current
-      ?.querySelector('[data-active="true"]')
-      ?.scrollIntoView({ block: 'nearest' });
+    menuRef.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [open, cursor]);
 
   const label = autoActive
@@ -199,7 +210,9 @@ export function ModelPicker() {
       >
         <span
           className="h-1.5 w-1.5 flex-none rounded-full"
-          style={{ background: active || autoActive ? 'var(--color-accent-2)' : 'var(--color-neutral-400)' }}
+          style={{
+            background: active || autoActive ? 'var(--color-accent-2)' : 'var(--color-neutral-400)',
+          }}
         />
         <span className="min-w-0 truncate">{label}</span>
         <ChevronDown className="h-3 w-3 flex-none text-muted" />
@@ -310,9 +323,7 @@ export function ModelPicker() {
                           on rate limits
                         </span>
                       </span>
-                      {autoActive ? (
-                        <Check className="h-3.5 w-3.5 flex-none text-accent" />
-                      ) : null}
+                      {autoActive ? <Check className="h-3.5 w-3.5 flex-none text-accent" /> : null}
                     </button>
                     {favorited.length ? (
                       <>
@@ -320,17 +331,17 @@ export function ModelPicker() {
                         {favorited.map((model, index) => {
                           const navIndex = 1 + index;
                           return (
-                          <Row
-                            key={modelKey(model)}
-                            model={model}
-                            showProvider
-                            active={navIndex === cursor}
-                            selected={modelKey(model) === selectedModel}
-                            starred
-                            onChoose={() => choose(model)}
-                            onStar={() => toggleFavorite(modelKey(model))}
-                            onHover={() => setCursor(navIndex)}
-                          />
+                            <Row
+                              key={modelKey(model)}
+                              model={model}
+                              showProvider
+                              active={navIndex === cursor}
+                              selected={modelKey(model) === selectedModel}
+                              starred
+                              onChoose={() => choose(model)}
+                              onStar={() => toggleFavorite(modelKey(model))}
+                              onHover={() => setCursor(navIndex)}
+                            />
                           );
                         })}
                       </>
@@ -339,21 +350,21 @@ export function ModelPicker() {
                     {providers.map(([id, group], index) => {
                       const navIndex = 1 + favorited.length + index;
                       return (
-                      <button
-                        key={id}
-                        type="button"
-                        data-active={navIndex === cursor ? 'true' : undefined}
-                        onMouseEnter={() => setCursor(navIndex)}
-                        onClick={() => setProvider(id)}
-                        className={cn(
-                          'flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3 py-[7px] text-left',
-                          listOptionClass(navIndex === cursor),
-                        )}
-                      >
-                        <span className="min-w-0 flex-1 truncate text-[12.5px]">{id}</span>
-                        <span className="flex-none text-[11px] text-muted">{group.length}</span>
-                        <ChevronRight className="h-3.5 w-3.5 flex-none text-muted" />
-                      </button>
+                        <button
+                          key={id}
+                          type="button"
+                          data-active={navIndex === cursor ? 'true' : undefined}
+                          onMouseEnter={() => setCursor(navIndex)}
+                          onClick={() => setProvider(id)}
+                          className={cn(
+                            'flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3 py-[7px] text-left',
+                            listOptionClass(navIndex === cursor),
+                          )}
+                        >
+                          <span className="min-w-0 flex-1 truncate text-[12.5px]">{id}</span>
+                          <span className="flex-none text-[11px] text-muted">{group.length}</span>
+                          <ChevronRight className="h-3.5 w-3.5 flex-none text-muted" />
+                        </button>
                       );
                     })}
                     {!providers.length ? (

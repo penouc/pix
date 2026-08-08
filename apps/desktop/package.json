@@ -13,7 +13,9 @@
     "test": "vitest run --config ../../vitest.config.ts --dir src",
     "preview": "vite preview",
     "package:dir": "pnpm build && electron-builder --mac dir --config electron-builder.yml --publish never --config.mac.identity=null --config.mac.hardenedRuntime=false --config.mac.notarize=false",
-    "package:dmg": "pnpm build && electron-builder --mac dmg --config electron-builder.yml --publish never --config.mac.identity=null --config.mac.hardenedRuntime=false --config.mac.notarize=false"
+    "package:dmg": "pnpm build && electron-builder --mac dmg --config electron-builder.yml --publish never --config.mac.identity=null --config.mac.hardenedRuntime=false --config.mac.notarize=false",
+    "package:win:dir": "pnpm build && electron-builder --win dir --x64 --config electron-builder.yml --publish never",
+    "package:win": "pnpm build && electron-builder --win nsis zip --x64 --config electron-builder.yml --publish never"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.83.0",

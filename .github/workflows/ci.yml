@@ -35,3 +35,41 @@ jobs:
 
       - name: Build packages
         run: pnpm -r --filter './packages/*' build
+
+  # Windows support (plan: Windows). The macOS job is the source of truth for
+  # behaviour; this job exists to catch the platform-specific breakage Windows
+  # would otherwise hide until release day: path separators, shell dialect,
+  # symlink handling, CRLF, file locks, and any macOS-only API that slips into
+  # shared code.
+  windows-check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        shell: bash
+        run: pnpm typecheck
+
+      - name: Lint
+        shell: bash
+        run: pnpm lint
+
+      - name: Test
+        shell: bash
+        run: pnpm test
+
+      - name: Build desktop
+        shell: bash
+        run: pnpm --filter @pi-desktop/desktop build

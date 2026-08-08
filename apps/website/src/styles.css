@@ -356,6 +356,28 @@ a:hover {
   width: 100%;
 }
 
+.hero-screen.video-needs-gesture,
+figure.screen.video-needs-gesture {
+  cursor: pointer;
+  position: relative;
+}
+
+.hero-screen.video-needs-gesture::after,
+figure.screen.video-needs-gesture::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 68px;
+  height: 68px;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 68 68'%3E%3Ccircle cx='34' cy='34' r='34' fill='%233d5a3a' fill-opacity='0.82'/%3E%3Cpath fill='%23fff' d='M28 22v24l22-12z'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  box-shadow: 0 12px 28px oklch(0.3 0.04 150 / 0.28);
+}
+
 .hero-copy > * {
   animation: rise 700ms var(--ease-out) both;
 }
@@ -508,6 +530,20 @@ a:hover {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   opacity: 0.85;
+}
+
+/* Secondary platform link + install notes under the hero CTA row. */
+.download-latest,
+.download-note {
+  margin: 0.85rem 0 0;
+  max-width: 46ch;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.download-latest {
+  font-variant-numeric: tabular-nums;
 }
 
 [hidden] {

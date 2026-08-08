@@ -323,6 +323,7 @@ docs/ (see §6.1)                    [~] see table below
 | M8-2 | Structured logging, redaction, Run metrics, diagnostic export | [x] `DesktopLogger` NDJSON rotating logs + `redactSecrets` + console replacement; `RunMetricsStore` tracks the run lifecycle; `RunMetrics` schema added to protocol; `diagnostics.export` IPC command |
 | M8-3 | Fixed Agent evaluation set + Electron E2E | [x] Added 5 fixtures (including conservative-change clarification and post-hoc precise-revert verification); `pnpm verify:fixtures` covers all 11 fixtures; Playwright E2E `tests/e2e/happy-path.spec.ts`; `pnpm test:e2e` script |
 | M8-4 | macOS packaged build, install, uninstall verification | [x] electron-builder.yml adds a DMG target; `scripts/verify-packaged.mjs` (bundle, asar contents, .node loadability, DMG); `pnpm verify:packaged` script; uninstall-path notes |
+| M8-5 | Windows x64 packaged build + CI (ADR-0004) | [x] electron-builder `win` (NSIS + zip + `latest.yml`); `pnpm package:win` / `verify:packaged:win`; Git Bash Terminal shell + `taskkill /T /F` process-tree termination; Git Bash preflight (banner + About); safeStorage/DPAPI copy; `.gitattributes` LF checkouts; `windows-check` CI job; parallel mac/win release workflow; website dual-platform downloads |
 
 ---
 
@@ -524,7 +525,7 @@ Each item needs its own ADR + evaluation + security review.
 | Async state | TanStack Query + Zustand (streaming never enters the Query Cache) |
 | Diff | @pierre/diffs |
 | Recovery | Snapshot + hash |
-| Launch | macOS + Git projects |
+| Launch | macOS (Apple Silicon) + Windows 10/11 x64 + Git projects |
 
 ### 9.2 External References
 

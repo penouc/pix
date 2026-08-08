@@ -57,6 +57,30 @@ export const AppInfoSchema = z.object({
       terminalOutputCapBytes: z.number().int().nonnegative(),
     })
     .optional(),
+  /**
+   * Environment probe for the About screen and the Windows Git Bash banner
+   * (plan: Windows support). Windows requires bash for agent commands; the
+   * renderer only acts when `bash.required && !bash.available`.
+   */
+  preflight: z
+    .object({
+      platform: z.string(),
+      git: z
+        .object({
+          available: z.boolean(),
+          version: z.string().optional(),
+        })
+        .optional(),
+      bash: z
+        .object({
+          required: z.boolean(),
+          available: z.boolean(),
+          path: z.string().optional(),
+          hint: z.string().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 });
 export type AppInfo = z.infer<typeof AppInfoSchema>;
 

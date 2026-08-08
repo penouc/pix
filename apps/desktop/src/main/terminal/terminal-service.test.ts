@@ -72,7 +72,14 @@ describe('TerminalService.changeDirectory', () => {
   it('refuses to leave the workspace and stays where it was', async () => {
     const cwd = path.join(root, 'packages');
 
-    for (const target of ['../..', '../../..', outside, '/etc', '/']) {
+    for (const target of [
+      '../..',
+      '../../..',
+      outside,
+      // `/etc` on Unix, `C:\etc` on Windows — absolute and outside the root.
+      path.join(path.parse(root).root, 'etc'),
+      path.parse(root).root,
+    ]) {
       const result = await service.changeDirectory({ workspaceRoot: root, cwd, target });
       expect(result.outcome, target).toBe('refused');
       // The tab must not move on a refusal, or the next command runs somewhere
@@ -133,8 +140,9 @@ describe('TerminalService.exec cwd', () => {
     });
 
     expect(result.outcome).toBe('ran');
-    // macOS reports /private/var for /var, so compare the tail.
-    expect(result.output.trim().endsWith('/sub')).toBe(true);
+    // macOS reports /private/var for /var; Windows (Git Bash) can print the
+    // Windows path with either slash style — compare the tail component only.
+    expect(path.basename(result.output.trim())).toBe('sub');
   });
 
   it('refuses a cwd outside the workspace before spawning anything', async () => {
@@ -143,7 +151,9 @@ describe('TerminalService.exec cwd', () => {
       workspaceRoot: root,
       projectTrusted: true,
       command: 'pwd',
-      cwd: '/etc',
+      // A drive root on Windows, `/` on Unix — absolute, and outside the
+      // workspace either way.
+      cwd: path.join(path.parse(root).root, 'etc'),
     });
 
     expect(result.outcome).toBe('denied');
@@ -187,9 +197,9 @@ describe('TerminalService.exec cwd', () => {
   it('refuses an ancestor of the project root', async () => {
     // Regression: the confinement check had its arguments reversed, so it asked
     // whether the root was inside the requested directory. Every ancestor —
-    // including `/` and the user's home — passed, and the command ran outside
-    // the workspace.
-    for (const cwd of [path.dirname(root), '/']) {
+    // including the filesystem root — passed, and the command ran outside the
+    // workspace.
+    for (const cwd of [path.dirname(root), path.parse(root).root]) {
       const result = await service.exec({
         projectId: 'p1',
         workspaceRoot: root,

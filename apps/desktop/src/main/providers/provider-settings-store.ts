@@ -195,7 +195,7 @@ export class ProviderSettingsStore {
 
   private writeEncrypted(settings: EncryptedSettings): void {
     if (!safeStorage.isEncryptionAvailable()) {
-      throw new Error('macOS Keychain encryption is unavailable for Provider settings.');
+      throw new Error('OS-level credential encryption is unavailable for Provider settings.');
     }
     mkdirSync(path.dirname(this.filePath), { recursive: true });
     const encrypted = safeStorage.encryptString(JSON.stringify({ providers: settings.providers }));
@@ -213,9 +213,7 @@ export class ProviderSettingsStore {
           : {}),
         ...(parsed.autoModel ? { autoModel: parsed.autoModel } : {}),
         ...(parsed.uiFlags ? { uiFlags: parsed.uiFlags } : {}),
-        ...(parsed.defaultApprovalMode
-          ? { defaultApprovalMode: parsed.defaultApprovalMode }
-          : {}),
+        ...(parsed.defaultApprovalMode ? { defaultApprovalMode: parsed.defaultApprovalMode } : {}),
         ...(Array.isArray(parsed.favoriteModels)
           ? { favoriteModels: parsed.favoriteModels }
           : Array.isArray((parsed as { visibleModels?: string[] }).visibleModels)
@@ -263,9 +261,7 @@ export class ProviderSettingsStore {
           : {}),
         ...(parsed.autoModel ? { autoModel: parsed.autoModel } : {}),
         ...(parsed.uiFlags ? { uiFlags: parsed.uiFlags } : {}),
-        ...(parsed.defaultApprovalMode
-          ? { defaultApprovalMode: parsed.defaultApprovalMode }
-          : {}),
+        ...(parsed.defaultApprovalMode ? { defaultApprovalMode: parsed.defaultApprovalMode } : {}),
         ...(Array.isArray(parsed.favoriteModels)
           ? { favoriteModels: parsed.favoriteModels }
           : Array.isArray((parsed as { visibleModels?: string[] }).visibleModels)

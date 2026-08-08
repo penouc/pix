@@ -131,7 +131,7 @@ function parseChangedFiles(names: string, numstat: string): ChangedFile[] {
   );
   const tokens = names.split('\0');
   const files: ChangedFile[] = [];
-  for (let index = 0; index < tokens.length; ) {
+  for (let index = 0; index < tokens.length;) {
     const statusToken = tokens[index++];
     if (!statusToken) continue;
     const status = statusToken[0];
@@ -195,7 +195,9 @@ function formatStatus(result: GitStatusResult): string {
   );
   for (const entry of result.entries) {
     const marker = entry.untracked ? '??' : entry.staged ? 'staged' : 'modified';
-    lines.push(`  ${marker.padEnd(9)} ${entry.path}${entry.previousPath ? ` (from ${entry.previousPath})` : ''}`);
+    lines.push(
+      `  ${marker.padEnd(9)} ${entry.path}${entry.previousPath ? ` (from ${entry.previousPath})` : ''}`,
+    );
   }
   return lines.join('\n');
 }
@@ -214,9 +216,7 @@ const diffSchema = Type.Object({
     Type.Boolean({ description: 'Show staged changes instead of the working tree' }),
   ),
   /** Optional pathspec filter. */
-  paths: Type.Optional(
-    Type.Array(Type.String({ description: 'Pathspecs to limit the diff to' })),
-  ),
+  paths: Type.Optional(Type.Array(Type.String({ description: 'Pathspecs to limit the diff to' }))),
 });
 type DiffParams = Static<typeof diffSchema>;
 
@@ -235,7 +235,7 @@ const commitSchema = Type.Object({
 });
 type CommitParams = Static<typeof commitSchema>;
 
-function resolveRepo(root: string, cwd?: string): string {
+function resolveRepo(root: string, _cwd?: string): string {
   // The tool's cwd is the project root (ExtensionContext.cwd). Pathspecs are
   // interpreted relative to it.
   return root;
@@ -303,7 +303,7 @@ export function createGitDiffTool() {
                 `  ${file.status.padEnd(9)} ${file.path}${file.previousPath ? ` (from ${file.previousPath})` : ''}${file.binary ? ' [binary]' : ''}`,
             ),
             '',
-            ...(result.truncated ? ['(patch truncated)' ] : []),
+            ...(result.truncated ? ['(patch truncated)'] : []),
             result.patch,
           ]
         : ['No changes.'];
@@ -339,9 +339,7 @@ export function createGitLogTool() {
       const raw = await execGit(root, ['log', `--max-count=${limit}`, '--oneline', '--decorate']);
       const commits = raw.split('\n').filter(Boolean);
       return {
-        content: [
-          { type: 'text', text: commits.length ? commits.join('\n') : '(no commits yet)' },
-        ],
+        content: [{ type: 'text', text: commits.length ? commits.join('\n') : '(no commits yet)' }],
         details: { commits },
       };
     },
@@ -379,7 +377,10 @@ export function createGitCommitTool() {
       const root = resolveRepo(ctx?.cwd ?? process.cwd());
       const message = params.message.trim();
       if (!message) {
-        return { content: [{ type: 'text', text: 'Commit message must not be empty.' }], details: { committed: false } };
+        return {
+          content: [{ type: 'text', text: 'Commit message must not be empty.' }],
+          details: { committed: false },
+        };
       }
       const files = params.files?.filter((f) => f.trim());
       if (files?.length) {

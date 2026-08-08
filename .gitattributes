@@ -1,0 +1,13 @@
+# Normalise line endings on every platform.
+#
+# Windows CI checks the repo out with core.autocrlf enabled by default, which
+# would convert text files to CRLF and break every test that compares file
+# contents against `\n` strings — plus hashline-edit's line hashing relies on
+# LF. `text=auto eol=lf` makes LF the canonical form everywhere; Git for
+# Windows users who want CRLF on their own worktrees can opt in via
+# core.autocrlf, which .gitattributes honours for *working-tree* files.
+* text=auto eol=lf
+
+# Windows-only scripts must stay CRLF for cmd.exe.
+*.bat text eol=crlf
+*.cmd text eol=crlf

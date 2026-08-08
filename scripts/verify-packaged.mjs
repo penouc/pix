@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * Post-pack verification script (plan §15 / M8-4).
+ * Post-pack verification script (plan §15 / M8-4, extended for Windows).
  *
- * Validates that the packaged macOS app bundle contains all required
- * components: asar structure, Pi SDK, SQLite native module, @pierre/diffs,
- * and unpacked native assets.
+ * Validates that the packaged app contains all required components: asar
+ * structure, Pi SDK, SQLite native module, @pierre/diffs, and unpacked native
+ * assets. Works for the macOS `.app` bundle (default) and the Windows
+ * `win-unpacked` directory (`--platform win32`).
  *
  * Usage:
- *   node scripts/verify-packaged.mjs [--app-path <path>]
+ *   node scripts/verify-packaged.mjs [--app-path <path>] [--platform win32]
  *
  * Uninstall guide: printed by this script rather than written here. Electron
  * derives the user-data directory from package.json `name`, not `productName`,
@@ -23,12 +24,19 @@ import { spawnSync } from 'node:child_process';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-// Support --app-path override for CI
+// --platform win32 (default: darwin)
+const platformIdx = process.argv.indexOf('--platform');
+const platform = platformIdx !== -1 ? process.argv[platformIdx + 1] : 'darwin';
+const isWin = platform === 'win32';
+
+// --app-path override for CI
 const argIdx = process.argv.indexOf('--app-path');
 const appRoot =
   argIdx !== -1
     ? process.argv[argIdx + 1]
-    : path.join(root, 'apps/desktop/release/mac-arm64/PiX.app');
+    : isWin
+      ? path.join(root, 'apps/desktop/release/win-unpacked')
+      : path.join(root, 'apps/desktop/release/mac-arm64/PiX.app');
 
 let failures = 0;
 
@@ -46,48 +54,54 @@ function section(title) {
 }
 
 // ── 1. App bundle structure
-section('App bundle structure');
+section('App structure');
 if (!existsSync(appRoot)) {
-  fail(`App bundle not found: ${appRoot}\n  Run: pnpm package:dir`);
+  fail(`App not found: ${appRoot}\n  Run: ${isWin ? 'pnpm package:win:dir' : 'pnpm package:dir'}`);
   process.exit(1);
 }
-pass('app bundle exists');
+pass('app directory exists');
 
-const binary = path.join(appRoot, 'Contents/MacOS/PiX');
-existsSync(binary) ? pass('main binary present') : fail('main binary missing');
+const binary = isWin ? path.join(appRoot, 'PiX.exe') : path.join(appRoot, 'Contents/MacOS/PiX');
+existsSync(binary)
+  ? pass(`main binary present (${isWin ? 'PiX.exe' : 'Contents/MacOS/PiX'})`)
+  : fail('main binary missing');
 
-// Electron ships Camera/Mic/Bluetooth usage strings by default. after-pack.mjs
-// must strip them so Privacy settings do not advertise capabilities we never use.
-section('Privacy Info.plist keys');
-{
-  const privacyKeys = [
-    'NSCameraUsageDescription',
-    'NSMicrophoneUsageDescription',
-    'NSBluetoothAlwaysUsageDescription',
-    'NSBluetoothPeripheralUsageDescription',
-    'NSPhotoLibraryUsageDescription',
-    'NSDocumentsFolderUsageDescription',
-    'NSDesktopFolderUsageDescription',
-    'NSDownloadsFolderUsageDescription',
-  ];
-  const infoPlist = path.join(appRoot, 'Contents/Info.plist');
-  const listed = spawnSync('plutil', ['-p', infoPlist], { encoding: 'utf8' });
-  if (listed.status !== 0) {
-    fail(`could not read Info.plist: ${listed.stderr || listed.stdout}`);
-  } else {
-    const body = listed.stdout;
-    let dirty = 0;
-    for (const key of privacyKeys) {
-      if (body.includes(key)) {
-        fail(`Info.plist still declares ${key} (run after-pack strip)`);
-        dirty += 1;
+if (!isWin) {
+  // Electron ships Camera/Mic/Bluetooth usage strings by default. after-pack.mjs
+  // must strip them so Privacy settings do not advertise capabilities we never use.
+  section('Privacy Info.plist keys');
+  {
+    const privacyKeys = [
+      'NSCameraUsageDescription',
+      'NSMicrophoneUsageDescription',
+      'NSBluetoothAlwaysUsageDescription',
+      'NSBluetoothPeripheralUsageDescription',
+      'NSPhotoLibraryUsageDescription',
+      'NSDocumentsFolderUsageDescription',
+      'NSDesktopFolderUsageDescription',
+      'NSDownloadsFolderUsageDescription',
+    ];
+    const infoPlist = path.join(appRoot, 'Contents/Info.plist');
+    const listed = spawnSync('plutil', ['-p', infoPlist], { encoding: 'utf8' });
+    if (listed.status !== 0) {
+      fail(`could not read Info.plist: ${listed.stderr || listed.stdout}`);
+    } else {
+      const body = listed.stdout;
+      let dirty = 0;
+      for (const key of privacyKeys) {
+        if (body.includes(key)) {
+          fail(`Info.plist still declares ${key} (run after-pack strip)`);
+          dirty += 1;
+        }
       }
+      if (dirty === 0) pass('no unused Camera/Mic/Bluetooth/folder privacy keys');
     }
-    if (dirty === 0) pass('no unused Camera/Mic/Bluetooth/folder privacy keys');
   }
 }
 
-const asarPath = path.join(appRoot, 'Contents/Resources/app.asar');
+const asarPath = isWin
+  ? path.join(appRoot, 'resources/app.asar')
+  : path.join(appRoot, 'Contents/Resources/app.asar');
 if (!existsSync(asarPath)) {
   fail('app.asar missing');
   process.exit(1);
@@ -127,7 +141,9 @@ const required = [
   '/package.json',
 ];
 for (const req of required) {
-  asarFiles.some((f) => f === req || f.endsWith(req)) ? pass(`asar: ${req}`) : fail(`asar missing: ${req}`);
+  asarFiles.some((f) => f === req || f.endsWith(req))
+    ? pass(`asar: ${req}`)
+    : fail(`asar missing: ${req}`);
 }
 
 const hasPiInAsar = asarFiles.some((f) => f.includes('@earendil-works/pi-coding-agent'));
@@ -140,7 +156,9 @@ hasPierre ? pass('asar: @pierre/diffs present') : fail('asar: @pierre/diffs miss
 
 // ── 3. Unpacked native modules
 section('Unpacked assets');
-const unpacked = path.join(appRoot, 'Contents/Resources/app.asar.unpacked/node_modules');
+const unpacked = isWin
+  ? path.join(appRoot, 'resources/app.asar.unpacked/node_modules')
+  : path.join(appRoot, 'Contents/Resources/app.asar.unpacked/node_modules');
 if (existsSync(unpacked)) {
   pass('app.asar.unpacked/node_modules exists');
   const piDir = path.join(unpacked, '@earendil-works');
@@ -151,7 +169,9 @@ if (existsSync(unpacked)) {
     console.warn('  ⚠  @earendil-works not in unpacked (Pi SDK may be entirely in asar)');
   }
 } else {
-  console.warn('  ⚠  no app.asar.unpacked/node_modules (acceptable if no native deps were unpacked)');
+  console.warn(
+    '  ⚠  no app.asar.unpacked/node_modules (acceptable if no native deps were unpacked)',
+  );
 }
 
 // Check for *.node native binaries (e.g. SQLite)
@@ -180,7 +200,7 @@ if (nodeFiles.length > 0) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       // May fail if wrong arch — report as warning not failure
-      if (/incompatible|wrong architecture|mach-o/i.test(msg)) {
+      if (/incompatible|wrong architecture|mach-o|not a valid Win32/i.test(msg)) {
         console.warn(`  ⚠  arch mismatch (expected on cross-compile): ${rel}`);
       } else {
         fail(`  not loadable: ${rel} — ${msg}`);
@@ -191,21 +211,46 @@ if (nodeFiles.length > 0) {
   console.warn('  ⚠  no .node native modules found in unpacked dir');
 }
 
-// ── 4. DMG presence (optional — only if package:dmg was run)
-section('DMG artifact (optional)');
-const dmgDir = path.join(root, 'apps/desktop/release');
-if (existsSync(dmgDir)) {
-  const dmgs = readdirSync(dmgDir).filter((f) => f.endsWith('.dmg'));
-  if (dmgs.length > 0) {
-    pass(`DMG files: ${dmgs.join(', ')}`);
+// ── 4. Installer artifacts (Windows: NSIS + update feed; macOS: DMG optional)
+if (isWin) {
+  section('Windows artifacts');
+  const releaseDir = path.join(root, 'apps/desktop/release');
+  const installers = existsSync(releaseDir)
+    ? readdirSync(releaseDir).filter((f) => f.endsWith('-setup.exe'))
+    : [];
+  if (installers.length > 0) {
+    pass(`NSIS installer: ${installers.join(', ')}`);
   } else {
-    console.log('  –  no .dmg found (run pnpm package:dmg to produce one)');
+    fail('no NSIS -setup.exe found (run pnpm package:win)');
   }
+  const zips = existsSync(releaseDir)
+    ? readdirSync(releaseDir).filter((f) => f.endsWith('.zip'))
+    : [];
+  zips.length > 0 ? pass(`portable zip: ${zips.join(', ')}`) : fail('no Windows .zip found');
+  const latestYml = path.join(releaseDir, 'latest.yml');
+  existsSync(latestYml)
+    ? pass('latest.yml present (electron-updater feed)')
+    : fail('latest.yml missing');
+  const blockmaps = existsSync(releaseDir)
+    ? readdirSync(releaseDir).filter((f) => f.endsWith('.exe.blockmap'))
+    : [];
+  blockmaps.length > 0 ? pass(`blockmap: ${blockmaps.join(', ')}`) : fail('no .exe.blockmap found');
 } else {
-  console.log('  –  release/ dir not found; no DMG check');
+  section('DMG artifact (optional)');
+  const dmgDir = path.join(root, 'apps/desktop/release');
+  if (existsSync(dmgDir)) {
+    const dmgs = readdirSync(dmgDir).filter((f) => f.endsWith('.dmg'));
+    if (dmgs.length > 0) {
+      pass(`DMG files: ${dmgs.join(', ')}`);
+    } else {
+      console.log('  –  no .dmg found (run pnpm package:dmg to produce one)');
+    }
+  } else {
+    console.log('  –  release/ dir not found; no DMG check');
+  }
 }
 
-// ── Uninstall paths, derived from the bundle so they cannot be wrong
+// ── Uninstall paths, derived from the package.json name so they cannot be wrong
 section('Uninstall paths (derived)');
 {
   // Electron keys userData off `name`; `productName` only names the bundle.
@@ -221,9 +266,15 @@ section('Uninstall paths (derived)');
   if (!appName) {
     fail('could not read app name from the packaged package.json');
   } else {
-    pass(`user data:  ~/Library/Application Support/${appName}`);
-    pass(`logs:       ~/Library/Logs/${appName}`);
-    console.log('  –  no LaunchAgents and no kernel extensions are installed');
+    if (isWin) {
+      pass(`user data:  %APPDATA%\\${appName}`);
+      pass(`logs:       %APPDATA%\\${appName}\\logs`);
+      console.log('  –  NSIS per-user install; uninstall keeps user data by design');
+    } else {
+      pass(`user data:  ~/Library/Application Support/${appName}`);
+      pass(`logs:       ~/Library/Logs/${appName}`);
+      console.log('  –  no LaunchAgents and no kernel extensions are installed');
+    }
   }
 }
 
