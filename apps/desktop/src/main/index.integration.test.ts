@@ -16,6 +16,10 @@ const electron = vi.hoisted(() => {
     setUserData: (value: string) => {
       userData = value;
     },
+    /** Fire a registered `app.on` listener (tests use this to close SQLite). */
+    emitApp: (event: string) => {
+      callbacks.get(event)?.();
+    },
     app: {
       whenReady: () => Promise.resolve(),
       getPath: () => userData,
@@ -87,20 +91,27 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Windows: the app's stores hold the sqlite handle open until before-quit,
-  // so a plain rm can hit EBUSY; retry briefly while the handle drains.
+  // Close the Main-process SQLite handle before deleting userData. On Windows
+  // an open DatabaseSync keeps pi-desktop.sqlite locked (EBUSY on unlink).
+  electron.emitApp('before-quit');
   await removeWithRetry(userData);
 });
 
-/** Retry removal: Windows keeps open file handles for a tick after close(). */
-async function removeWithRetry(target: string, attempts = 8): Promise<void> {
+/** Retry removal: Windows can hold file handles for a tick after close(). */
+async function removeWithRetry(target: string, attempts = 16): Promise<void> {
   for (let attempt = 0; ; attempt++) {
     try {
       await rm(target, { recursive: true, force: true });
       return;
     } catch (error) {
-      if (attempt >= attempts - 1) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 125));
+      const code =
+        error && typeof error === 'object' && 'code' in error
+          ? String((error as { code?: unknown }).code)
+          : '';
+      if (attempt >= attempts - 1 || (code !== 'EBUSY' && code !== 'EPERM')) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
     }
   }
 }
