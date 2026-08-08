@@ -7,8 +7,8 @@
   "main": "dist-electron/main/index.js",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit && vite build",
+    "dev": "pnpm --filter @pi-desktop/database build && vite",
+    "build": "pnpm --filter @pi-desktop/database build && tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit && vite build",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "vitest run --config ../../vitest.config.ts --dir src",
     "preview": "vite preview",
