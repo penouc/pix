@@ -87,8 +87,23 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await rm(userData, { recursive: true, force: true });
+  // Windows: the app's stores hold the sqlite handle open until before-quit,
+  // so a plain rm can hit EBUSY; retry briefly while the handle drains.
+  await removeWithRetry(userData);
 });
+
+/** Retry removal: Windows keeps open file handles for a tick after close(). */
+async function removeWithRetry(target: string, attempts = 8): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await rm(target, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (attempt >= attempts - 1) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 125));
+    }
+  }
+}
 
 describe('Main IPC with real Pi runtime (offline)', () => {
   it('creates a Pi-backed session through typed IPC without a provider request', async () => {

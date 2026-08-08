@@ -302,4 +302,13 @@ ALTER TABLE run_metrics ADD COLUMN cache_read_tokens INTEGER;
 ALTER TABLE run_metrics ADD COLUMN cache_write_tokens INTEGER;
 `,
   },
+  {
+    // Older imports omitted cacheRead and skipped turns covered by live runs.
+    // Clearing cursors forces a full JSONL rescan on the next Usage sync.
+    version: 16,
+    name: 'session_log_resync_cache_tokens',
+    sql: `
+DELETE FROM session_log_sync;
+`,
+  },
 ];

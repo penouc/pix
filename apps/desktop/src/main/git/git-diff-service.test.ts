@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -9,11 +10,27 @@ import { getWorkingTreeDiff } from './git-diff-service.js';
 
 const tempDirs: string[] = [];
 
-afterEach(() => {
+afterEach(async () => {
   for (const tempDir of tempDirs.splice(0)) {
-    rmSync(tempDir, { recursive: true, force: true });
+    await removeWithRetry(tempDir);
   }
 });
+
+/**
+ * Windows: a git child killed for exceeding maxBuffer can still hold the repo
+ * directory for a tick after the promise settles, so plain rmSync hits EBUSY.
+ */
+async function removeWithRetry(target: string, attempts = 8): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await rm(target, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (attempt >= attempts - 1) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 125));
+    }
+  }
+}
 
 function createRepository(): string {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'pi-desktop-git-diff-'));

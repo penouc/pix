@@ -26,18 +26,21 @@ describe('canonicalizePath', () => {
   });
 
   it('resolves an existing path through symlinks', () => {
-    expect(canonicalizePath(root, 'src/a.ts')).toBe(realpathSync(path.join(root, 'src', 'a.ts')));
+    expect(canonicalizePath(root, 'src/a.ts')).toBe(
+      realpathSync.native(path.join(root, 'src', 'a.ts')),
+    );
   });
 
   it('resolves a path that does not exist yet via its deepest existing ancestor', () => {
     // A write target: the file is absent, but the workspace it lands in is real.
     const resolved = canonicalizePath(root, 'src/new-file.ts');
 
-    expect(resolved).toBe(path.join(realpathSync(root), 'src', 'new-file.ts'));
+    expect(resolved).toBe(path.join(realpathSync.native(root), 'src', 'new-file.ts'));
     // Regression: with the unresolved path, this read as an escape attempt and a
     // legitimate new file under a symlinked project root was refused.
     expect(isPathInsideWorkspace(root, resolved)).toBe(true);
-    expect(toWorkspaceRelative(root, resolved)).toBe('src/new-file.ts');
+    // Platform separators: `src/new-file.ts` on POSIX, `src\new-file.ts` on Windows.
+    expect(toWorkspaceRelative(root, resolved)).toBe(path.join('src', 'new-file.ts'));
   });
 
   it('follows a symlinked ancestor of a path that does not exist', async () => {
@@ -45,7 +48,7 @@ describe('canonicalizePath', () => {
 
     const resolved = canonicalizePath(root, 'linked/new-file.ts');
 
-    expect(resolved).toBe(path.join(realpathSync(outside), 'new-file.ts'));
+    expect(resolved).toBe(path.join(realpathSync.native(outside), 'new-file.ts'));
     // The escape is now visible; before, the unresolved path looked contained.
     expect(isPathInsideWorkspace(root, resolved)).toBe(false);
   });

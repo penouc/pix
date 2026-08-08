@@ -19,9 +19,16 @@ interface SessionLogSyncState {
 /**
  * Import billable assistant turns from Pi desktop session JSONL files into
  * `run_metrics`, similar to CC Switch's session-log scan (v3.13+).
+ *
+ * Session-log rows are the source of truth for per-turn tokens (including
+ * prompt-cache reads). Live runs that overlap those turns keep their
+ * tool/file counters, but their token/cost fields are cleared so Usage
+ * totals do not double-count.
  */
 export class SessionLogSyncService {
   private syncPromise: Promise<{ imported: number }> | null = null;
+  /** Sticky across coalesced callers so a forced backfill is not dropped. */
+  private pendingForce = false;
 
   constructor(
     private readonly sessionsDir: string,
@@ -29,7 +36,8 @@ export class SessionLogSyncService {
   ) {}
 
   /** Coalesce concurrent sync requests into one pass. */
-  sync(): Promise<{ imported: number }> {
+  sync(options?: { force?: boolean }): Promise<{ imported: number }> {
+    if (options?.force) this.pendingForce = true;
     this.syncPromise ??= this.runSync().finally(() => {
       this.syncPromise = null;
     });
@@ -37,6 +45,8 @@ export class SessionLogSyncService {
   }
 
   private async runSync(): Promise<{ imported: number }> {
+    const force = this.pendingForce;
+    this.pendingForce = false;
     let imported = 0;
     try {
       const files = await readdir(this.sessionsDir);
@@ -44,7 +54,7 @@ export class SessionLogSyncService {
 
       for (const name of files) {
         if (!name.endsWith('.jsonl')) continue;
-        imported += await this.syncFile(db, path.join(this.sessionsDir, name));
+        imported += await this.syncFile(db, path.join(this.sessionsDir, name), force);
       }
     } catch (error) {
       const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
@@ -54,9 +64,13 @@ export class SessionLogSyncService {
     return { imported };
   }
 
-  private async syncFile(db: DesktopDatabase, filePath: string): Promise<number> {
+  private async syncFile(
+    db: DesktopDatabase,
+    filePath: string,
+    force: boolean,
+  ): Promise<number> {
     const fileStat = await stat(filePath);
-    const state = getSyncState(db, filePath);
+    const state = force ? null : getSyncState(db, filePath);
     const content = await readFile(filePath, 'utf8');
     const lines = content.split('\n');
     const nonEmptyLineCount = lines.filter((line) => line.trim()).length;
@@ -74,6 +88,9 @@ export class SessionLogSyncService {
       sessionMetaFromFilename(path.basename(filePath));
     if (!meta) return 0;
 
+    // `lastLineCount` is stored as `lines.length` (including a trailing empty
+    // split). Re-read from 0 when forcing a backfill so older rows can pick up
+    // cache tokens that earlier imports dropped.
     const startLine = state?.lastLineCount ?? 0;
     const newLines = lines.slice(startLine);
     const entries = parseSessionLogLines(newLines, meta, (sessionId, cwd) =>
@@ -82,9 +99,11 @@ export class SessionLogSyncService {
 
     let imported = 0;
     for (const entry of entries) {
-      if (shouldSkipEntry(db, entry)) continue;
-      recordSessionLogEntry(db, entry);
-      imported++;
+      const changed = recordSessionLogEntry(db, entry);
+      // Always drop overlapping live token totals once per-turn rows exist,
+      // even when the session-log row itself did not need an update.
+      clearOverlappingLiveRunTokens(db, entry);
+      if (changed) imported++;
     }
 
     upsertSyncState(db, {
@@ -113,31 +132,83 @@ function resolveProjectId(db: DesktopDatabase, sessionId: string, cwd: string): 
   return projectIdForPath(cwd);
 }
 
-function shouldSkipEntry(db: DesktopDatabase, entry: SessionLogUsageEntry): boolean {
-  const existing = db.db
-    .prepare(`SELECT 1 FROM run_metrics WHERE run_id = ?`)
-    .get(entry.runId);
-  if (existing) return true;
-
-  // A live run already captured usage for this assistant turn.
-  const covered = db.db
-    .prepare(
-      `SELECT 1 FROM run_metrics
-        WHERE session_id = ?
-          AND run_id NOT LIKE 'session-log:%'
-          AND input_tokens IS NOT NULL
-          AND started_at <= ?
-          AND (completed_at IS NULL OR completed_at >= ?)
-        LIMIT 1`,
-    )
-    .get(entry.sessionId, entry.startedAt, entry.startedAt);
-  return Boolean(covered);
+function tokenTotal(entry: {
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  cacheReadTokens?: number | null;
+  cacheWriteTokens?: number | null;
+}): number {
+  return (
+    (entry.inputTokens ?? 0) +
+    (entry.outputTokens ?? 0) +
+    (entry.cacheReadTokens ?? 0) +
+    (entry.cacheWriteTokens ?? 0)
+  );
 }
 
-function recordSessionLogEntry(db: DesktopDatabase, entry: SessionLogUsageEntry): void {
+/**
+ * Upsert a session-log turn. Returns true when the row was inserted or its
+ * token/cost fields were refreshed with richer data.
+ */
+export function recordSessionLogEntry(
+  db: DesktopDatabase,
+  entry: SessionLogUsageEntry,
+): boolean {
+  const existing = db.db
+    .prepare(
+      `SELECT input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd
+         FROM run_metrics WHERE run_id = ?`,
+    )
+    .get(entry.runId) as
+    | {
+        input_tokens: number | null;
+        output_tokens: number | null;
+        cache_read_tokens: number | null;
+        cache_write_tokens: number | null;
+        cost_usd: number | null;
+      }
+    | undefined;
+
+  if (existing) {
+    const existingTotal = tokenTotal({
+      inputTokens: existing.input_tokens,
+      outputTokens: existing.output_tokens,
+      cacheReadTokens: existing.cache_read_tokens,
+      cacheWriteTokens: existing.cache_write_tokens,
+    });
+    const nextTotal = tokenTotal(entry);
+    const costRicher = entry.costUsd > (existing.cost_usd ?? 0);
+    if (nextTotal <= existingTotal && !costRicher) {
+      return false;
+    }
+    db.db
+      .prepare(
+        `UPDATE run_metrics SET
+           provider_id = ?,
+           model_id = ?,
+           input_tokens = ?,
+           output_tokens = ?,
+           cache_read_tokens = ?,
+           cache_write_tokens = ?,
+           cost_usd = ?
+         WHERE run_id = ?`,
+      )
+      .run(
+        entry.providerId,
+        entry.modelId,
+        entry.inputTokens,
+        entry.outputTokens,
+        entry.cacheReadTokens,
+        entry.cacheWriteTokens,
+        entry.costUsd,
+        entry.runId,
+      );
+    return true;
+  }
+
   db.db
     .prepare(
-      `INSERT OR IGNORE INTO run_metrics (
+      `INSERT INTO run_metrics (
          run_id, session_id, project_id, provider_id, model_id,
          started_at, completed_at, tool_call_count, file_change_count,
          input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
@@ -158,6 +229,33 @@ function recordSessionLogEntry(db: DesktopDatabase, entry: SessionLogUsageEntry)
       entry.cacheWriteTokens,
       entry.costUsd,
     );
+  return true;
+}
+
+/**
+ * Live runs aggregate tokens across a tool loop, but historically missed
+ * cacheRead. Once per-turn session-log rows exist for that window, drop the
+ * live token/cost fields so Usage sums the accurate per-turn rows only.
+ */
+export function clearOverlappingLiveRunTokens(
+  db: DesktopDatabase,
+  entry: SessionLogUsageEntry,
+): void {
+  db.db
+    .prepare(
+      `UPDATE run_metrics
+          SET input_tokens = NULL,
+              output_tokens = NULL,
+              cache_read_tokens = NULL,
+              cache_write_tokens = NULL,
+              cost_usd = NULL
+        WHERE session_id = ?
+          AND run_id NOT LIKE 'session-log:%'
+          AND input_tokens IS NOT NULL
+          AND started_at <= ?
+          AND (completed_at IS NULL OR completed_at >= ?)`,
+    )
+    .run(entry.sessionId, entry.startedAt, entry.startedAt);
 }
 
 function getSyncState(db: DesktopDatabase, filePath: string): SessionLogSyncState | null {
