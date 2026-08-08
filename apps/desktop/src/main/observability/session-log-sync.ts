@@ -38,15 +38,22 @@ export class SessionLogSyncService {
   /** Coalesce concurrent sync requests into one pass. */
   sync(options?: { force?: boolean }): Promise<{ imported: number }> {
     if (options?.force) this.pendingForce = true;
-    this.syncPromise ??= this.runSync().finally(() => {
-      this.syncPromise = null;
-    });
+    this.syncPromise ??= (async () => {
+      // Let same-tick coalesced `sync({ force: true })` callers set the flag
+      // before we snapshot it.
+      await Promise.resolve();
+      const force = this.pendingForce;
+      this.pendingForce = false;
+      try {
+        return await this.runSync(force);
+      } finally {
+        this.syncPromise = null;
+      }
+    })();
     return this.syncPromise;
   }
 
-  private async runSync(): Promise<{ imported: number }> {
-    const force = this.pendingForce;
-    this.pendingForce = false;
+  private async runSync(force: boolean): Promise<{ imported: number }> {
     let imported = 0;
     try {
       const files = await readdir(this.sessionsDir);
