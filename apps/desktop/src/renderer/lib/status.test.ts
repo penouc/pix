@@ -1,20 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatTokenMillions, NOT_REPORTED } from './status';
+import { formatInteger, NOT_REPORTED } from './status';
 
-describe('formatTokenMillions', () => {
+describe('formatInteger', () => {
   it.each([
-    [0, '0M'],
-    [1_000, '0.001M'],
-    [125_000, '0.125M'],
-    [1_000_000, '1M'],
-    [1_250_000, '1.25M'],
-    [12_345_678, '12.3M'],
-  ])('formats %i tokens as %s', (tokens, expected) => {
-    expect(formatTokenMillions(tokens)).toBe(expected);
+    [0, '0'],
+    [1_000, '1,000'],
+    [125_000, '125,000'],
+    [1_000_000, '1,000,000'],
+    [12_345_678, '12,345,678'],
+    [296_750_859, '296,750,859'],
+  ])('formats %i as %s', (value, expected) => {
+    expect(formatInteger(value)).toBe(expected);
   });
 
   it('keeps the missing-value label', () => {
-    expect(formatTokenMillions(undefined)).toBe(NOT_REPORTED);
+    expect(formatInteger(undefined)).toBe(NOT_REPORTED);
   });
 });

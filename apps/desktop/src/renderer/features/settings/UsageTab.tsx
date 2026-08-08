@@ -5,7 +5,7 @@ import type { UsageByModel, UsageProject, UsageSummary } from '@pi-desktop/proto
 
 import { Segmented } from '@/components/ui/segmented';
 import { invoke } from '@/lib/ipc';
-import { formatCost, formatDurationMs, formatTokenMillions, NOT_REPORTED } from '@/lib/status';
+import { formatCost, formatDurationMs, formatInteger, NOT_REPORTED } from '@/lib/status';
 import { cn } from '@/lib/utils';
 
 type Range = '30' | '90' | '365';
@@ -152,7 +152,7 @@ export function UsageTab() {
           label="Tokens"
           value={
             totals
-              ? formatTokenMillions(
+              ? formatInteger(
                   totals.inputTokens +
                     totals.outputTokens +
                     totals.cacheReadTokens +
@@ -163,10 +163,10 @@ export function UsageTab() {
         >
           {totals
             ? [
-                `${formatTokenMillions(totals.inputTokens)} in`,
-                `${formatTokenMillions(totals.outputTokens)} out`,
+                `${formatInteger(totals.inputTokens)} in`,
+                `${formatInteger(totals.outputTokens)} out`,
                 totals.cacheReadTokens + totals.cacheWriteTokens > 0
-                  ? `${formatTokenMillions(totals.cacheReadTokens + totals.cacheWriteTokens)} cache`
+                  ? `${formatInteger(totals.cacheReadTokens + totals.cacheWriteTokens)} cache`
                   : null,
               ]
                 .filter(Boolean)
@@ -322,7 +322,7 @@ function ModelRow({ model, peak }: { model: UsageByModel; peak: number }) {
         <div className="text-[11px] text-muted">{model.providerId}</div>
       </td>
       <td className="px-3.5 py-2.5 text-right font-mono">{model.runs.toLocaleString()}</td>
-      <td className="px-3.5 py-2.5 text-right font-mono">{formatTokenMillions(tokens)}</td>
+      <td className="px-3.5 py-2.5 text-right font-mono">{formatInteger(tokens)}</td>
       <td className="px-3.5 py-2.5">
         <div className="flex items-center gap-2">
           {/* One hue, so this stays a magnitude meter rather than an identity colour. */}
