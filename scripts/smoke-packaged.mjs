@@ -61,13 +61,13 @@ try {
     if (!existsSync(asarBin)) fail('cannot load @electron/asar');
     const listed = spawnSync(asarBin, ['list', asarPath], { encoding: 'utf8' });
     if (listed.status !== 0) fail(`asar list failed: ${listed.stderr}`);
-    const files = listed.stdout.split('\n');
+    const files = listed.stdout.split('\n').map((f) => f.replace(/\\/g, '/'));
     checkList(files);
     process.exit(0);
   }
 }
 
-const files = asar.listPackage(asarPath).map(String);
+const files = asar.listPackage(asarPath).map((f) => String(f).replace(/\\/g, '/'));
 checkList(files);
 
 // Pi unpack path

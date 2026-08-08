@@ -122,12 +122,14 @@ try {
     asar = require('@electron/asar');
   }
   asarModule = asar;
-  asarFiles = asar.listPackage(asarPath).map(String);
+  // Windows: @electron/asar lists entries with backslashes; normalise so the
+  // forward-slash assertions below hold on every platform.
+  asarFiles = asar.listPackage(asarPath).map((f) => String(f).replace(/\\/g, '/'));
 } catch {
   const asarBin = path.join(root, 'node_modules/.pnpm/node_modules/.bin/asar');
   if (existsSync(asarBin)) {
     const listed = spawnSync(asarBin, ['list', asarPath], { encoding: 'utf8' });
-    asarFiles = listed.stdout.split('\n').filter(Boolean);
+    asarFiles = listed.stdout.split('\n').filter(Boolean).map((f) => f.replace(/\\/g, '/'));
   } else {
     console.warn('  ⚠  Cannot list asar contents — @electron/asar not found');
     asarFiles = [];
