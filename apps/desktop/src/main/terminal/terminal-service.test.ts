@@ -32,9 +32,12 @@ describe('TerminalService.changeDirectory', () => {
     });
 
     expect(result.outcome).toBe('changed');
-    expect(result.relative).toBe('packages/security');
-    // Canonical, so symlinks in the root are already resolved.
-    expect(result.cwd).toBe(path.join(realpathSync(root), 'packages', 'security'));
+    // Platform separators: `packages/security` on POSIX, `packages\security` on Windows.
+    expect(result.relative).toBe(path.join('packages', 'security'));
+    // Canonical, so symlinks in the root are already resolved. The service
+    // canonicalises with realpathSync.native, which on Windows expands 8.3
+    // short names (RUNNER~1 → runneradmin) — mirror it exactly.
+    expect(result.cwd).toBe(path.join(realpathSync.native(root), 'packages', 'security'));
   });
 
   it('resolves the next target against the current directory', async () => {
@@ -44,7 +47,7 @@ describe('TerminalService.changeDirectory', () => {
       target: 'security',
     });
 
-    expect(result.relative).toBe('packages/security');
+    expect(result.relative).toBe(path.join('packages', 'security'));
   });
 
   it('treats a bare cd and ~ as the project root', async () => {
@@ -83,8 +86,9 @@ describe('TerminalService.changeDirectory', () => {
       const result = await service.changeDirectory({ workspaceRoot: root, cwd, target });
       expect(result.outcome, target).toBe('refused');
       // The tab must not move on a refusal, or the next command runs somewhere
-      // the user did not choose.
-      expect(result.cwd, target).toBe(path.join(realpathSync(root), 'packages'));
+      // the user did not choose. Same realpathSync.native canonicalisation as
+      // the service (long form on Windows, e.g. runneradmin not RUNNER~1).
+      expect(result.cwd, target).toBe(path.join(realpathSync.native(root), 'packages'));
       expect(result.reason, target).toMatch(/outside the project root/);
     }
   });
@@ -112,7 +116,7 @@ describe('TerminalService.changeDirectory', () => {
       workspaceRoot: root,
       target: '"packages/security"',
     });
-    expect(result.relative).toBe('packages/security');
+    expect(result.relative).toBe(path.join('packages', 'security'));
   });
 });
 
