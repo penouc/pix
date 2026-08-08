@@ -6,7 +6,7 @@
  * ~/.local/share/opencode/auth.json — never logs secrets).
  *
  * Usage:
- *   pnpm -r --filter './packages/*' build
+ *   pnpm -r --filter "./packages/*" build
  *   pnpm eval:fixture
  *
  * Optional:
@@ -96,7 +96,7 @@ async function resetWorkdir(work) {
 
 async function main() {
   if (!existsSync(agentPi)) {
-    fail('packages/agent-pi/dist missing — run: pnpm -r --filter \'./packages/*\' build');
+    fail('packages/agent-pi/dist missing — run: pnpm -r --filter "./packages/*" build');
   }
 
   const { createAgentRuntime, describeAuthSources, loadOpenCodeAuthFromDisk } =
