@@ -33,6 +33,11 @@ import {
 
 import { describeProtectedPaths } from '@pi-desktop/security';
 
+import {
+  BrowserPreviewError,
+  BrowserPreviewService,
+} from './browser/browser-preview-service.js';
+
 // Dock / taskbar should say PiX, but userData must stay on the historical folder.
 // `productName` / `app.setName` alone would move Application Support to "PiX" and
 // orphan projects, sessions, and settings under `@pi-desktop/desktop`.
@@ -71,6 +76,7 @@ import { runPreflight } from './platform/environment.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let mainWindow: BrowserWindow | null = null;
+const browserPreview = new BrowserPreviewService(() => mainWindow);
 let runtime: AgentRuntime | null = null;
 let desktopDb: DesktopDatabase | null = null;
 let desktopDbInit: Promise<DesktopDatabase> | null = null;
@@ -341,6 +347,7 @@ function createWindow(): void {
   }
 
   mainWindow.on('closed', () => {
+    browserPreview.detach();
     mainWindow = null;
   });
 }
@@ -353,6 +360,14 @@ export function isExternallyOpenable(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+function browserPreviewErrorResult(error: unknown): IpcResult<never> {
+  if (error instanceof BrowserPreviewError) {
+    return errResult(error.code, error.message);
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return errResult('BROWSER_ERROR', message || 'Browser preview failed.');
 }
 
 function persistTranscriptEntry(sessionId: string, entry: StoredMessage, id?: string): void {
@@ -1259,6 +1274,55 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         await shell.openExternal(cmd.params.url);
         return okResult({ ok: true });
       }
+      case 'browser.attach':
+        return okResult(browserPreview.attach());
+      case 'browser.detach': {
+        browserPreview.detach();
+        return okResult({ ok: true });
+      }
+      case 'browser.navigate': {
+        try {
+          return okResult(await browserPreview.navigate(cmd.params.url));
+        } catch (error) {
+          return browserPreviewErrorResult(error);
+        }
+      }
+      case 'browser.setBounds':
+        return okResult(browserPreview.setBounds(cmd.params));
+      case 'browser.setVisible':
+        return okResult(browserPreview.setVisible(cmd.params.visible));
+      case 'browser.reload': {
+        try {
+          return okResult(browserPreview.reload());
+        } catch (error) {
+          return browserPreviewErrorResult(error);
+        }
+      }
+      case 'browser.goBack': {
+        try {
+          return okResult(browserPreview.goBack());
+        } catch (error) {
+          return browserPreviewErrorResult(error);
+        }
+      }
+      case 'browser.goForward': {
+        try {
+          return okResult(browserPreview.goForward());
+        } catch (error) {
+          return browserPreviewErrorResult(error);
+        }
+      }
+      case 'browser.getState':
+        return okResult(browserPreview.getState());
+      case 'browser.startPicker': {
+        try {
+          return okResult(await browserPreview.startPicker());
+        } catch (error) {
+          return browserPreviewErrorResult(error);
+        }
+      }
+      case 'browser.cancelPicker':
+        return okResult(await browserPreview.cancelPicker());
       case 'index.rebuild': {
         const project = projects.get(cmd.params.projectId);
         if (!project) return errResult('PROJECT_NOT_FOUND', 'Project not found');
@@ -1591,10 +1655,13 @@ function exportDiagnostics(): { logPath: string; recentMetrics: unknown[] } {
 
 /**
  * Chromium permission surface. PiX is a coding workbench — it never needs the
- * camera, mic, geolocation, or screen capture. Denying here means a framed page
- * or a future renderer bug cannot pop an OS permission dialog on a cold start.
- * Clipboard + notifications stay allowed (paste into the composer; run finished
- * alerts). Fullscreen is harmless chrome.
+ * camera, mic, geolocation, or screen capture. Denying here means a preview
+ * page or a future renderer bug cannot pop an OS permission dialog on a cold
+ * start. Clipboard + notifications stay allowed (paste into the composer; run
+ * finished alerts). Fullscreen is harmless chrome.
+ *
+ * Page screenshots for browser Select use Main `webContents.capturePage()`, not
+ * the session screen-capture permission.
  */
 function installSessionPermissionGates(): void {
   const allowed = new Set([

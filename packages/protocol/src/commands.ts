@@ -277,6 +277,53 @@ export const OpenExternalInputSchema = z.object({
 });
 export type OpenExternalInput = z.infer<typeof OpenExternalInputSchema>;
 
+/** DIP rectangle for the Dock content hole that hosts the preview WebContentsView. */
+export const BrowserBoundsSchema = z.object({
+  x: z.number().finite(),
+  y: z.number().finite(),
+  width: z.number().finite().nonnegative(),
+  height: z.number().finite().nonnegative(),
+});
+export type BrowserBounds = z.infer<typeof BrowserBoundsSchema>;
+
+export const BrowserNavigateInputSchema = z.object({
+  url: z.string().min(1).max(4096),
+});
+export type BrowserNavigateInput = z.infer<typeof BrowserNavigateInputSchema>;
+
+export const BrowserSetBoundsInputSchema = BrowserBoundsSchema;
+export type BrowserSetBoundsInput = z.infer<typeof BrowserSetBoundsInputSchema>;
+
+export const BrowserSetVisibleInputSchema = z.object({
+  visible: z.boolean(),
+});
+export type BrowserSetVisibleInput = z.infer<typeof BrowserSetVisibleInputSchema>;
+
+/**
+ * Structured page selection from the preview picker (ADR-0005).
+ * Screenshot is optional — loopback picks may include a cropped PNG.
+ */
+export const BrowserSelectionSchema = z.object({
+  url: z.string().min(1).max(4096),
+  title: z.string().max(512).optional(),
+  selector: z.string().min(1).max(2000),
+  tagName: z.string().min(1).max(64),
+  text: z.string().max(20_000),
+  htmlSnippet: z.string().max(20_000),
+  rect: BrowserBoundsSchema.optional(),
+  screenshot: InputImageSchema.optional(),
+});
+export type BrowserSelection = z.infer<typeof BrowserSelectionSchema>;
+
+export const BrowserStateSchema = z.object({
+  url: z.string(),
+  title: z.string(),
+  canGoBack: z.boolean(),
+  canGoForward: z.boolean(),
+  picking: z.boolean(),
+});
+export type BrowserState = z.infer<typeof BrowserStateSchema>;
+
 export const IndexRebuildInputSchema = z.object({
   projectId: z.string().min(1),
   /** Discard and re-read everything instead of an incremental pass. */
@@ -619,6 +666,20 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('index.status'), params: z.object({}).optional() }),
   z.object({ method: z.literal('index.tree'), params: IndexTreeInputSchema }),
   z.object({ method: z.literal('system.openExternal'), params: OpenExternalInputSchema }),
+  /** ADR-0005: create/show the Dock WebContentsView host (idempotent). */
+  z.object({ method: z.literal('browser.attach'), params: z.object({}).optional() }),
+  /** Hide and tear down the preview host. */
+  z.object({ method: z.literal('browser.detach'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('browser.navigate'), params: BrowserNavigateInputSchema }),
+  z.object({ method: z.literal('browser.setBounds'), params: BrowserSetBoundsInputSchema }),
+  z.object({ method: z.literal('browser.setVisible'), params: BrowserSetVisibleInputSchema }),
+  z.object({ method: z.literal('browser.reload'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('browser.goBack'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('browser.goForward'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('browser.getState'), params: z.object({}).optional() }),
+  /** One-shot element picker; resolves when the user clicks (loopback only). */
+  z.object({ method: z.literal('browser.startPicker'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('browser.cancelPicker'), params: z.object({}).optional() }),
   z.object({ method: z.literal('index.rebuild'), params: IndexRebuildInputSchema }),
   z.object({
     method: z.literal('index.forget'),

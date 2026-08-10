@@ -159,7 +159,7 @@
 |----------|--------|----------|----------|
 | web_search | 多后端搜索 | **已落地（#18）**：单 provider（DuckDuckGo HTML）；风险 `external-side-effect`；Plan 阻断 | 自建（已做，单 provider） |
 | github / github-as-fs | PR/issue 当路径 | shell + gh | 移植思路 |
-| browser（Puppeteer/CDP） | Agent 开车页 | 仅 preview iframe | 自建（高风险） |
+| browser（Puppeteer/CDP） | Agent 开车页 | **P1 预览宿主已落地**：Dock `WebContentsView` + localhost Select→Composer；Agent 工具仍无（C8 / P2） | 自建（高风险；P2） |
 | computer（OS 操控） | 截屏/键鼠/AX | 无 | 跳过 |
 | generate_image / tts | 多媒体 | 非核心 | 低优先 |
 | 图片理解 / 粘贴截图 | UI bug 复现 | Composer 可贴图（roadmap 余量） | 接线 Pi / 小自建 |

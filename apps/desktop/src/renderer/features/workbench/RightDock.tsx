@@ -14,6 +14,7 @@ import {
   DOCK_MAX_WIDTH,
   type DockTab,
 } from '@/stores/ui-prefs-store';
+import type { InputImage } from '@pi-desktop/protocol';
 
 const MIN_THREAD_WIDTH = 440;
 const RESIZER_WIDTH = 8;
@@ -39,9 +40,11 @@ const TABS: Array<{ id: DockTab; label: string; icon: ReactNode }> = [
 export function RightDock({
   onOpenFullDiff,
   onInsertPath,
+  onInsertComposer,
 }: {
   onOpenFullDiff: (path?: string) => void;
   onInsertPath: (path: string) => void;
+  onInsertComposer: (insert: { text?: string; images?: InputImage[]; token: number }) => void;
 }) {
   const tab = useUiPrefsStore((s) => s.dockTab);
   const setPref = useUiPrefsStore((s) => s.set);
@@ -113,7 +116,7 @@ export function RightDock({
           {tab === 'files' ? <FileTree onInsertPath={onInsertPath} /> : null}
           {tab === 'changes' ? <ReviewPanel onOpenFullDiff={onOpenFullDiff} /> : null}
           {tab === 'todo' ? <TodoPanel /> : null}
-          {tab === 'browser' ? <BrowserPanel /> : null}
+          {tab === 'browser' ? <BrowserPanel onInsertComposer={onInsertComposer} /> : null}
           {terminalTouched.current ? (
             <div className={cn('flex min-h-0 flex-1', tab === 'terminal' ? 'flex' : 'hidden')}>
               <TerminalView />

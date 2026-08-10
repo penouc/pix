@@ -1,91 +1,206 @@
-import { ArrowLeft, ArrowRight, ExternalLink, RotateCw, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  ExternalLink,
+  MousePointer2,
+  RotateCw,
+  X,
+} from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { invoke } from '@/lib/ipc';
+import { formatBrowserSelectionForComposer } from '@/features/browser/selection-format';
+import { invoke, IpcError } from '@/lib/ipc';
 import { useUiPrefsStore } from '@/stores/ui-prefs-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
+import type { BrowserSelection, BrowserState, InputImage } from '@pi-desktop/protocol';
 
 /** Ports a dev server is most likely to be on, offered as one-click starts. */
 const COMMON_PORTS = [3000, 5173, 8080, 4321, 1420];
 
 const STORAGE_PREFIX = 'pi-desktop.browser-url.';
 
+type ComposerInsert = {
+  text?: string;
+  images?: InputImage[];
+  token: number;
+};
+
+const EMPTY_STATE: BrowserState = {
+  url: '',
+  title: '',
+  canGoBack: false,
+  canGoForward: false,
+  picking: false,
+};
+
 /**
- * A preview pane for whatever you are building.
+ * Dock preview chrome for the Main-owned WebContentsView (ADR-0005).
  *
- * This is a sandboxed `<iframe>`, which is deliberate on two counts. Electron's
- * own documentation recommends against the `<webview>` tag ("we currently
- * recommend to not use the webview tag") and names `iframe` and
- * `WebContentsView` as the alternatives; and VS Code's built-in Simple Browser
- * is itself a sandboxed iframe. So this adds no new Electron privilege — no
- * `webviewTag`, no node access, no popups, no top-level navigation.
- *
- * What that costs, stated plainly rather than hidden: a site that sends
- * `X-Frame-Options: DENY` or a restrictive `frame-ancestors` will refuse to
- * render, and the browser gives the page no way to tell us it refused. Local dev
- * servers do not send those headers, which is the case this pane is for. The
- * "Open in browser" button is the escape hatch for everything else.
- *
- * It is also not agent-drivable: the agent cannot see or click this page. That
- * needs a real browser under CDP and an approval story per origin, and it is a
- * separate project rather than something to imply here.
+ * The page itself is not an iframe — Main paints a WebContentsView into the
+ * content hole below this toolbar. That is what makes element selection and
+ * screenshots possible. Agent-driven browsing is still out of scope (P2 / C8).
  */
-export function BrowserPanel() {
+export function BrowserPanel({
+  onInsertComposer,
+}: {
+  onInsertComposer: (insert: ComposerInsert) => void;
+}) {
   const project = useWorkspaceStore((s) => s.project);
   const setPref = useUiPrefsStore((s) => s.set);
   const storageKey = `${STORAGE_PREFIX}${project?.id ?? 'none'}`;
 
+  const [draft, setDraft] = useState('');
+  /** True only after this panel intentionally shows a page (avoids leftover guest URLs). */
+  const [pageOpen, setPageOpen] = useState(false);
+  const [state, setState] = useState<BrowserState>(EMPTY_STATE);
+  const [error, setError] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+
   function closePanel() {
-    // Browser is a dock tab, not a window — "close" means leave the tab.
-    // URL stays in localStorage so reopening restores where you were.
     setPref('dockTab', 'changes');
   }
 
-  const [url, setUrl] = useState('');
-  const [draft, setDraft] = useState('');
-  /** Bumped to force a reload; an iframe has no reload() we can reach. */
-  const [nonce, setNonce] = useState(0);
-  /** Our own history, because a cross-origin iframe's is not readable. */
-  const [history, setHistory] = useState<string[]>([]);
-  const [cursor, setCursor] = useState(-1);
-  const frameRef = useRef<HTMLIFrameElement>(null);
+  const applyState = useCallback((next: BrowserState, open: boolean) => {
+    setState(next);
+    setPageOpen(open);
+    if (open && next.url) setDraft(next.url);
+  }, []);
 
-  // Each project remembers where you were.
+  const syncBounds = useCallback(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    void invoke<BrowserState>({
+      method: 'browser.setBounds',
+      params: {
+        x: rect.left,
+        y: rect.top,
+        width: rect.width,
+        height: rect.height,
+      },
+    })
+      .then((next) => applyState(next, true))
+      .catch((err) => console.error('[browser] setBounds failed', err));
+  }, [applyState]);
+
+  // Attach + restore on mount / project change. Hiding (not destroying) on unmount
+  // keeps guest history across Dock tab switches; the window close path detaches.
   useEffect(() => {
-    let saved = '';
-    try {
-      saved = localStorage.getItem(storageKey) ?? '';
-    } catch {
-      saved = '';
-    }
-    setUrl(saved);
-    setDraft(saved);
-    setHistory(saved ? [saved] : []);
-    setCursor(saved ? 0 : -1);
-  }, [storageKey]);
+    let cancelled = false;
 
-  function go(next: string) {
-    const normalized = normalizeUrl(next);
-    if (!normalized) return;
-    setUrl(normalized);
-    setDraft(normalized);
-    setHistory((all) => [...all.slice(0, cursor + 1), normalized]);
-    setCursor((value) => value + 1);
+    async function boot() {
+      setError(null);
+      let saved = '';
+      try {
+        saved = localStorage.getItem(storageKey) ?? '';
+      } catch {
+        saved = '';
+      }
+      setDraft(saved);
+
+      try {
+        await invoke<BrowserState>({ method: 'browser.attach' });
+        if (cancelled) return;
+
+        if (!saved) {
+          await invoke({ method: 'browser.setVisible', params: { visible: false } });
+          if (!cancelled) applyState(EMPTY_STATE, false);
+          return;
+        }
+
+        const current = await invoke<BrowserState>({ method: 'browser.getState' });
+        if (cancelled) return;
+        const next =
+          current.url === saved
+            ? await invoke<BrowserState>({ method: 'browser.setVisible', params: { visible: true } })
+            : await invoke<BrowserState>({ method: 'browser.navigate', params: { url: saved } });
+        if (cancelled) return;
+        applyState(next, true);
+        requestAnimationFrame(() => {
+          if (!cancelled) syncBounds();
+        });
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+          applyState(EMPTY_STATE, false);
+        }
+      }
+    }
+
+    void boot();
+    return () => {
+      cancelled = true;
+      void invoke({ method: 'browser.setVisible', params: { visible: false } }).catch(() => {
+        /* shutting down */
+      });
+    };
+  }, [storageKey, applyState, syncBounds]);
+
+  useEffect(() => {
+    if (!pageOpen) return;
+    syncBounds();
+    const el = contentRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => syncBounds());
+    observer.observe(el);
+    window.addEventListener('resize', syncBounds);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', syncBounds);
+    };
+  }, [pageOpen, syncBounds]);
+
+  async function go(next: string) {
+    setError(null);
     try {
-      localStorage.setItem(storageKey, normalized);
-    } catch {
-      /* storage unavailable — this session only */
+      const nextState = await invoke<BrowserState>({
+        method: 'browser.navigate',
+        params: { url: next },
+      });
+      applyState(nextState, true);
+      try {
+        localStorage.setItem(storageKey, nextState.url || next);
+      } catch {
+        /* storage unavailable */
+      }
+      requestAnimationFrame(() => syncBounds());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   }
 
-  function step(delta: number) {
-    const next = cursor + delta;
-    const target = history[next];
-    if (!target) return;
-    setCursor(next);
-    setUrl(target);
-    setDraft(target);
+  async function startPick() {
+    setError(null);
+    setPicking(true);
+    try {
+      const selection = await invoke<BrowserSelection>({ method: 'browser.startPicker' });
+      onInsertComposer({
+        text: formatBrowserSelectionForComposer(selection),
+        ...(selection.screenshot ? { images: [selection.screenshot] } : {}),
+        token: Date.now(),
+      });
+      const next = await invoke<BrowserState>({ method: 'browser.getState' });
+      applyState(next, true);
+    } catch (err) {
+      if (err instanceof IpcError && err.code === 'BROWSER_PICKER_CANCELLED') {
+        /* user hit Escape */
+      } else {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      setPicking(false);
+    }
+  }
+
+  async function cancelPick() {
+    try {
+      const next = await invoke<BrowserState>({ method: 'browser.cancelPicker' });
+      applyState(next, pageOpen);
+    } finally {
+      setPicking(false);
+    }
   }
 
   return (
@@ -96,8 +211,12 @@ export function BrowserPanel() {
           size="icon"
           className="h-6 w-6"
           title="Back"
-          disabled={cursor <= 0}
-          onClick={() => step(-1)}
+          disabled={!pageOpen || !state.canGoBack}
+          onClick={() => {
+            void invoke<BrowserState>({ method: 'browser.goBack' })
+              .then((next) => applyState(next, true))
+              .catch(console.error);
+          }}
         >
           <ArrowLeft className="h-3.5 w-3.5" />
         </Button>
@@ -106,8 +225,12 @@ export function BrowserPanel() {
           size="icon"
           className="h-6 w-6"
           title="Forward"
-          disabled={cursor < 0 || cursor >= history.length - 1}
-          onClick={() => step(1)}
+          disabled={!pageOpen || !state.canGoForward}
+          onClick={() => {
+            void invoke<BrowserState>({ method: 'browser.goForward' })
+              .then((next) => applyState(next, true))
+              .catch(console.error);
+          }}
         >
           <ArrowRight className="h-3.5 w-3.5" />
         </Button>
@@ -116,8 +239,12 @@ export function BrowserPanel() {
           size="icon"
           className="h-6 w-6"
           title="Reload"
-          disabled={!url}
-          onClick={() => setNonce((value) => value + 1)}
+          disabled={!pageOpen}
+          onClick={() => {
+            void invoke<BrowserState>({ method: 'browser.reload' })
+              .then((next) => applyState(next, true))
+              .catch(console.error);
+          }}
         >
           <RotateCw className="h-3.5 w-3.5" />
         </Button>
@@ -129,17 +256,41 @@ export function BrowserPanel() {
           onKeyDown={(event) => {
             if (event.key !== 'Enter') return;
             event.preventDefault();
-            go(draft);
+            void go(draft);
           }}
         />
+        {picking ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="h-6 px-2 text-[11px]"
+            onClick={() => void cancelPick()}
+          >
+            Cancel
+          </Button>
+        ) : (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="h-6 gap-1 px-2 text-[11px]"
+            title="Select an element to send into the composer"
+            disabled={!pageOpen}
+            onClick={() => void startPick()}
+          >
+            <MousePointer2 className="h-3 w-3" />
+            Select
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon"
           className="h-6 w-6"
           title="Open in your browser"
-          disabled={!url}
+          disabled={!pageOpen || !state.url}
           onClick={() => {
-            void invoke({ method: 'system.openExternal', params: { url } }).catch(console.error);
+            void invoke({ method: 'system.openExternal', params: { url: state.url } }).catch(
+              console.error,
+            );
           }}
         >
           <ExternalLink className="h-3.5 w-3.5" />
@@ -155,62 +306,40 @@ export function BrowserPanel() {
         </Button>
       </div>
 
-      {url ? (
-        <iframe
-          // Remounts on reload and on navigation, which is what makes both work.
-          key={`${url}#${nonce}`}
-          ref={frameRef}
-          src={url}
-          title="Preview"
-          className="min-h-0 w-full flex-1 border-0 bg-white"
-          // No allow-popups and no allow-top-navigation: the page cannot pull the
-          // app window somewhere else. allow-same-origin is needed for ordinary
-          // pages to use storage at all.
-          sandbox="allow-scripts allow-forms allow-same-origin allow-downloads"
-          referrerPolicy="no-referrer"
-        />
-      ) : (
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-5 text-center">
-          <p className="m-0 text-[12.5px] leading-relaxed text-muted">
-            Point this at your dev server to see it next to the thread.
-          </p>
-          <div className="flex flex-wrap justify-center gap-1.5">
-            {COMMON_PORTS.map((port) => (
-              <Button
-                key={port}
-                variant="secondary"
-                size="sm"
-                onClick={() => go(`http://localhost:${port}`)}
-              >
-                :{port}
-              </Button>
-            ))}
+      {error ? (
+        <p className="m-0 flex-none border-b border-border bg-background px-3 py-1.5 text-[11.5px] text-danger">
+          {error}
+        </p>
+      ) : null}
+
+      {picking ? (
+        <p className="m-0 flex-none border-b border-border px-3 py-1.5 text-[11.5px] text-muted">
+          Click an element in the preview. Esc cancels. Selection is limited to localhost.
+        </p>
+      ) : null}
+
+      <div ref={contentRef} className="relative min-h-0 w-full flex-1 bg-white">
+        {!pageOpen ? (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-surface px-5 text-center">
+            <p className="m-0 text-[12.5px] leading-relaxed text-muted">
+              Point this at your dev server to see it next to the thread. Use Select to send an
+              element into the composer, then ask the agent to change the source.
+            </p>
+            <div className="flex flex-wrap justify-center gap-1.5">
+              {COMMON_PORTS.map((port) => (
+                <Button
+                  key={port}
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => void go(`http://localhost:${port}`)}
+                >
+                  :{port}
+                </Button>
+              ))}
+            </div>
           </div>
-          <p className="m-0 text-[11px] leading-relaxed text-muted">
-            Local pages render here. Sites that refuse to be framed stay blank — use “open in
-            browser” for those.
-          </p>
-        </div>
-      )}
+        ) : null}
+      </div>
     </div>
   );
-}
-
-/** Accept `localhost:5173` and bare hosts the way a browser address bar does. */
-function normalizeUrl(input: string): string | null {
-  const trimmed = input.trim();
-  if (!trimmed) return null;
-  const withScheme = /^https?:\/\//i.test(trimmed)
-    ? trimmed
-    : // Anything local is plain http; assume https for the rest.
-      /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(trimmed)
-      ? `http://${trimmed}`
-      : `https://${trimmed}`;
-  try {
-    const parsed = new URL(withScheme);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
-    return parsed.toString();
-  } catch {
-    return null;
-  }
 }

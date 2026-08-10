@@ -18,8 +18,15 @@ MVP methods:
 - `session.create` / `session.list`
 - `agent.sendMessage` / `agent.abort` / `agent.setModel` / `agent.resolveApproval` / `agent.listModels`
 
+Browser preview (ADR-0005 — Dock `WebContentsView`, select-to-composer):
+
+- `browser.attach` / `browser.detach` / `browser.setBounds` / `browser.setVisible`
+- `browser.navigate` / `browser.reload` / `browser.goBack` / `browser.goForward` / `browser.getState`
+- `browser.startPicker` / `browser.cancelPicker` (loopback origins only)
+
 ## Security
 
 - No generic `ipcRenderer.invoke(channel, ...)` exposure
 - Every payload validated with Zod on the Main boundary
 - Invalid agent events are dropped before broadcast
+- Preview picker is denied for non-loopback URLs (`BROWSER_ORIGIN_DENIED`)

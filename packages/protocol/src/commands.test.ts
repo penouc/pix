@@ -182,3 +182,45 @@ describe('Compaction IPC commands', () => {
     ).toBe(false);
   });
 });
+
+describe('Browser preview IPC commands', () => {
+  it('accepts attach, navigate, bounds, and picker commands', () => {
+    expect(parseIpcCommand({ method: 'browser.attach' }).success).toBe(true);
+    expect(parseIpcCommand({ method: 'browser.detach' }).success).toBe(true);
+    expect(
+      parseIpcCommand({
+        method: 'browser.navigate',
+        params: { url: 'http://localhost:5173/' },
+      }).success,
+    ).toBe(true);
+    expect(
+      parseIpcCommand({
+        method: 'browser.setBounds',
+        params: { x: 10, y: 20, width: 400, height: 600 },
+      }).success,
+    ).toBe(true);
+    expect(
+      parseIpcCommand({
+        method: 'browser.setVisible',
+        params: { visible: false },
+      }).success,
+    ).toBe(true);
+    expect(parseIpcCommand({ method: 'browser.startPicker' }).success).toBe(true);
+    expect(parseIpcCommand({ method: 'browser.cancelPicker' }).success).toBe(true);
+  });
+
+  it('rejects non-finite bounds and empty navigate urls', () => {
+    expect(
+      parseIpcCommand({
+        method: 'browser.setBounds',
+        params: { x: Number.NaN, y: 0, width: 1, height: 1 },
+      }).success,
+    ).toBe(false);
+    expect(
+      parseIpcCommand({
+        method: 'browser.navigate',
+        params: { url: '' },
+      }).success,
+    ).toBe(false);
+  });
+});

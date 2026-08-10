@@ -129,8 +129,8 @@ interface ChatPanelProps {
   onBack: () => void;
   panelOpen: boolean;
   onTogglePanel: () => void;
-  /** Text pushed into the composer from elsewhere (a `$skill`, for instance). */
-  insert?: { text: string; token: number } | null;
+  /** Text / images pushed into the composer from elsewhere (skills, browser select). */
+  insert?: { text?: string; images?: InputImage[]; token: number } | null;
   /**
    * True for a task that has not been started. The design v3 replaced the task
    * list with this state: same screen, no run to report on yet.
@@ -489,12 +489,31 @@ export function ChatPanel({
     textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
   }, [draft]);
 
-  // Text handed in from the Skills screen or the ⌘K palette.
+  // Text / images handed in from Skills, ⌘K, or the browser Select action.
+  // Screenshots are only kept when the active model can see images — otherwise
+  // a browser pick would attach a PNG the user cannot send (and the model
+  // could not use). The text/HTML context is always enough for edit-the-source.
   useEffect(() => {
     if (!insert) return;
-    setDraft((current) => (current ? `${current}${insert.text}` : insert.text));
+    if (insert.text) {
+      setDraft((current) => (current ? `${current}${insert.text}` : insert.text!));
+    }
+    if (insert.images?.length) {
+      if (imageInputUnavailable) {
+        setAttachmentError(
+          'Screenshot omitted — the current model cannot read images. The selected text and HTML were still added.',
+        );
+      } else {
+        setAttachments((current) => {
+          const room = Math.max(0, MAX_IMAGE_COUNT - current.length);
+          if (room <= 0) return current;
+          return [...current, ...insert.images!.slice(0, room)];
+        });
+        setAttachmentError(null);
+      }
+    }
     composerRef.current?.focus();
-  }, [insert, setDraft]);
+  }, [insert, setDraft, imageInputUnavailable]);
 
   // When a run finishes, put the caret back in the composer so the next message
   // does not need a click — the thread just stole focus while streaming.

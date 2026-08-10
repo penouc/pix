@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
   ApprovalDecision,
   IndexHit,
+  InputImage,
   ProjectSummary,
   SessionSummary,
   StoredMessage,
@@ -43,9 +44,11 @@ export function App() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [dismissedApproval, setDismissedApproval] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [composerInsert, setComposerInsert] = useState<{ text: string; token: number } | null>(
-    null,
-  );
+  const [composerInsert, setComposerInsert] = useState<{
+    text?: string;
+    images?: InputImage[];
+    token: number;
+  } | null>(null);
   /** Session to restore when leaving an unstarted new task — back is not "new task again". */
   const [priorSession, setPriorSession] = useState<SessionSummary | null>(null);
 
@@ -469,6 +472,10 @@ export function App() {
             // A trailing space so you can keep typing after the reference.
             setComposerInsert({ text: `@${path} `, token: Date.now() })
           }
+          onInsertComposer={(insert) => {
+            setPanelOpen(true);
+            setComposerInsert(insert);
+          }}
         />
       }
       // The dock is not only about a finished run any more — files, terminal and
