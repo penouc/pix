@@ -2,3 +2,9 @@ packages:
   - "apps/*"
   - "apps/website/video"
   - "packages/*"
+
+# pnpm 10: allow native install scripts (also mirrored in package.json pnpm.onlyBuiltDependencies).
+onlyBuiltDependencies:
+  - electron
+  - esbuild
+  - node-pty

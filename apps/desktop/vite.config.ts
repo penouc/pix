@@ -46,6 +46,7 @@ export default defineConfig({
                 'typescript',
                 'minimatch',
                 'cross-spawn',
+                'node-pty',
                 'highlight.js',
                 'hosted-git-info',
                 'proper-lockfile',

@@ -36,12 +36,14 @@
     "package:dir": "pnpm build && pnpm --filter @pi-desktop/desktop package:dir",
     "package:win:dir": "pnpm build && pnpm --filter @pi-desktop/desktop package:win:dir",
     "package:win": "pnpm build && pnpm --filter @pi-desktop/desktop package:win",
+    "rebuild:native": "pnpm --filter @pi-desktop/desktop rebuild:native",
     "clean": "pnpm -r exec rm -rf dist node_modules && rm -rf node_modules"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
       "electron",
-      "esbuild"
+      "esbuild",
+      "node-pty"
     ]
   },
   "devDependencies": {

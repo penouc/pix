@@ -77,6 +77,7 @@ import {
   DEFAULT_TIMEOUT_MS as TERMINAL_TIMEOUT_MS,
   MAX_OUTPUT_BYTES as TERMINAL_OUTPUT_CAP_BYTES,
 } from './terminal/terminal-service.js';
+import { PtySessionError, PtySessionService } from './terminal/pty-session-service.js';
 import { AutomationStore } from './automations/automation-store.js';
 import { AutomationScheduler } from './automations/automation-scheduler.js';
 import { UpdateService } from './updates/update-service.js';
@@ -107,6 +108,7 @@ runMetrics.onFinished = (metrics) => {
 };
 let skillsService: SkillsService | null = null;
 let terminalService: TerminalService | null = null;
+let ptySessionService: PtySessionService | null = null;
 let automationStore: AutomationStore | null = null;
 let automationScheduler: AutomationScheduler | null = null;
 let notifications: NotificationService | null = null;
@@ -673,9 +675,29 @@ function getTerminalService(): TerminalService {
   return terminalService;
 }
 
+/**
+ * Interactive PTY sessions for the Terminal panel (ADR-0006).
+ * Kept separate from {@link TerminalService} so agent bash stays non-interactive.
+ */
+function getPtySessionService(): PtySessionService {
+  ptySessionService ??= new PtySessionService({
+    auditFilePath: path.join(app.getPath('userData'), 'audit', 'terminal.ndjson'),
+    emit: (event) => broadcastEvent(event),
+  });
+  return ptySessionService;
+}
+
 let terminalSequence = 0;
 function nextTerminalSequence(): number {
   return (terminalSequence += 1);
+}
+
+function ptyErrResult(error: unknown): IpcResult<never> {
+  if (error instanceof PtySessionError) {
+    return errResult(error.code, error.message);
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return errResult('PTY_ERROR', message || 'Terminal session failed.');
 }
 
 function getAutomationStore(): AutomationStore {
@@ -1494,6 +1516,59 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
           }),
         );
       }
+      case 'terminal.open': {
+        const project = projects.get(cmd.params.projectId);
+        if (!project) return errResult('PROJECT_NOT_FOUND', 'Project not found');
+        if (!project.trusted) {
+          return errResult('PROJECT_UNTRUSTED', 'Trust the project before opening a terminal.');
+        }
+        try {
+          return okResult(
+            getPtySessionService().open({
+              projectId: project.id,
+              workspaceRoot: project.path,
+              projectTrusted: project.trusted,
+              cwd: cmd.params.cwd,
+              cols: cmd.params.cols,
+              rows: cmd.params.rows,
+            }),
+          );
+        } catch (error) {
+          return ptyErrResult(error);
+        }
+      }
+      case 'terminal.write': {
+        try {
+          return okResult(
+            getPtySessionService().write(cmd.params.sessionId, {
+              ...(cmd.params.data != null ? { data: cmd.params.data } : {}),
+              ...(cmd.params.dataBase64 != null ? { dataBase64: cmd.params.dataBase64 } : {}),
+            }),
+          );
+        } catch (error) {
+          return ptyErrResult(error);
+        }
+      }
+      case 'terminal.resize': {
+        try {
+          return okResult(
+            getPtySessionService().resize(
+              cmd.params.sessionId,
+              cmd.params.cols,
+              cmd.params.rows,
+            ),
+          );
+        } catch (error) {
+          return ptyErrResult(error);
+        }
+      }
+      case 'terminal.close': {
+        try {
+          return okResult(getPtySessionService().close(cmd.params.sessionId));
+        } catch (error) {
+          return ptyErrResult(error);
+        }
+      }
       case 'automation.list': {
         const list = await getAutomationStore().list(cmd.params?.projectId);
         return okResult(
@@ -1831,6 +1906,8 @@ app.on('before-quit', () => {
     deltaFlushTimer = null;
   }
   deltaBuffer = [];
+  ptySessionService?.closeAll();
+  ptySessionService = null;
   void runtime?.dispose();
   runtime = null;
   desktopDb?.close();

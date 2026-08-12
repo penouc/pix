@@ -468,6 +468,35 @@ export const TerminalCwdResultSchema = z.object({
 });
 export type TerminalCwdResult = z.infer<typeof TerminalCwdResultSchema>;
 
+/** Result of opening a persistent PTY session for the Terminal panel. */
+export const TerminalOpenResultSchema = z.object({
+  sessionId: z.string().min(1),
+  cwd: z.string(),
+  relative: z.string(),
+  shell: z.string(),
+  cols: z.number().int().positive(),
+  rows: z.number().int().positive(),
+  pid: z.number().int().nonnegative(),
+});
+export type TerminalOpenResult = z.infer<typeof TerminalOpenResultSchema>;
+
+export const TerminalWriteResultSchema = z.object({
+  ok: z.literal(true),
+});
+export type TerminalWriteResult = z.infer<typeof TerminalWriteResultSchema>;
+
+export const TerminalResizeResultSchema = z.object({
+  ok: z.literal(true),
+  cols: z.number().int().positive(),
+  rows: z.number().int().positive(),
+});
+export type TerminalResizeResult = z.infer<typeof TerminalResizeResultSchema>;
+
+export const TerminalCloseResultSchema = z.object({
+  ok: z.literal(true),
+});
+export type TerminalCloseResult = z.infer<typeof TerminalCloseResultSchema>;
+
 export const AutomationSchema = z.object({
   id: z.string(),
   name: z.string(),

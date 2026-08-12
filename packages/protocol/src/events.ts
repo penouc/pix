@@ -299,5 +299,31 @@ export const DesktopAgentEventSchema = z.discriminatedUnion('type', [
     optionId: z.string().optional(),
     answer: z.string().min(1).max(10_000),
   }),
+  /**
+   * Interactive Terminal PTY output (ADR-0006). Not run-scoped — the Terminal
+   * panel listens by `ptySessionId` and the agent stream store ignores these.
+   * `dataBase64` is the binary-safe payload; `data` is a UTF-8 convenience when
+   * the chunk is valid text.
+   */
+  z.object({
+    type: z.literal('terminal.data'),
+    projectId: z.string().min(1),
+    /** PTY session id from `terminal.open` (not an agent chat session). */
+    ptySessionId: z.string().min(1),
+    sequence: z.number().int().nonnegative(),
+    timestamp: z.number().int().nonnegative(),
+    dataBase64: z.string().min(1).max(200_000),
+    data: z.string().max(150_000).optional(),
+  }),
+  /** Interactive Terminal PTY process exited or failed to stay alive. */
+  z.object({
+    type: z.literal('terminal.exit'),
+    projectId: z.string().min(1),
+    ptySessionId: z.string().min(1),
+    sequence: z.number().int().nonnegative(),
+    timestamp: z.number().int().nonnegative(),
+    exitCode: z.number().int().nullable(),
+    signal: z.number().int().nullable().optional(),
+  }),
 ]);
 export type DesktopAgentEvent = z.infer<typeof DesktopAgentEventSchema>;

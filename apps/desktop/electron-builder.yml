@@ -31,6 +31,7 @@ files:
 asar: true
 asarUnpack:
   - '**/*.node'
+  - '**/node_modules/node-pty/**'
   - '**/node_modules/@earendil-works/**'
   - '**/node_modules/@silvia-odwyer/**'
 

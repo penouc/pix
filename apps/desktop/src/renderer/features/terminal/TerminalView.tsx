@@ -1,303 +1,384 @@
-import { Plus } from 'lucide-react';
+import { FitAddon } from '@xterm/addon-fit';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import { Terminal } from '@xterm/xterm';
+import '@xterm/xterm/css/xterm.css';
+import { Plus, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import type { ProjectSummary, TerminalCwdResult, TerminalResult } from '@pi-desktop/protocol';
+import type { DesktopAgentEvent, TerminalOpenResult } from '@pi-desktop/protocol';
 
 import { invoke } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 
-/**
- * One scrollback line. A `cd` shares the shape so the transcript stays a single
- * list, and `kind` is what lets it drop the exit-code footer that would be
- * meaningless for a directory change.
- */
-type Entry = TerminalResult & { kind?: 'cd' };
-
 interface TerminalTab {
   id: number;
-  /** Absolute directory this tab runs in, or '.' for the project root. */
-  cwd: string;
-  /** Project-relative label for `cwd`. */
+  /** Main-side PTY session id once opened. */
+  sessionId: string | null;
+  /** Project-relative label for the tab strip. */
   label: string;
-  /** Where `cd -` goes back to. */
-  previousCwd: string;
-  entries: Entry[];
+  /** Absolute start cwd (project root when '.'). */
+  cwd: string;
+  error: string | null;
+  exited: boolean;
 }
 
-/**
- * A `cd` this view handles itself, rather than a command to run.
- *
- * Only a bare `cd` qualifies. `cd build && pnpm test` still goes to the shell,
- * where the directory change applies to that one command and then goes away —
- * which is what a subshell does, and what the scrollback will show.
- */
-const BARE_CD = /^cd(?:\s+(.+))?$/;
-
-function parseCd(command: string): { target: string } | null {
-  if (/[;&|`]|\$\(/.test(command)) return null;
-  const match = BARE_CD.exec(command);
-  return match ? { target: match[1] ?? '' } : null;
+interface HostedTerminal {
+  term: Terminal;
+  fit: FitAddon;
+  sessionId: string | null;
+  disposed: boolean;
 }
 
-/** `project` at the root, `project/sub/dir` below it. */
-function promptLabel(project: ProjectSummary | null, cwd: string): string {
-  const name = project?.name ?? 'no project';
-  if (!project || cwd === '.' || cwd === project.path) return name;
-  // Windows separators: compare and slice on a slash-normalised form so a
-  // `C:\repo` project labels its subdirectories the same way as a macOS one.
-  const normalizedCwd = cwd.replace(/\\/g, '/');
-  const normalizedProject = project.path.replace(/\\/g, '/');
-  if (normalizedCwd.startsWith(`${normalizedProject}/`)) {
-    return `${name}/${normalizedCwd.slice(normalizedProject.length + 1)}`;
-  }
-  return cwd;
+function readCssColor(name: string, fallback: string): string {
+  if (typeof window === 'undefined') return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
 }
 
-/**
- * A `cd` rendered into the scrollback.
- *
- * `from` is the directory the command was typed in — not where it landed. A real
- * terminal shows the old prompt on the `cd` line and the new one underneath, and
- * labelling it with the destination made the transcript read as though you were
- * already there.
- */
-function cwdEntry(command: string, from: string, result: TerminalCwdResult): Entry {
+function buildXtermTheme(): ConstructorParameters<typeof Terminal>[0] {
+  const foreground = readCssColor('--color-output-foreground', '#f1f1f2');
+  const background = readCssColor('--color-output', '#1d1e21');
+  const accent = readCssColor('--color-accent-2-400', '#93c4ad');
+  const cursor = readCssColor('--color-accent-2', '#5d9e82');
   return {
-    kind: 'cd',
-    command,
-    cwd: from,
-    outcome: result.outcome === 'changed' ? 'ran' : 'denied',
-    exitCode: result.outcome === 'changed' ? 0 : null,
-    output: result.outcome === 'changed' ? result.relative : '',
-    truncated: false,
-    durationMs: 0,
-    ...(result.reason ? { reason: result.reason } : {}),
+    convertEol: true,
+    cursorBlink: true,
+    fontFamily: readCssColor(
+      '--font-mono',
+      'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    ),
+    fontSize: 12.5,
+    lineHeight: 1.35,
+    scrollback: 5000,
+    allowProposedApi: true,
+    theme: {
+      foreground,
+      background,
+      cursor,
+      cursorAccent: background,
+      selectionBackground: 'rgba(93, 158, 130, 0.35)',
+      selectionForeground: foreground,
+      black: '#1d1e21',
+      red: '#e06c75',
+      green: accent,
+      yellow: '#e5c07b',
+      blue: '#61afef',
+      magenta: '#c678dd',
+      cyan: '#56b6c2',
+      white: foreground,
+      brightBlack: '#5c6370',
+      brightRed: '#e06c75',
+      brightGreen: accent,
+      brightYellow: '#e5c07b',
+      brightBlue: '#61afef',
+      brightMagenta: '#c678dd',
+      brightCyan: '#56b6c2',
+      brightWhite: '#ffffff',
+    },
   };
 }
 
+function decodePtyData(event: Extract<DesktopAgentEvent, { type: 'terminal.data' }>): string {
+  if (event.data != null) return event.data;
+  const binary = atob(event.dataBase64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
 /**
- * A command runner, not a shell. Each line is executed once.
+ * Interactive PTY terminal (ADR-0006).
  *
- * Commands you type are not held for approval — you are the one acting, so the
- * keystroke is the consent. The policy floor still applies: a protected path or
- * a path outside the project is refused, and read-only mode refuses bash
- * entirely. Every command is audited either way.
- *
- * There is no PTY, so interactive programs (vim, top) will not work; that is a
- * deliberate limit, not a bug.
+ * Each tab owns a Main-side `node-pty` session and a renderer xterm instance.
+ * Typed input is consent; the agent bash tool remains on its separate
+ * non-interactive permission path.
  */
 export function TerminalView() {
   const project = useWorkspaceStore((s) => s.project);
-  const session = useWorkspaceStore((s) => s.session);
   const [tabs, setTabs] = useState<TerminalTab[]>([
-    { id: 1, cwd: '.', label: '.', previousCwd: '.', entries: [] },
+    { id: 1, sessionId: null, label: '.', cwd: '.', error: null, exited: false },
   ]);
   const [active, setActive] = useState(1);
-  const [draft, setDraft] = useState('');
-  const [busy, setBusy] = useState(false);
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const hostRef = useRef<HTMLDivElement>(null);
+  const hostsRef = useRef(new Map<number, HostedTerminal>());
+  const nextIdRef = useRef(2);
+  const projectRef = useRef(project);
+  projectRef.current = project;
 
   const current = tabs.find((tab) => tab.id === active) ?? tabs[0]!;
 
-  useEffect(() => {
-    const element = scrollerRef.current;
-    if (element) element.scrollTop = element.scrollHeight;
-  }, [tabs, active, busy]);
-
-  /** Append one scrollback entry to the tab that produced it. */
-  function append(tabId: number, entry: Entry) {
-    setTabs((all) =>
-      all.map((tab) => (tab.id === tabId ? { ...tab, entries: [...tab.entries, entry] } : tab)),
-    );
+  function showOnly(tabId: number) {
+    for (const [id, other] of hostsRef.current) {
+      if (!other.term.element) continue;
+      other.term.element.style.display = id === tabId ? 'block' : 'none';
+    }
   }
 
-  async function changeDirectory(command: string, target: string) {
-    if (!project) return;
-    // `cd -` is the tab's own history, so it is resolved here and then validated
-    // in Main like any other target.
-    const requested = target === '-' ? current.previousCwd : target;
-    const result = await invoke<TerminalCwdResult>({
-      method: 'terminal.changeDirectory',
-      params: {
-        projectId: project.id,
-        ...(current.cwd === '.' ? {} : { cwd: current.cwd }),
-        target: requested === '.' ? '' : requested,
-      },
-    });
+  /** Open (or reopen) a PTY for a tab and attach xterm. */
+  async function ensureSession(tabId: number) {
+    const projectNow = projectRef.current;
+    const hostEl = hostRef.current;
+    if (!projectNow || !hostEl) return;
 
-    if (result.outcome === 'changed') {
+    let hosted = hostsRef.current.get(tabId);
+    if (!hosted) {
+      const fit = new FitAddon();
+      const term = new Terminal(buildXtermTheme());
+      term.loadAddon(fit);
+      term.loadAddon(new WebLinksAddon());
+      hosted = { term, fit, sessionId: null, disposed: false };
+      hostsRef.current.set(tabId, hosted);
+      term.open(hostEl);
+      fit.fit();
+
+      term.onData((data) => {
+        const sessionId = hosted?.sessionId;
+        if (!sessionId || hosted?.disposed) return;
+        void invoke({ method: 'terminal.write', params: { sessionId, data } }).catch(() => {
+          /* session may have exited */
+        });
+      });
+    }
+
+    showOnly(tabId);
+
+    if (hosted.sessionId) {
+      hosted.fit.fit();
+      void invoke({
+        method: 'terminal.resize',
+        params: {
+          sessionId: hosted.sessionId,
+          cols: hosted.term.cols,
+          rows: hosted.term.rows,
+        },
+      }).catch(() => {});
+      hosted.term.focus();
+      return;
+    }
+
+    try {
+      hosted.fit.fit();
+      const cols = Math.max(hosted.term.cols, 2);
+      const rows = Math.max(hosted.term.rows, 1);
+      const opened = await invoke<TerminalOpenResult>({
+        method: 'terminal.open',
+        params: {
+          projectId: projectNow.id,
+          cols,
+          rows,
+        },
+      });
+      if (hosted.disposed) {
+        void invoke({ method: 'terminal.close', params: { sessionId: opened.sessionId } });
+        return;
+      }
+      hosted.sessionId = opened.sessionId;
       setTabs((all) =>
         all.map((tab) =>
-          tab.id === current.id
+          tab.id === tabId
             ? {
                 ...tab,
-                cwd: result.cwd,
-                label: result.relative,
-                previousCwd: tab.cwd,
-                entries: [...tab.entries, cwdEntry(command, tab.cwd, result)],
+                sessionId: opened.sessionId,
+                cwd: opened.cwd,
+                label: opened.relative,
+                error: null,
+                exited: false,
               }
             : tab,
         ),
       );
-      return;
+      hosted.term.focus();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setTabs((all) =>
+        all.map((tab) => (tab.id === tabId ? { ...tab, error: message, exited: true } : tab)),
+      );
+      hosted.term.writeln(`\r\n\x1b[31m${message}\x1b[0m`);
     }
-    append(current.id, cwdEntry(command, current.cwd, result));
   }
 
-  async function run() {
-    const command = draft.trim();
-    if (!command || !project || busy) return;
-    setDraft('');
-    setBusy(true);
-    try {
-      const cd = parseCd(command);
-      if (cd) {
-        await changeDirectory(command, cd.target);
+  async function disposeTab(tabId: number) {
+    const hosted = hostsRef.current.get(tabId);
+    if (!hosted) return;
+    hosted.disposed = true;
+    const sessionId = hosted.sessionId;
+    hosted.sessionId = null;
+    hostsRef.current.delete(tabId);
+    hosted.term.dispose();
+    if (sessionId) {
+      await invoke({ method: 'terminal.close', params: { sessionId } }).catch(() => {});
+    }
+  }
+
+  // Project gate / (re)open active tab session.
+  useEffect(() => {
+    if (!project) return;
+    void ensureSession(active);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ensureSession closes over refs
+  }, [project?.id, active]);
+
+  // Tear down every PTY when the project changes or the view unmounts.
+  useEffect(() => {
+    const hosts = hostsRef.current;
+    return () => {
+      for (const id of [...hosts.keys()]) {
+        void disposeTab(id);
+      }
+    };
+  }, [project?.id]);
+
+  // Stream PTY output into the matching xterm.
+  useEffect(() => {
+    if (!window.piDesktop) return;
+    return window.piDesktop.onAgentEvent((event: DesktopAgentEvent) => {
+      if (event.type === 'terminal.data') {
+        for (const hosted of hostsRef.current.values()) {
+          if (hosted.sessionId !== event.ptySessionId || hosted.disposed) continue;
+          hosted.term.write(decodePtyData(event));
+          break;
+        }
         return;
       }
-      const result = await invoke<TerminalResult>({
-        method: 'terminal.exec',
+      if (event.type === 'terminal.exit') {
+        for (const [tabId, hosted] of hostsRef.current) {
+          if (hosted.sessionId !== event.ptySessionId) continue;
+          hosted.sessionId = null;
+          setTabs((all) =>
+            all.map((tab) =>
+              tab.id === tabId
+                ? {
+                    ...tab,
+                    sessionId: null,
+                    exited: true,
+                    error: `Shell exited (${event.exitCode ?? 'signal'})`,
+                  }
+                : tab,
+            ),
+          );
+          hosted.term.writeln(
+            `\r\n\x1b[90m[process exited with code ${event.exitCode ?? 'null'}]\x1b[0m`,
+          );
+          break;
+        }
+      }
+    });
+  }, []);
+
+  // Fit + resize on container size changes and when the active tab gains focus.
+  useEffect(() => {
+    const hostEl = hostRef.current;
+    if (!hostEl) return;
+    const observer = new ResizeObserver(() => {
+      const hosted = hostsRef.current.get(active);
+      if (!hosted || hosted.disposed) return;
+      hosted.fit.fit();
+      if (!hosted.sessionId) return;
+      void invoke({
+        method: 'terminal.resize',
         params: {
-          projectId: project.id,
-          command,
-          cwd: current.cwd === '.' ? undefined : current.cwd,
-          sessionId: session?.id,
+          sessionId: hosted.sessionId,
+          cols: hosted.term.cols,
+          rows: hosted.term.rows,
         },
-      });
-      append(current.id, result);
-    } catch (error) {
-      append(current.id, {
-        command,
+      }).catch(() => {});
+    });
+    observer.observe(hostEl);
+    return () => observer.disconnect();
+  }, [active]);
+
+  function addTab() {
+    const id = nextIdRef.current++;
+    setTabs((all) => [
+      ...all,
+      {
+        id,
+        sessionId: null,
+        label: current.label,
         cwd: current.cwd,
-        outcome: 'denied',
-        exitCode: null,
-        output: '',
-        truncated: false,
-        durationMs: 0,
-        reason: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      setBusy(false);
-      inputRef.current?.focus();
+        error: null,
+        exited: false,
+      },
+    ]);
+    setActive(id);
+  }
+
+  async function closeTab(tabId: number) {
+    if (tabs.length === 1) {
+      await disposeTab(tabId);
+      const id = nextIdRef.current++;
+      setTabs([{ id, sessionId: null, label: '.', cwd: '.', error: null, exited: false }]);
+      setActive(id);
+      return;
     }
+    await disposeTab(tabId);
+    setTabs((all) => {
+      const remaining = all.filter((tab) => tab.id !== tabId);
+      if (!remaining.some((tab) => tab.id === active)) {
+        setActive(remaining[remaining.length - 1]!.id);
+      }
+      return remaining;
+    });
   }
 
   return (
     <div className="flex min-w-0 flex-1 flex-col bg-[var(--color-output)]">
-      {/* Tabs */}
       <div className="flex flex-none items-center gap-0.5 px-3 pt-2">
         {tabs.map((tab) => (
-          <button
+          <div
             key={tab.id}
-            type="button"
-            onClick={() => setActive(tab.id)}
             className={cn(
-              'cursor-pointer rounded-t-xl border-0 px-3.5 py-2 font-mono text-[11.5px]',
+              'group flex items-center gap-1 rounded-t-xl px-2 py-1.5 font-mono text-[11.5px]',
               tab.id === active
                 ? 'bg-[var(--color-output)] text-white'
                 : 'bg-transparent text-white/45 hover:text-white/80',
             )}
           >
-            {/* The label is the tab's own directory — that is the thing that now
-                differs between tabs, and the project name is the same for all. */}
-            {tab.label === '.' ? (project?.name ?? 'no project') : tab.label}
-          </button>
+            <button
+              type="button"
+              onClick={() => setActive(tab.id)}
+              className="cursor-pointer border-0 bg-transparent px-1.5 py-0.5 font-mono text-[11.5px] text-inherit"
+            >
+              {tab.label === '.' ? (project?.name ?? 'no project') : tab.label}
+            </button>
+            <button
+              type="button"
+              title="Close terminal"
+              onClick={() => void closeTab(tab.id)}
+              className="grid h-4 w-4 cursor-pointer place-items-center rounded-sm border-0 bg-transparent text-white/35 opacity-0 hover:bg-white/10 hover:text-white/80 group-hover:opacity-100"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
         ))}
         <button
           type="button"
           title="New terminal"
-          onClick={() => {
-            const id = Math.max(...tabs.map((tab) => tab.id)) + 1;
-            setTabs((all) => [
-              ...all,
-              // A new tab opens where you were, the way a real terminal does.
-              {
-                id,
-                cwd: current.cwd,
-                label: current.label,
-                previousCwd: current.cwd,
-                entries: [],
-              },
-            ]);
-            setActive(id);
-          }}
-          className="ml-1 grid h-6 w-6 cursor-pointer place-items-center rounded-full border-0 bg-transparent text-white/55 hover:bg-white/10 hover:text-white/85"
+          onClick={addTab}
+          disabled={!project}
+          className="ml-1 grid h-6 w-6 cursor-pointer place-items-center rounded-full border-0 bg-transparent text-white/55 hover:bg-white/10 hover:text-white/85 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Plus className="h-3.5 w-3.5" />
         </button>
       </div>
 
-      {/* Scrollback */}
-      <div
-        ref={scrollerRef}
-        className="min-h-0 flex-1 overflow-y-auto bg-[var(--color-output)] px-5 py-3.5 font-mono text-[12.5px] leading-[1.7] text-[var(--color-output-foreground)]"
-      >
+      <div className="relative min-h-0 flex-1 bg-[var(--color-output)]">
         {!project ? (
-          <div className="text-white/45">Open a project to run commands.</div>
-        ) : !current.entries.length ? (
-          <div className="text-white/45">
-            Commands run once inside {project.name}. Yours run without asking; paths outside the
-            project are still refused. Interactive programs are not supported.
+          <div className="px-5 py-3.5 font-mono text-[12.5px] text-white/45">
+            Open a project to use the terminal.
           </div>
         ) : null}
-
-        {current.entries.map((entry, index) => (
-          <div key={`${index}-${entry.command}`} className="mb-3.5">
-            <div>
-              <span className="text-accent-2-400">➜</span>{' '}
-              {/* The directory each command actually ran in, not the current one
-                  — scrollback after a `cd` would otherwise misattribute it. */}
-              <span className="text-accent-200">{promptLabel(project, entry.cwd)}</span>{' '}
-              {entry.command}
-            </div>
-            {entry.outcome !== 'ran' ? (
-              <pre className="mt-1 mb-0 whitespace-pre-wrap text-accent-300">
-                {entry.outcome === 'denied' ? 'refused: ' : 'cancelled: '}
-                {entry.reason ?? 'no reason given'}
-              </pre>
-            ) : entry.kind === 'cd' ? null : (
-              <pre className="mt-1 mb-0 whitespace-pre-wrap opacity-90">
-                {entry.output || '(no output)'}
-              </pre>
-            )}
-            {entry.outcome === 'ran' && entry.kind !== 'cd' ? (
-              <div className="mt-0.5 text-[11px] text-white/40">
-                exit {entry.exitCode ?? '—'} · {entry.durationMs}ms
-                {entry.truncated ? ' · output truncated' : ''}
-              </div>
-            ) : null}
-          </div>
-        ))}
-
-        {busy ? (
-          <div className="text-white/45">
-            running…{' '}
-            <span
-              className="inline-block h-3.5 w-1.5 align-middle bg-[var(--color-output-foreground)]"
-              style={{ animation: 'pi-blink 1s step-end infinite' }}
-            />
+        {project && current.error && !current.sessionId ? (
+          <div className="absolute inset-x-0 top-0 z-10 px-5 py-2 font-mono text-[12px] text-accent-300">
+            {current.error}
           </div>
         ) : null}
-      </div>
-
-      {/* Prompt */}
-      <div className="flex flex-none items-center gap-2 bg-[var(--color-output)] px-5 pt-2.5 pb-4 font-mono text-[12.5px] text-[var(--color-output-foreground)]">
-        <span className="text-accent-2-400">➜</span>
-        <span className="text-accent-200">{promptLabel(project, current.cwd)}</span>
-        <input
-          ref={inputRef}
-          className="flex-1 border-0 bg-transparent p-0 font-mono text-[12.5px] text-[var(--color-output-foreground)] outline-none placeholder:text-white/35"
-          placeholder={project ? 'pnpm test …' : 'open a project first'}
-          disabled={!project || busy}
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault();
-              void run();
-            }
+        <div
+          ref={hostRef}
+          className="pi-xterm-host h-full w-full px-3 py-2"
+          onMouseDown={() => {
+            const hosted = hostsRef.current.get(active);
+            hosted?.term.focus();
           }}
         />
       </div>

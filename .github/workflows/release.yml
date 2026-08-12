@@ -46,6 +46,9 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Rebuild native modules for Electron
+        run: pnpm rebuild:native
+
       - name: Check
         run: |
           pnpm typecheck
@@ -125,6 +128,10 @@ jobs:
       - name: Install
         shell: bash
         run: pnpm install --frozen-lockfile
+
+      - name: Rebuild native modules for Electron
+        shell: bash
+        run: pnpm rebuild:native
 
       - name: Check
         shell: bash

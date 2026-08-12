@@ -24,9 +24,16 @@ Browser preview (ADR-0005 — Dock `WebContentsView`, select-to-composer):
 - `browser.navigate` / `browser.reload` / `browser.goBack` / `browser.goForward` / `browser.getState`
 - `browser.startPicker` / `browser.cancelPicker` (loopback origins only)
 
+Interactive Terminal PTY (ADR-0006 — xterm.js + node-pty):
+
+- `terminal.open` / `terminal.write` / `terminal.resize` / `terminal.close`
+- Events: `terminal.data` (base64 chunk) / `terminal.exit`
+- Legacy one-shot: `terminal.exec` / `terminal.changeDirectory` (not used by the panel UI)
+
 ## Security
 
 - No generic `ipcRenderer.invoke(channel, ...)` exposure
 - Every payload validated with Zod on the Main boundary
 - Invalid agent events are dropped before broadcast
 - Preview picker is denied for non-loopback URLs (`BROWSER_ORIGIN_DENIED`)
+- Terminal PTY requires a trusted project; start cwd is workspace-confined (live `cd` outside is possible — see ADR-0006)
