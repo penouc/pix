@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import type {
   AppInfo,
@@ -24,7 +24,7 @@ import { credentialStorageLabel } from '@/lib/platform';
 import { cn } from '@/lib/utils';
 import { useUiPrefsStore } from '@/stores/ui-prefs-store';
 
-type TabId =
+export type SettingsTabId =
   | 'providers'
   | 'permissions'
   | 'projects'
@@ -34,6 +34,8 @@ type TabId =
   | 'usage'
   | 'updates'
   | 'about';
+
+type TabId = SettingsTabId;
 
 const TABS: Array<{ id: TabId; name: string; title: string; desc: string }> = [
   {
@@ -98,8 +100,18 @@ const TABS: Array<{ id: TabId; name: string; title: string; desc: string }> = [
  * behind them exists yet, and a switch that changes nothing is worse than an
  * absent one.
  */
-export function SettingsView({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<TabId>('providers');
+export function SettingsView({
+  onClose,
+  initialTab = 'providers',
+}: {
+  onClose: () => void;
+  /** Deep-link from onboarding / no-auth CTAs (usually `providers`). */
+  initialTab?: TabId;
+}) {
+  const [tab, setTab] = useState<TabId>(initialTab);
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab]);
   const active = TABS.find((entry) => entry.id === tab)!;
 
   return (
@@ -477,8 +489,13 @@ function ProjectsTab() {
         </Row>
         <FlagSwitch
           name="Trust new projects automatically"
-          desc="Off keeps the Workspace Trust step on first open. Automations never bypass it."
+          desc="When on, newly opened folders are trusted immediately so indexing can start. When off, the first message in a project trusts it. Automations never bypass an untrusted folder."
           flag="trustNewProjects"
+        />
+        <FlagSwitch
+          name="Reopen last project on launch"
+          desc="Restore the most recent real project when PiX starts. Off keeps a blank Run so first-run onboarding can lead."
+          flag="reopenLastProject"
         />
       </Group>
       <IndexingGroup />

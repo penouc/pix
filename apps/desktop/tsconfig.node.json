@@ -7,6 +7,6 @@
     "moduleResolution": "Bundler",
     "noEmit": true
   },
-  "include": ["src/main/**/*", "src/preload/**/*", "vite.config.ts"],
+  "include": ["src/main/**/*", "src/preload/**/*", "src/shared/**/*", "vite.config.ts"],
   "references": [{ "path": "../../packages/database" }]
 }

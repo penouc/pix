@@ -106,6 +106,37 @@ describe('Provider settings IPC commands', () => {
   });
 });
 
+describe('Onboarding IPC commands', () => {
+  it('accepts get and partial patch of onboarding flags', () => {
+    expect(parseIpcCommand({ method: 'settings.getOnboarding' }).success).toBe(true);
+    expect(
+      parseIpcCommand({
+        method: 'settings.patchOnboarding',
+        params: { skipped: true, completed: true },
+      }).success,
+    ).toBe(true);
+    expect(
+      parseIpcCommand({
+        method: 'settings.patchOnboarding',
+        params: {
+          hasOpenedProject: true,
+          hasConfiguredAuth: true,
+          hasFirstRun: true,
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects non-boolean onboarding patches', () => {
+    expect(
+      parseIpcCommand({
+        method: 'settings.patchOnboarding',
+        params: { completed: 'yes' },
+      }).success,
+    ).toBe(false);
+  });
+});
+
 describe('Auto model routing IPC commands', () => {
   it('round-trips the configurable fallback chain', () => {
     const get = parseIpcCommand({ method: 'settings.getAutoModel' });

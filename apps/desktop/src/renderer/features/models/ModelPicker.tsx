@@ -42,7 +42,7 @@ import { useWorkspaceStore } from '@/stores/workspace-store';
  *    use is one click away. They pin, they do not filter: everything stays
  *    reachable underneath.
  */
-export function ModelPicker() {
+export function ModelPicker({ onAddProvider }: { onAddProvider?: () => void } = {}) {
   const session = useWorkspaceStore((s) => s.session);
   const selectedModel = useWorkspaceStore((s) => s.selectedModel);
   const setSelectedModel = useWorkspaceStore((s) => s.setSelectedModel);
@@ -52,6 +52,7 @@ export function ModelPicker() {
     queryKey: ['settings.get'],
     queryFn: () => invoke<Settings>({ method: 'settings.get' }),
   });
+  const noAuth = !isLoading && models.length === 0;
 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -189,33 +190,51 @@ export function ModelPicker() {
         ? 'loading…'
         : models.length
           ? 'model'
-          : 'no model';
+          : 'Add a provider…';
 
   return (
     <div ref={rootRef} className="relative inline-flex">
       <button
         type="button"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        disabled={!models.length && !isLoading}
-        onClick={() => setOpen((value) => !value)}
+        aria-haspopup={noAuth ? undefined : 'listbox'}
+        aria-expanded={noAuth ? undefined : open}
+        disabled={isLoading}
+        onClick={() => {
+          if (noAuth) {
+            onAddProvider?.();
+            return;
+          }
+          setOpen((value) => !value);
+        }}
         title={
-          autoActive
-            ? 'Auto — picks per task & mode'
-            : active
-              ? `${active.displayName} · ${active.providerId}/${active.modelId}`
-              : 'Choose a model'
+          noAuth
+            ? 'Add a provider under Settings to run the agent'
+            : autoActive
+              ? 'Auto — picks per task & mode'
+              : active
+                ? `${active.displayName} · ${active.providerId}/${active.modelId}`
+                : 'Choose a model'
         }
-        className="flex h-[26px] max-w-[140px] cursor-pointer items-center gap-1.5 rounded-full border-0 bg-foreground/[0.06] pr-2 pl-2.5 text-[12px] hover:bg-foreground/[0.1]"
+        className={cn(
+          'flex h-[26px] max-w-[160px] cursor-pointer items-center gap-1.5 rounded-full border-0 pr-2 pl-2.5 text-[12px]',
+          noAuth
+            ? 'bg-accent/15 font-bold text-accent-800 hover:bg-accent/25'
+            : 'bg-foreground/[0.06] hover:bg-foreground/[0.1]',
+        )}
       >
         <span
           className="h-1.5 w-1.5 flex-none rounded-full"
           style={{
-            background: active || autoActive ? 'var(--color-accent-2)' : 'var(--color-neutral-400)',
+            background:
+              active || autoActive
+                ? 'var(--color-accent-2)'
+                : noAuth
+                  ? 'var(--color-accent)'
+                  : 'var(--color-neutral-400)',
           }}
         />
         <span className="min-w-0 truncate">{label}</span>
-        <ChevronDown className="h-3 w-3 flex-none text-muted" />
+        {noAuth ? null : <ChevronDown className="h-3 w-3 flex-none text-muted" />}
       </button>
 
       {open && anchor
@@ -369,9 +388,25 @@ export function ModelPicker() {
                     })}
                     {!providers.length ? (
                       <Empty>
-                        {isLoading
-                          ? 'Loading models…'
-                          : 'Add a provider key or sign in under Settings.'}
+                        {isLoading ? (
+                          'Loading models…'
+                        ) : (
+                          <span className="flex flex-col items-center gap-2">
+                            <span>Add a provider under Settings to run the agent.</span>
+                            {onAddProvider ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpen(false);
+                                  onAddProvider();
+                                }}
+                                className="cursor-pointer border-0 bg-transparent p-0 text-[12px] font-bold text-accent-800 underline-offset-2 hover:underline"
+                              >
+                                Open Providers
+                              </button>
+                            ) : null}
+                          </span>
+                        )}
                       </Empty>
                     ) : null}
                   </>

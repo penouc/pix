@@ -451,6 +451,16 @@ export const SetUiSettingInputSchema = z.object({
   value: z.boolean(),
 });
 
+/** Partial update for first-run onboarding flags (docs/onboarding.md). */
+export const PatchOnboardingInputSchema = z.object({
+  completed: z.boolean().optional(),
+  skipped: z.boolean().optional(),
+  hasOpenedProject: z.boolean().optional(),
+  hasConfiguredAuth: z.boolean().optional(),
+  hasFirstRun: z.boolean().optional(),
+});
+export type PatchOnboardingInput = z.infer<typeof PatchOnboardingInputSchema>;
+
 export const ApprovalModeSchema = z.enum(['ask', 'auto-reads', 'read-only']);
 export type ApprovalMode = z.infer<typeof ApprovalModeSchema>;
 
@@ -708,6 +718,8 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
     params: SetDefaultProjectsFolderInputSchema,
   }),
   z.object({ method: z.literal('settings.pickProjectsFolder'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('settings.getOnboarding'), params: z.object({}).optional() }),
+  z.object({ method: z.literal('settings.patchOnboarding'), params: PatchOnboardingInputSchema }),
   z.object({ method: z.literal('audit.summary'), params: z.object({}).optional() }),
   z.object({ method: z.literal('usage.summary'), params: UsageSummaryInputSchema.optional() }),
   z.object({ method: z.literal('usage.projects'), params: UsageSummaryInputSchema.optional() }),

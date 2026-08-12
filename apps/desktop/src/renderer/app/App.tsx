@@ -21,7 +21,7 @@ import { DiffPanel } from '@/features/diff/DiffPanel';
 import { ProjectSidebar } from '@/features/projects/ProjectSidebar';
 import { PreflightBanner } from '@/features/preflight/PreflightBanner';
 import { SearchPalette, type PaletteCommand } from '@/features/search/SearchPalette';
-import { SettingsView } from '@/features/settings/SettingsView';
+import { SettingsView, type SettingsTabId } from '@/features/settings/SettingsView';
 import { SkillsView } from '@/features/skills/SkillsView';
 import { TerminalView } from '@/features/terminal/TerminalView';
 import { RightDock } from '@/features/workbench/RightDock';
@@ -38,6 +38,7 @@ type View = 'run' | 'diff' | 'settings' | 'terminal' | 'automations' | 'skills';
 
 export function App() {
   const [view, setView] = useState<View>('run');
+  const [settingsTab, setSettingsTab] = useState<SettingsTabId>('providers');
   const [blankRun, setBlankRun] = useState(true);
   const [projectError, setProjectError] = useState<string | null>(null);
   const [diffFocusPath, setDiffFocusPath] = useState<string | undefined>();
@@ -345,7 +346,15 @@ export function App() {
         hint: '⌘O',
         run: () => void browseForProject(),
       },
-      { id: 'settings', title: 'Open settings', hint: '⌘,', run: () => setView('settings') },
+      {
+        id: 'settings',
+        title: 'Open settings',
+        hint: '⌘,',
+        run: () => {
+          setSettingsTab('providers');
+          setView('settings');
+        },
+      },
     ],
     [newTask, browseForProject],
   );
@@ -368,6 +377,7 @@ export function App() {
       }
       if (event.key === ',') {
         event.preventDefault();
+        setSettingsTab('providers');
         setView('settings');
       }
     }
@@ -411,7 +421,10 @@ export function App() {
       <PreflightBanner />
       <div className="flex min-h-0 min-w-0 flex-1">
         {view === 'settings' ? (
-          <SettingsView onClose={() => setView('run')} />
+          <SettingsView
+            initialTab={settingsTab}
+            onClose={() => setView('run')}
+          />
         ) : view === 'terminal' ? (
           <TerminalView />
         ) : view === 'automations' ? (
@@ -434,6 +447,11 @@ export function App() {
             blank={blankRun}
             onTaskStarted={() => setBlankRun(false)}
             onNewTask={newTask}
+            onOpenProviders={() => {
+              setSettingsTab('providers');
+              setView('settings');
+            }}
+            onBrowseForProject={() => void browseForProject()}
           />
         )}
       </div>
@@ -446,7 +464,14 @@ export function App() {
         <ProjectSidebar
           activeNav={view}
           isBlankRun={blankRun}
-          onOpenSettings={() => setView(view === 'settings' ? 'run' : 'settings')}
+          onOpenSettings={() => {
+            if (view === 'settings') {
+              setView('run');
+              return;
+            }
+            setSettingsTab('providers');
+            setView('settings');
+          }}
           onNewTask={newTask}
           onSelectSession={selectSession}
           onOpenSearch={() => setSearchOpen(true)}

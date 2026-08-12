@@ -171,6 +171,56 @@ function getProviderSettings(): ProviderSettingsStore {
   return providerSettings;
 }
 
+/** App-owned scratch workspace — not a user project folder. */
+function playgroundDir(): string {
+  return path.join(app.getPath('userData'), 'playground');
+}
+
+function isPlaygroundPath(projectPath: string): boolean {
+  return path.resolve(projectPath) === path.resolve(playgroundDir());
+}
+
+/** Tag playground projects at the IPC boundary (not persisted in SQLite). */
+function decorateProject(project: ProjectSummary): ProjectSummary {
+  const playground = isPlaygroundPath(project.path);
+  return {
+    ...project,
+    ...(playground
+      ? {
+          isPlayground: true,
+          // Keep the sidebar / picker label honest even if an older row stored "playground".
+          name: project.name === 'playground' ? 'Scratch playground' : project.name,
+        }
+      : { isPlayground: false }),
+  };
+}
+
+async function resolveOnboardingState() {
+  const store = getProviderSettings();
+  // After the one-shot upgrade write, skip DB/runtime evidence gathering.
+  if (store.hasOnboardingRecord()) {
+    return store.getOnboarding();
+  }
+  const db = await getDb();
+  const projects = db.projects.listRecent(100);
+  const hasRealProject = projects.some((project) => !isPlaygroundPath(project.path));
+  let hasAuth = store.list().length > 0;
+  if (!hasAuth) {
+    try {
+      hasAuth = (await readAuthStatus(await ensureRuntime())).some((entry) => entry.hasAuth);
+    } catch {
+      // Runtime may not be ready on the very first prefs read; saved keys alone
+      // are enough to treat an upgrade as experienced.
+    }
+  }
+  const hasSession = db.sessions.listAll().length > 0;
+  return store.ensureOnboardingMigrated({
+    hasRealProject,
+    hasAuth,
+    hasSession,
+  });
+}
+
 function getUpdates(): UpdateService {
   if (!updates) {
     updates = new UpdateService();
@@ -847,7 +897,10 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
             .refreshIfStale(project.id)
             .catch((error) => console.error('[main] index refresh failed', error));
         }
-        return okResult(project satisfies ProjectSummary);
+        if (!isPlaygroundPath(project.path)) {
+          getProviderSettings().patchOnboarding({ hasOpenedProject: true });
+        }
+        return okResult(decorateProject(project) satisfies ProjectSummary);
       }
       case 'project.pickFolder': {
         const configuredRoot = getProviderSettings().getUiFlags().defaultProjectsFolder;
@@ -864,11 +917,22 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         if (result.canceled || !result.filePaths[0]) {
           return errResult('CANCELLED', 'Folder picker cancelled');
         }
-        const project = await projects.open(result.filePaths[0]);
-        return okResult(project satisfies ProjectSummary);
+        let project = await projects.open(result.filePaths[0]);
+        if (!project.trusted && getProviderSettings().getUiFlags().trustNewProjects) {
+          project = await projects.setTrust(project.id, true);
+        }
+        if (project.trusted) {
+          void getIndexService(db)
+            .refreshIfStale(project.id)
+            .catch((error) => console.error('[main] index refresh failed', error));
+        }
+        if (!isPlaygroundPath(project.path)) {
+          getProviderSettings().patchOnboarding({ hasOpenedProject: true });
+        }
+        return okResult(decorateProject(project) satisfies ProjectSummary);
       }
       case 'project.listRecent': {
-        return okResult(projects.listRecent());
+        return okResult(projects.listRecent().map(decorateProject));
       }
       case 'project.openPlayground': {
         // A scratch workspace so "New task" works before you have picked a
@@ -876,13 +940,16 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         // create it, so we should not be putting directories where they keep
         // their own work. Auto-trusted for the same reason — it is our own empty
         // directory, not something of theirs we are claiming permission over.
-        const dir = path.join(app.getPath('userData'), 'playground');
+        const dir = playgroundDir();
         await fsp.mkdir(dir, { recursive: true });
         let playground = await projects.open(dir);
         if (!playground.trusted) {
           playground = await projects.setTrust(playground.id, true);
         }
-        return okResult(playground satisfies ProjectSummary);
+        if (playground.name === 'playground') {
+          playground = await projects.put({ ...playground, name: 'Scratch playground' });
+        }
+        return okResult(decorateProject(playground) satisfies ProjectSummary);
       }
       case 'project.setTrust': {
         const project = await projects.setTrust(cmd.params.projectId, cmd.params.trusted);
@@ -895,7 +962,7 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         } else {
           getIndexService(db).forget(project.id);
         }
-        return okResult(project);
+        return okResult(decorateProject(project));
       }
       case 'git.getWorkingTreeDiff': {
         const project = projects.get(cmd.params.projectId);
@@ -916,6 +983,7 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       case 'provider.saveApiKey': {
         getProviderSettings().saveApiKey(cmd.params.providerId, cmd.params.apiKey);
         await agent.configureProvider?.(cmd.params.providerId, cmd.params.apiKey);
+        getProviderSettings().patchOnboarding({ hasConfiguredAuth: true });
         return okResult({ configured: true });
       }
       case 'provider.remove': {
@@ -927,6 +995,7 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         return okResult({
           defaultModel: getProviderSettings().getDefaultModel(),
           uiFlags: getProviderSettings().getUiFlags(),
+          onboarding: await resolveOnboardingState(),
         });
       }
       case 'settings.setDefaultModel': {
@@ -1075,6 +1144,8 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
           sessionId: meta.id,
         });
         await sessions.touch(cmd.params.sessionId);
+        // First successful send completes onboarding step 3 (run started).
+        getProviderSettings().patchOnboarding({ hasFirstRun: true });
         return okResult(ref);
       }
       case 'agent.steer': {
@@ -1627,6 +1698,12 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         getProviderSettings().setUiFlag(cmd.params.key, cmd.params.value);
         if (cmd.params.key === 'autoUpdate') getUpdates().configure(cmd.params.value);
         return okResult(getProviderSettings().getUiFlags());
+      }
+      case 'settings.getOnboarding': {
+        return okResult(await resolveOnboardingState());
+      }
+      case 'settings.patchOnboarding': {
+        return okResult(getProviderSettings().patchOnboarding(cmd.params));
       }
       case 'diagnostics.export': {
         return okResult(exportDiagnostics());
