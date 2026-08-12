@@ -22,6 +22,9 @@ interface AppShellProps {
  * Chrome bar over a 210px sidebar, the working column, and the optional
  * right-hand dock. The dock brings its own width and resizer, so this lays out
  * the row and stays out of it.
+ *
+ * Sidebar collapse lives in the TitleBar (same row as brand / window controls)
+ * so Windows does not get an orphaned collapse-only row under a native title bar.
  */
 export function AppShell({
   sidebar,
