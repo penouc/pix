@@ -118,6 +118,62 @@ describe('ProviderSettingsStore', () => {
     expect(existsSync(encPath)).toBe(false);
   });
 
+  it('persists onboarding skip and step completion without touching secrets', () => {
+    const store = new ProviderSettingsStore(encPath);
+    expect(store.hasOnboardingRecord()).toBe(false);
+
+    const migrated = store.ensureOnboardingMigrated({
+      hasRealProject: false,
+      hasAuth: false,
+      hasSession: false,
+    });
+    expect(migrated.completed).toBe(false);
+    expect(store.hasOnboardingRecord()).toBe(true);
+
+    const skipped = store.patchOnboarding({ skipped: true });
+    expect(skipped.completed).toBe(true);
+    expect(skipped.skipped).toBe(true);
+
+    const reloaded = new ProviderSettingsStore(encPath);
+    expect(reloaded.getOnboarding()).toEqual(skipped);
+    expect(existsSync(encPath)).toBe(false);
+  });
+
+  it('marks experienced upgrades completed on first onboarding read', () => {
+    const store = new ProviderSettingsStore(encPath);
+    const state = store.ensureOnboardingMigrated({
+      hasRealProject: true,
+      hasAuth: true,
+      hasSession: true,
+    });
+    expect(state.completed).toBe(true);
+    expect(state.hasOpenedProject).toBe(true);
+    expect(state.hasConfiguredAuth).toBe(true);
+    expect(state.hasFirstRun).toBe(true);
+    // Preserve the pre-wiring behaviour of always restoring the last project.
+    expect(store.getUiFlags().reopenLastProject).toBe(true);
+
+    // Second call must not rewrite a skipped/completed user back to defaults.
+    store.patchOnboarding({ skipped: true });
+    const again = store.ensureOnboardingMigrated({
+      hasRealProject: false,
+      hasAuth: false,
+      hasSession: false,
+    });
+    expect(again.skipped).toBe(true);
+    expect(again.completed).toBe(true);
+  });
+
+  it('does not enable reopenLastProject for a clean first install', () => {
+    const store = new ProviderSettingsStore(encPath);
+    store.ensureOnboardingMigrated({
+      hasRealProject: false,
+      hasAuth: false,
+      hasSession: false,
+    });
+    expect(store.getUiFlags().reopenLastProject).toBe(false);
+  });
+
   it('migrates legacy encrypted blobs that mixed secrets and prefs', () => {
     const legacy = {
       providers: [{ providerId: 'anthropic', apiKey: 'sk-legacy' }],

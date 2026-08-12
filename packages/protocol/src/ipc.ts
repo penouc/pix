@@ -111,6 +111,11 @@ export const ProjectSummarySchema = z.object({
   trusted: z.boolean(),
   isGit: z.boolean(),
   lastOpenedAt: z.number().int().nonnegative(),
+  /**
+   * True for the app-owned scratch workspace under userData/playground.
+   * Computed at the IPC boundary — not a SQLite column.
+   */
+  isPlayground: z.boolean().optional(),
 });
 export type ProjectSummary = z.infer<typeof ProjectSummarySchema>;
 
@@ -388,9 +393,25 @@ export const AuditSummarySchema = z.object({
 });
 export type AuditSummary = z.infer<typeof AuditSummarySchema>;
 
+/**
+ * User-level first-run onboarding (docs/onboarding.md). Lives next to UiFlags in
+ * plain preferences — never in project SQLite.
+ */
+export const OnboardingStateSchema = z.object({
+  /** Three steps done, or the user skipped — checklist never blocks again. */
+  completed: z.boolean(),
+  /** Explicit Skip; treated as completed for display, kept for analytics/debug. */
+  skipped: z.boolean(),
+  hasOpenedProject: z.boolean(),
+  hasConfiguredAuth: z.boolean(),
+  hasFirstRun: z.boolean(),
+});
+export type OnboardingState = z.infer<typeof OnboardingStateSchema>;
+
 export const SettingsSchema = z.object({
   defaultModel: ModelSelectionSchema.optional(),
   uiFlags: UiFlagsSchema.optional(),
+  onboarding: OnboardingStateSchema.optional(),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 

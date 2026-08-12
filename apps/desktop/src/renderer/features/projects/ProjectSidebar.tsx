@@ -230,7 +230,11 @@ export function ProjectSidebar({
               .map((item) => (
                 <ProjectBranch
                   key={item.id}
-                  project={item}
+                  project={
+                    item.isPlayground
+                      ? { ...item, name: item.name === 'playground' ? 'Scratch playground' : item.name }
+                      : item
+                  }
                   isActive={project?.id === item.id}
                   expanded={expanded.has(item.id)}
                   busy={busy}
@@ -245,7 +249,7 @@ export function ProjectSidebar({
                 />
               ))
           ) : (
-            <EmptyHint>No projects yet</EmptyHint>
+            <EmptyHint>No projects yet — open a folder to begin</EmptyHint>
           )}
         </div>
       </div>

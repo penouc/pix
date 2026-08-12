@@ -5,6 +5,20 @@ import { safeStorage } from 'electron';
 
 import type { AutoModelConfig, ModelSelection } from '@pi-desktop/protocol';
 
+import {
+  mergeOnboarding,
+  migrateOnboardingFromEvidence,
+  normalizeOnboarding,
+  type OnboardingEvidence,
+  type OnboardingState,
+} from '../../shared/onboarding-state.js';
+
+export type { OnboardingState, OnboardingEvidence } from '../../shared/onboarding-state.js';
+export {
+  DEFAULT_ONBOARDING_STATE,
+  ONBOARDING_STARTER_PROMPT,
+} from '../../shared/onboarding-state.js';
+
 interface StoredProvider {
   providerId: string;
   apiKey: string;
@@ -70,6 +84,8 @@ interface PlainPreferences {
    * model through provider drill-down and search regardless of this list.
    */
   favoriteModels?: string[];
+  /** First-run checklist progress — user-level, not project SQLite. */
+  onboarding?: Partial<OnboardingState>;
 }
 
 /** Legacy shape: secrets + prefs were one encrypted blob. */
@@ -178,6 +194,52 @@ export class ProviderSettingsStore {
     this.writePrefs(prefs);
   }
 
+  getOnboarding(): OnboardingState {
+    return normalizeOnboarding(this.readPrefs().onboarding);
+  }
+
+  /**
+   * True once `onboarding` has been written (including a fresh-install default).
+   * Used so upgrade migration runs only once.
+   */
+  hasOnboardingRecord(): boolean {
+    return this.readPrefs().onboarding !== undefined;
+  }
+
+  patchOnboarding(patch: Partial<OnboardingState>): OnboardingState {
+    const prefs = this.readPrefs();
+    const next = mergeOnboarding(normalizeOnboarding(prefs.onboarding), patch);
+    prefs.onboarding = next;
+    this.writePrefs(prefs);
+    return next;
+  }
+
+  /**
+   * Ensure onboarding exists. Existing installs with project/auth/session are
+   * marked completed so an upgrade does not force the checklist.
+   *
+   * Experienced upgrades also turn on `reopenLastProject`: before this flag was
+   * wired, the blank Run always restored the last project, so keeping that
+   * behaviour avoids a silent regression for people already using the app.
+   */
+  ensureOnboardingMigrated(evidence: OnboardingEvidence): OnboardingState {
+    const prefs = this.readPrefs();
+    const hadRecord = prefs.onboarding !== undefined;
+    const { state, shouldPersist } = migrateOnboardingFromEvidence(prefs.onboarding, evidence);
+    if (shouldPersist) {
+      prefs.onboarding = state;
+      if (
+        !hadRecord &&
+        state.completed &&
+        (evidence.hasRealProject || evidence.hasSession || evidence.hasAuth)
+      ) {
+        prefs.uiFlags = { ...(prefs.uiFlags ?? {}), reopenLastProject: true };
+      }
+      this.writePrefs(prefs);
+    }
+    return state;
+  }
+
   private readEncrypted(): EncryptedSettings {
     this.migrateLegacyIfNeeded();
     if (!existsSync(this.filePath)) return { providers: [] };
@@ -219,6 +281,7 @@ export class ProviderSettingsStore {
           : Array.isArray((parsed as { visibleModels?: string[] }).visibleModels)
             ? { favoriteModels: (parsed as { visibleModels?: string[] }).visibleModels }
             : {}),
+        ...(parsed.onboarding ? { onboarding: parsed.onboarding } : {}),
       };
     } catch {
       return {};

@@ -45,6 +45,7 @@ import type {
   ProjectSummary,
   RunRef,
   SessionMode,
+  Settings,
   SkillInfo,
   StoredMessage,
 } from '@pi-desktop/protocol';
@@ -67,6 +68,11 @@ import { ThinkingPlaceholderRow, ThinkingStreamRow } from '@/features/chat/Think
 import { Markdown } from '@/features/chat/Markdown';
 import { ModelPicker } from '@/features/models/ModelPicker';
 import { AUTO_MODEL_KEY } from '@/features/models/model-key';
+import { OnboardingChecklist } from '@/features/onboarding/OnboardingChecklist';
+import {
+  ONBOARDING_STARTER_PROMPT,
+  useOnboarding,
+} from '@/features/onboarding/use-onboarding';
 import { useCreateTask } from '@/features/sessions/use-create-task';
 import { invoke, IpcError } from '@/lib/ipc';
 import { useAnchorAbove, useDismiss } from '@/lib/use-dismiss';
@@ -140,6 +146,10 @@ interface ChatPanelProps {
   onTaskStarted: () => void;
   /** `/new` — start a fresh task from the composer. */
   onNewTask: () => void;
+  /** Open Settings → Providers (onboarding + no-auth CTA). */
+  onOpenProviders: () => void;
+  /** OS folder picker — same path as ⌘O / sidebar. */
+  onBrowseForProject: () => void;
 }
 
 export function ChatPanel({
@@ -150,6 +160,8 @@ export function ChatPanel({
   blank,
   onTaskStarted,
   onNewTask,
+  onOpenProviders,
+  onBrowseForProject,
 }: ChatPanelProps) {
   const session = useWorkspaceStore((s) => s.session);
   const project = useWorkspaceStore((s) => s.project);
@@ -224,6 +236,12 @@ export function ChatPanel({
   }
 
   const queryClient = useQueryClient();
+  const onboarding = useOnboarding();
+  const uiSettings = useQuery({
+    queryKey: ['settings.get'],
+    queryFn: () => invoke<Settings>({ method: 'settings.get' }),
+  });
+  const reopenLastProject = uiSettings.data?.uiFlags?.reopenLastProject === true;
   const recentProjects = useQuery({
     queryKey: ['project.listRecent'],
     queryFn: () => invoke<ProjectSummary[]>({ method: 'project.listRecent' }),
@@ -232,12 +250,27 @@ export function ChatPanel({
     const byId = new Map<string, ProjectSummary>();
     if (project) byId.set(project.id, project);
     for (const item of recentProjects.data ?? []) byId.set(item.id, item);
-    return [
-      ...[...byId.values()]
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map((item) => ({ value: item.id, label: item.name, sublabel: item.path })),
-      { value: '__browse__', label: 'Open another folder…', sublabel: 'Choose a project folder' },
-    ];
+    const options = [...byId.values()]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((item) => ({
+        value: item.id,
+        label: item.isPlayground ? 'Scratch playground' : item.name,
+        sublabel: item.isPlayground ? 'App scratch space — not a real project' : item.path,
+      }));
+    if (project?.isPlayground) {
+      options.push({
+        value: '__browse__',
+        label: 'Open a real folder…',
+        sublabel: 'Leave the scratch playground',
+      });
+    } else {
+      options.push({
+        value: '__browse__',
+        label: 'Open another folder…',
+        sublabel: 'Choose a project folder',
+      });
+    }
+    return options;
   }, [project, recentProjects.data]);
 
   async function selectProject(projectId: string) {
@@ -277,7 +310,10 @@ export function ChatPanel({
     }
   }, [project, session]);
 
+  // Settings → "Reopen last project" (UiFlag). Off by default so a clean first
+  // launch stays on the onboarding checklist instead of silently restoring.
   useEffect(() => {
+    if (!reopenLastProject) return;
     if (!blank || project || !recentProjects.data?.length) return;
     let preferredId = '';
     try {
@@ -285,14 +321,69 @@ export function ChatPanel({
     } catch {
       // Fall back to the most recently opened project below.
     }
+    const realProjects = recentProjects.data.filter((item) => !item.isPlayground);
+    const pool = realProjects.length ? realProjects : recentProjects.data;
     const fallback =
-      recentProjects.data.find((item) => item.id === preferredId) ??
-      [...recentProjects.data].sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)[0];
+      pool.find((item) => item.id === preferredId) ??
+      [...pool].sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)[0];
     if (!fallback) return;
     setProject(fallback);
     resetSessionView();
     setScope(fallback.id, null);
-  }, [blank, project, recentProjects.data, resetSessionView, setProject, setScope]);
+  }, [
+    blank,
+    project,
+    recentProjects.data,
+    reopenLastProject,
+    resetSessionView,
+    setProject,
+    setScope,
+  ]);
+
+  async function openPlayground() {
+    setProjectSwitching(true);
+    setProjectSwitchError(null);
+    try {
+      const opened = await invoke<ProjectSummary>({ method: 'project.openPlayground' });
+      setProject(opened);
+      resetSessionView();
+      setScope(opened.id, null);
+      await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
+      focusComposer();
+    } catch (err) {
+      setProjectSwitchError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setProjectSwitching(false);
+    }
+  }
+
+  const starterPrefillRef = useRef(false);
+
+  function useStarterPrompt() {
+    starterPrefillRef.current = true;
+    setDraft(ONBOARDING_STARTER_PROMPT);
+    focusComposer();
+  }
+
+  // Prefill the editable starter once when project + auth land (not again if
+  // the user clears the composer).
+  useEffect(() => {
+    if (!blank || !onboarding.showChecklist) return;
+    if (!onboarding.steps.openProject || !onboarding.steps.addModel) return;
+    if (onboarding.steps.firstMessage) return;
+    if (starterPrefillRef.current) return;
+    if (draft.trim()) return;
+    starterPrefillRef.current = true;
+    setDraft(ONBOARDING_STARTER_PROMPT);
+  }, [
+    blank,
+    onboarding.showChecklist,
+    onboarding.steps.openProject,
+    onboarding.steps.addModel,
+    onboarding.steps.firstMessage,
+    draft,
+    setDraft,
+  ]);
 
   // Transient controls reset between tasks, while each task's unsent draft lives
   // in composerDraftStore and returns when the user comes back.
@@ -888,6 +979,8 @@ export function ChatPanel({
         method: 'agent.sendMessage',
         params: { sessionId: active.id, text, ...(images.length ? { images } : {}) },
       });
+      // Main also patches this; keep the checklist in sync without waiting for refetch.
+      onboarding.markFirstRun();
     } catch (err) {
       console.error(err);
       // A slow failure from a task we already left must not turn the new task's
@@ -1144,16 +1237,51 @@ export function ChatPanel({
           <div className="px-5 pt-5" style={{ paddingBottom: composerPad + 48 }}>
             <div className="mx-auto flex w-full min-w-0 max-w-[760px] flex-col gap-3">
               {!timeline.length && !approval ? (
-                <div className="flex flex-col items-center gap-2 px-5 py-20 text-center">
-                  <div className="text-sm font-bold">
-                    {project ? 'Describe what it should do' : 'Choose a project to start'}
+                blank && onboarding.showChecklist ? (
+                  <OnboardingChecklist
+                    steps={onboarding.steps}
+                    onOpenFolder={onBrowseForProject}
+                    onOpenPlayground={() => void openPlayground()}
+                    onOpenProviders={onOpenProviders}
+                    onUseStarter={useStarterPrompt}
+                    onSkip={() => onboarding.skip()}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center gap-2 px-5 py-20 text-center">
+                    <div className="text-sm font-bold">
+                      {project?.isPlayground
+                        ? 'Scratch playground'
+                        : project
+                          ? 'Describe what it should do'
+                          : 'Choose a project to start'}
+                    </div>
+                    <p className="max-w-[320px] text-[12.5px] leading-relaxed text-muted">
+                      {project?.isPlayground
+                        ? 'A temporary workspace under app data — open a real folder when you want to work on a project.'
+                        : project
+                          ? "Type or attach a screenshot below — @ for a file, $ for a skill, / for commands, ⌘K to search. It'll read the project, plan, then ask before running anything risky."
+                          : 'Choose a project above the composer. You can start typing while it loads.'}
+                    </p>
+                    {project?.isPlayground ? (
+                      <Button size="sm" variant="secondary" onClick={onBrowseForProject}>
+                        <FolderOpen className="h-3.5 w-3.5" />
+                        Open a real folder…
+                      </Button>
+                    ) : null}
+                    {!onboarding.hasAuth && project ? (
+                      <p className="max-w-[320px] text-[12.5px] leading-relaxed text-muted">
+                        Add a provider under Settings to run the agent.{' '}
+                        <button
+                          type="button"
+                          onClick={onOpenProviders}
+                          className="cursor-pointer border-0 bg-transparent p-0 font-bold text-accent-800 underline-offset-2 hover:underline"
+                        >
+                          Open Providers
+                        </button>
+                      </p>
+                    ) : null}
                   </div>
-                  <p className="max-w-[320px] text-[12.5px] leading-relaxed text-muted">
-                    {project
-                      ? "Type or attach a screenshot below — @ for a file, $ for a skill, / for commands, ⌘K to search. It'll read the project, plan, then ask before running anything risky."
-                      : 'Choose a project above the composer. You can start typing while it loads.'}
-                  </p>
-                </div>
+                )
               ) : null}
 
               {timeline.map((entry) =>
@@ -1796,7 +1924,7 @@ export function ChatPanel({
                 />
                 {/* Model choice belongs with the send button: it is a property of the
                     message you are about to send, not of the window. */}
-                <ModelPicker />
+                <ModelPicker onAddProvider={onOpenProviders} />
                 {running ? (
                   <button
                     type="button"

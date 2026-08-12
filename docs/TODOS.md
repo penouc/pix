@@ -3,7 +3,7 @@
 > **Authoritative product/engineering master plan:** [`./product-and-engineering-plan.md`](./product-and-engineering-plan.md) (v1.0 · 2026-07-24)  
 > **This file's job:** break the master plan into executable todos, track current status, and prevent skipping acceptance gates.  
 > **Progression principle (master plan §0):** each phase only proceeds to the next after its corresponding acceptance criteria pass; nothing that doesn't affect the first complete user journey may block the MVP.  
-> **Last updated:** 2026-07-24 (Pi SDK 0.82.0 session integration)
+> **Last updated:** 2026-08-12 (first-run onboarding P0+P1)
 
 ---
 
@@ -541,7 +541,19 @@ Each item needs its own ADR + evaluation + security review.
 |-----|------|
 | [`omp-capability-todo.md`](./omp-capability-todo.md) | OMP 紧急能力完成状态 |
 | [`omp-capability-borrow.md`](./omp-capability-borrow.md) | OMP 对照与借鉴说明 |
-| [`onboarding.md`](./onboarding.md) | 新装 / 首启 checklist 与 onboarding 约定（尚未实现） |
+| [`onboarding.md`](./onboarding.md) | 新装 / 首启 checklist 与 onboarding 约定（P0+P1 已落地） |
+
+### 9.4 First-run onboarding (2026-08-12)
+
+- [x] User-level onboarding state in `app-preferences.json` (completed / skipped / step flags)
+- [x] Blank Run three-step checklist + Skip
+- [x] Open folder / scratch playground / Providers deep-link / starter prompt
+- [x] Model picker “Add a provider…” CTA when no auth
+- [x] Wire `reopenLastProject` + Settings toggle; preserve restore for upgraded users
+- [x] Align Trust Settings copy with silent first-send trust
+- [x] Playground labeling + “Open a real folder…”
+- [x] Unit tests for onboarding transitions + store persistence + IPC schema
+- [ ] Manual acceptance on clean userData (see [`onboarding.md`](./onboarding.md) 验收)
 ---
 
 ## 10. Changelog
@@ -574,6 +586,7 @@ Each item needs its own ADR + evaluation + security review.
 | 2026-07-25 | M8-3: added 5 fixtures (needs-clarification, workspace-outside-read, dangerous-command-risk, cancel-long-task, precise-revert); `verify:fixtures` covers all 11 fixtures; clarification's conservative change and precise-revert's post-hoc verification are both covered; Playwright E2E covers `app.getInfo`, project, trust, session, send, and cancel |
 | 2026-07-25 | M8-4: electron-builder.yml adds a DMG target (arm64); `scripts/verify-packaged.mjs` validates the bundle/asar/native loadability/DMG artifact; `pnpm verify:packaged` script; uninstall-path documentation |
 | 2026-08-07 | Added [`onboarding.md`](./onboarding.md): first-run checklist + layered onboarding proposal; linked from §9.3 |
+| 2026-08-12 | Implemented first-run onboarding P0+P1 per [`onboarding.md`](./onboarding.md): user-level state, blank-Run checklist, Providers CTA, `reopenLastProject`, Trust copy, playground labeling; §9.4 ledger |
 
 ---
 
