@@ -79,13 +79,21 @@ Windows checkout with default `core.autocrlf=true` would otherwise turn every te
 break both string-comparison tests and line hashing. Windows CI (`windows-check` in `ci.yml`)
 guards this permanently.
 
-### 5. Window chrome: native frame on Windows
+### 5. Window chrome: custom title bar + Window Controls Overlay on Windows
 
-`titleBarStyle: 'hiddenInset'` is macOS-specific styling. On Windows it is ignored, but keeping it
-spread across the BrowserWindow options implied a hidden title bar that does not exist.
+`titleBarStyle: 'hiddenInset'` is macOS-specific. An earlier revision left Windows on the default
+native frame while the renderer still drew a custom `TitleBar`, which stacked two bars and left
+the sidebar collapse control looking stranded (macOS traffic-light left inset with nothing to
+inset for).
 
-**Decision:** `hiddenInset` + `trafficLightPosition` are set only on darwin; Windows uses the
-native frame so close/minimise/drag behave like every other Windows app.
+**Decision:** platform chrome is centralised in `apps/desktop/src/main/platform/window-chrome.ts`:
+
+- **macOS:** `hiddenInset` + `trafficLightPosition` (unchanged).
+- **Windows:** `titleBarStyle: 'hidden'` + `titleBarOverlay` (colour/height matched to the
+  renderer surface / 36px title bar) so caption buttons sit in the same chrome as PiX — one top
+  bar, no stacked OS title bar. The renderer TitleBar skips the traffic-light spacer on Windows
+  and pads the right edge with `env(titlebar-area-*)` so controls stay clickable.
+- **Linux:** default native frame (not a first-class Beta target).
 
 ### 6. Release pipeline: parallel per-platform builds, one publish
 

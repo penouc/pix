@@ -1,4 +1,13 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, session, shell } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  nativeImage,
+  nativeTheme,
+  session,
+  shell,
+} from 'electron';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -72,6 +81,10 @@ import { AutomationStore } from './automations/automation-store.js';
 import { AutomationScheduler } from './automations/automation-scheduler.js';
 import { UpdateService } from './updates/update-service.js';
 import { runPreflight } from './platform/environment.js';
+import {
+  windowChromeOptions,
+  windowsTitleBarOverlay,
+} from './platform/window-chrome.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -363,15 +376,11 @@ function createWindow(): void {
     ...(iconPath ? { icon: iconPath } : {}),
     // Organic ground (--color-bg) — avoids a flash of a different colour on show.
     backgroundColor: '#f8faf8',
-    // macOS gets the hidden-inset title bar with custom traffic-light spacing;
-    // Windows keeps the native frame so close/minimise/drag behave like every
-    // other Windows app (plan: Windows support).
-    ...(process.platform === 'darwin'
-      ? {
-          titleBarStyle: 'hiddenInset' as const,
-          trafficLightPosition: { x: 14, y: 9 } as { x: number; y: number },
-        }
-      : {}),
+    // macOS: hiddenInset + traffic lights. Windows: single custom title bar with
+    // Window Controls Overlay (no stacked native title bar). See ADR-0004 §5.
+    ...windowChromeOptions(process.platform, {
+      dark: nativeTheme.shouldUseDarkColors,
+    }),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.mjs'),
       contextIsolation: true,
@@ -379,6 +388,15 @@ function createWindow(): void {
       sandbox: true,
     },
   });
+
+  let syncWindowsOverlay: (() => void) | null = null;
+  if (process.platform === 'win32') {
+    syncWindowsOverlay = () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      mainWindow.setTitleBarOverlay(windowsTitleBarOverlay(nativeTheme.shouldUseDarkColors));
+    };
+    nativeTheme.on('updated', syncWindowsOverlay);
+  }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     // Never a new Electron window — and only schemes the OS should be handed.
@@ -397,6 +415,10 @@ function createWindow(): void {
   }
 
   mainWindow.on('closed', () => {
+    if (syncWindowsOverlay) {
+      nativeTheme.removeListener('updated', syncWindowsOverlay);
+      syncWindowsOverlay = null;
+    }
     browserPreview.detach();
     mainWindow = null;
   });
