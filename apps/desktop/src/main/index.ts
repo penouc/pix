@@ -196,10 +196,15 @@ function decorateProject(project: ProjectSummary): ProjectSummary {
 }
 
 async function resolveOnboardingState() {
+  const store = getProviderSettings();
+  // After the one-shot upgrade write, skip DB/runtime evidence gathering.
+  if (store.hasOnboardingRecord()) {
+    return store.getOnboarding();
+  }
   const db = await getDb();
   const projects = db.projects.listRecent(100);
   const hasRealProject = projects.some((project) => !isPlaygroundPath(project.path));
-  let hasAuth = getProviderSettings().list().length > 0;
+  let hasAuth = store.list().length > 0;
   if (!hasAuth) {
     try {
       hasAuth = (await readAuthStatus(await ensureRuntime())).some((entry) => entry.hasAuth);
@@ -209,7 +214,7 @@ async function resolveOnboardingState() {
     }
   }
   const hasSession = db.sessions.listAll().length > 0;
-  return getProviderSettings().ensureOnboardingMigrated({
+  return store.ensureOnboardingMigrated({
     hasRealProject,
     hasAuth,
     hasSession,
