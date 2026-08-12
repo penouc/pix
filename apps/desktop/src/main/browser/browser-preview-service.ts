@@ -1,4 +1,4 @@
-import { BrowserWindow, WebContentsView, shell } from 'electron';
+import { WebContentsView, shell, type BrowserWindow } from 'electron';
 
 import type {
   BrowserBounds,
