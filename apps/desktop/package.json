@@ -12,10 +12,12 @@
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "vitest run --config ../../vitest.config.ts --dir src",
     "preview": "vite preview",
-    "package:dir": "pnpm build && electron-builder --mac dir --config electron-builder.yml --publish never --config.mac.identity=null --config.mac.hardenedRuntime=false --config.mac.notarize=false",
-    "package:dmg": "pnpm build && electron-builder --mac dmg --config electron-builder.yml --publish never --config.mac.identity=null --config.mac.hardenedRuntime=false --config.mac.notarize=false",
-    "package:win:dir": "pnpm build && electron-builder --win dir --x64 --config electron-builder.yml --publish never",
-    "package:win": "pnpm build && electron-builder --win nsis zip --x64 --config electron-builder.yml --publish never"
+    "rebuild:native": "electron-rebuild -f -w node-pty",
+    "postinstall": "electron-rebuild -f -w node-pty || true",
+    "package:dir": "pnpm rebuild:native && pnpm build && electron-builder --mac dir --config electron-builder.yml --publish never --config.mac.identity=null --config.mac.hardenedRuntime=false --config.mac.notarize=false",
+    "package:dmg": "pnpm rebuild:native && pnpm build && electron-builder --mac dmg --config electron-builder.yml --publish never --config.mac.identity=null --config.mac.hardenedRuntime=false --config.mac.notarize=false",
+    "package:win:dir": "pnpm rebuild:native && pnpm build && electron-builder --win dir --x64 --config electron-builder.yml --publish never",
+    "package:win": "pnpm rebuild:native && pnpm build && electron-builder --win nsis zip --x64 --config electron-builder.yml --publish never"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.83.0",
@@ -29,11 +31,15 @@
     "@pierre/diffs": "1.2.12",
     "@streamdown/code": "^1.1.1",
     "@tanstack/react-query": "^5.80.6",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-web-links": "^0.12.0",
+    "@xterm/xterm": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cross-spawn": "^7.0.6",
     "electron-updater": "^6.8.9",
     "lucide-react": "^0.513.0",
+    "node-pty": "^1.1.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "streamdown": "^2.5.0",
@@ -44,6 +50,7 @@
     "zustand": "^5.0.5"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
     "@tailwindcss/vite": "^4.1.8",
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.5",

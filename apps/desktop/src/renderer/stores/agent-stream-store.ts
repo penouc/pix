@@ -216,6 +216,8 @@ function shouldAccept(
     | { type: 'ask.pending' }
     | { type: 'ask.resolved' }
     | { type: 'update.status' }
+    | { type: 'terminal.data' }
+    | { type: 'terminal.exit' }
   >,
 ): boolean {
   if (state.activeProjectId && event.projectId !== state.activeProjectId) return false;
@@ -673,6 +675,8 @@ export const useAgentStreamStore = create<AgentStreamState>((set, get) => ({
     if (event.type === 'session.updated') return;
     // App update progress shares the IPC bus but is not an agent stream event.
     if (event.type === 'update.status') return;
+    // Interactive Terminal PTY output — handled by TerminalView, not the chat stream.
+    if (event.type === 'terminal.data' || event.type === 'terminal.exit') return;
 
     if (event.type === 'context.updated') {
       const state = get();

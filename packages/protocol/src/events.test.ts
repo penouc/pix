@@ -217,4 +217,29 @@ describe('#11/#12 collaboration events', () => {
       }).success,
     ).toBe(true);
   });
+
+  it('accepts terminal.data and terminal.exit PTY events', () => {
+    expect(
+      DesktopAgentEventSchema.safeParse({
+        type: 'terminal.data',
+        projectId: 'p1',
+        ptySessionId: 'pty-1',
+        sequence: 1,
+        timestamp: Date.now(),
+        dataBase64: Buffer.from('hi').toString('base64'),
+        data: 'hi',
+      }).success,
+    ).toBe(true);
+    expect(
+      DesktopAgentEventSchema.safeParse({
+        type: 'terminal.exit',
+        projectId: 'p1',
+        ptySessionId: 'pty-1',
+        sequence: 2,
+        timestamp: Date.now(),
+        exitCode: 0,
+        signal: null,
+      }).success,
+    ).toBe(true);
+  });
 });

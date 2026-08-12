@@ -375,6 +375,42 @@ export const TerminalChangeDirectoryInputSchema = z.object({
 });
 export type TerminalChangeDirectoryInput = z.infer<typeof TerminalChangeDirectoryInputSchema>;
 
+/** Open a persistent interactive PTY shell for the Terminal panel (ADR-0006). */
+export const TerminalOpenInputSchema = z.object({
+  projectId: z.string().min(1),
+  /** Initial working directory. Absolute or relative; confined to the project root. */
+  cwd: z.string().max(4096).optional(),
+  cols: z.number().int().min(2).max(1000).default(80),
+  rows: z.number().int().min(1).max(1000).default(24),
+});
+export type TerminalOpenInput = z.infer<typeof TerminalOpenInputSchema>;
+
+/** Write bytes to an open PTY session (UTF-8 string or base64). */
+export const TerminalWriteInputSchema = z
+  .object({
+    sessionId: z.string().min(1),
+    /** UTF-8 text from xterm `onData` (control characters included). */
+    data: z.string().max(65_536).optional(),
+    /** Base64 payload when the renderer needs binary-safe chunks. */
+    dataBase64: z.string().max(87_400).optional(),
+  })
+  .refine((value) => value.data != null || value.dataBase64 != null, {
+    message: 'terminal.write requires data or dataBase64',
+  });
+export type TerminalWriteInput = z.infer<typeof TerminalWriteInputSchema>;
+
+export const TerminalResizeInputSchema = z.object({
+  sessionId: z.string().min(1),
+  cols: z.number().int().min(2).max(1000),
+  rows: z.number().int().min(1).max(1000),
+});
+export type TerminalResizeInput = z.infer<typeof TerminalResizeInputSchema>;
+
+export const TerminalCloseInputSchema = z.object({
+  sessionId: z.string().min(1),
+});
+export type TerminalCloseInput = z.infer<typeof TerminalCloseInputSchema>;
+
 /** How much an automation may do without a human in the loop. */
 export const AutomationApprovalModeSchema = z.enum([
   /** Every elevated tool call waits for a person — an unattended run stalls. */
@@ -704,6 +740,10 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
     method: z.literal('terminal.changeDirectory'),
     params: TerminalChangeDirectoryInputSchema,
   }),
+  z.object({ method: z.literal('terminal.open'), params: TerminalOpenInputSchema }),
+  z.object({ method: z.literal('terminal.write'), params: TerminalWriteInputSchema }),
+  z.object({ method: z.literal('terminal.resize'), params: TerminalResizeInputSchema }),
+  z.object({ method: z.literal('terminal.close'), params: TerminalCloseInputSchema }),
   z.object({ method: z.literal('automation.list'), params: ListAutomationsInputSchema.optional() }),
   z.object({ method: z.literal('automation.save'), params: AutomationDraftSchema }),
   z.object({ method: z.literal('automation.delete'), params: AutomationIdInputSchema }),

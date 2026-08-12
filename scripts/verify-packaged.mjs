@@ -170,6 +170,13 @@ if (existsSync(unpacked)) {
   } else {
     console.warn('  ⚠  @earendil-works not in unpacked (Pi SDK may be entirely in asar)');
   }
+  // Interactive Terminal (ADR-0006) needs node-pty's native binding outside asar.
+  const nodePtyDir = path.join(unpacked, 'node-pty');
+  if (existsSync(nodePtyDir)) {
+    pass('node-pty unpacked for interactive Terminal PTY');
+  } else {
+    fail('node-pty missing from app.asar.unpacked (Terminal PTY will not load)');
+  }
 } else {
   console.warn(
     '  ⚠  no app.asar.unpacked/node_modules (acceptable if no native deps were unpacked)',

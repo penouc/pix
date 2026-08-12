@@ -33,13 +33,11 @@ export interface TerminalApprovalRequest {
 }
 
 /**
- * Runs a command the *user* typed in the Terminal panel.
+ * Non-interactive one-shot command runner (policy + capped capture).
  *
- * It is not a free shell: every command goes through the same
- * normalize → classify → policy → audit pipeline as an agent tool call, so
- * protected paths, workspace escapes and high-risk side effects are refused or
- * held for approval exactly as they are for the agent. There is no PTY, so no
- * interactive programs — one command, captured output.
+ * The Terminal panel uses PtySessionService for interactive PTY sessions
+ * (ADR-0006). This class remains for any caller that still needs a single
+ * audited `spawn` with workspace-confined cwd — it is not the UI shell.
  */
 export class TerminalService {
   private readonly pipeline: PermissionPipeline;

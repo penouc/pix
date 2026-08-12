@@ -99,6 +99,10 @@ export function App() {
         });
         return;
       }
+      // Interactive Terminal PTY stream — TerminalView subscribes separately.
+      if (event.type === 'terminal.data' || event.type === 'terminal.exit') {
+        return;
+      }
       applyEvent(event);
       // Terminal run events also refresh the task list (status badges, order).
       if (

@@ -1245,7 +1245,7 @@ A feature only counts as "implemented" if it satisfies all of the following:
 2. It crosses process boundaries via typed IPC with Zod validation;
 3. It has tests, including coverage of failure/security branches;
 4. Every number/path/status shown in the UI comes from a real data source;
-5. Known limitations are documented in a code comment or in this document (e.g., the terminal has no PTY, `allow-project` doesn't survive a restart).
+5. Known limitations are documented in a code comment or in this document (e.g., interactive PTY can `cd` outside the workspace after start — ADR-0006; `allow-project` doesn't survive a restart).
 
 
 # 32. State-Storage Inventory (v1.2)

@@ -214,6 +214,56 @@ describe('Compaction IPC commands', () => {
   });
 });
 
+describe('Interactive terminal PTY IPC commands', () => {
+  it('accepts open / write / resize / close', () => {
+    expect(
+      parseIpcCommand({
+        method: 'terminal.open',
+        params: { projectId: 'project-1', cols: 120, rows: 40 },
+      }).success,
+    ).toBe(true);
+    expect(
+      parseIpcCommand({
+        method: 'terminal.write',
+        params: { sessionId: 'pty-1', data: '\u0003' },
+      }).success,
+    ).toBe(true);
+    expect(
+      parseIpcCommand({
+        method: 'terminal.write',
+        params: { sessionId: 'pty-1', dataBase64: Buffer.from('x').toString('base64') },
+      }).success,
+    ).toBe(true);
+    expect(
+      parseIpcCommand({
+        method: 'terminal.resize',
+        params: { sessionId: 'pty-1', cols: 80, rows: 24 },
+      }).success,
+    ).toBe(true);
+    expect(
+      parseIpcCommand({
+        method: 'terminal.close',
+        params: { sessionId: 'pty-1' },
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects write without payload and invalid sizes', () => {
+    expect(
+      parseIpcCommand({
+        method: 'terminal.write',
+        params: { sessionId: 'pty-1' },
+      }).success,
+    ).toBe(false);
+    expect(
+      parseIpcCommand({
+        method: 'terminal.resize',
+        params: { sessionId: 'pty-1', cols: 1, rows: 24 },
+      }).success,
+    ).toBe(false);
+  });
+});
+
 describe('Browser preview IPC commands', () => {
   it('accepts attach, navigate, bounds, and picker commands', () => {
     expect(parseIpcCommand({ method: 'browser.attach' }).success).toBe(true);

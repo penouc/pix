@@ -1010,6 +1010,23 @@
     opacity: 0;
   }
 }
+
+/* Interactive Terminal (xterm.js) — fill the Dock output surface. */
+.pi-xterm-host {
+  overflow: hidden;
+}
+.pi-xterm-host .xterm {
+  height: 100%;
+  width: 100%;
+  padding: 0;
+}
+.pi-xterm-host .xterm-viewport {
+  overflow-y: auto !important;
+}
+.pi-xterm-host .xterm-helper-textarea {
+  /* Keep IME / key events inside the panel without stealing Dock chrome focus rings. */
+  outline: none;
+}
 @keyframes pi-think-pulse {
   0%,
   100% {
