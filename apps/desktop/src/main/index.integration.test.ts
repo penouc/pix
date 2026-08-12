@@ -48,10 +48,17 @@ const electron = vi.hoisted(() => {
       loadFile = vi.fn();
       loadURL = vi.fn();
       on = vi.fn();
+      isDestroyed = () => false;
+      setTitleBarOverlay = vi.fn();
     },
     dialog: { showOpenDialog: vi.fn() },
     ipcMain: { handle: vi.fn() },
     nativeImage: { createFromPath: vi.fn(() => ({ isEmpty: () => true })) },
+    nativeTheme: {
+      shouldUseDarkColors: false,
+      on: vi.fn(),
+      removeListener: vi.fn(),
+    },
     shell: { openExternal: vi.fn(), showItemInFolder: vi.fn() },
     session: {
       defaultSession: {
