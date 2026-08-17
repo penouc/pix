@@ -42,10 +42,7 @@ import {
 
 import { describeProtectedPaths } from '@pi-desktop/security';
 
-import {
-  BrowserPreviewError,
-  BrowserPreviewService,
-} from './browser/browser-preview-service.js';
+import { BrowserPreviewError, BrowserPreviewService } from './browser/browser-preview-service.js';
 
 // Dock / taskbar should say PiX, but userData must stay on the historical folder.
 // `productName` / `app.setName` alone would move Application Support to "PiX" and
@@ -82,10 +79,8 @@ import { AutomationStore } from './automations/automation-store.js';
 import { AutomationScheduler } from './automations/automation-scheduler.js';
 import { UpdateService } from './updates/update-service.js';
 import { runPreflight } from './platform/environment.js';
-import {
-  windowChromeOptions,
-  windowsTitleBarOverlay,
-} from './platform/window-chrome.js';
+import { windowChromeOptions, windowsTitleBarOverlay } from './platform/window-chrome.js';
+import { ipcMethodNeedsRuntime } from './ipc-runtime-gate.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -844,6 +839,31 @@ function ensureRuntime(): AgentRuntime {
   return runtime;
 }
 
+async function readyAgent(): Promise<AgentRuntime> {
+  const agent = ensureRuntime();
+  await applyPersistedProviderKeys(agent);
+  return agent;
+}
+
+/**
+ * Touched only if a DB-only IPC is misclassified as needing no runtime.
+ * Optional chaining still hits this trap, so a missed `agent.*` case fails loud.
+ */
+const missingAgent = new Proxy({} as AgentRuntime, {
+  get(_target, property) {
+    throw new Error(
+      `AgentRuntime is not initialized for this IPC method (accessed ${String(property)})`,
+    );
+  },
+});
+
+/** Warm Pi / saved keys after the window exists so later agent IPCs stay fast. */
+function preheatRuntime(): void {
+  void readyAgent().catch((error) => {
+    console.error('[main] runtime preheat failed', error);
+  });
+}
+
 /**
  * Rebuild the SDK-side session lazily from the SQLite record after a restart,
  * keeping the desktop session id so all subsequent IPC and events stay in the
@@ -878,9 +898,16 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
   }
 
   const cmd = parsed.data;
-  const agent = ensureRuntime();
-  await applyPersistedProviderKeys(agent);
-  const db = await getDb();
+  // DB-only / settings-only first-paint commands (project.listRecent, …) must
+  // not wait on Pi SDK construction or the models.dev catalog. settings.get
+  // still gathers onboarding auth via resolveOnboardingState() below — that
+  // path is allowed to touch the runtime, but it does not gate listRecent.
+  const needsRuntime = ipcMethodNeedsRuntime(cmd.method);
+  const [db, loadedAgent] = await Promise.all([
+    getDb(),
+    needsRuntime ? readyAgent() : Promise.resolve(undefined),
+  ]);
+  const agent = loadedAgent ?? missingAgent;
   const projects = db.projects;
   const sessions = db.sessions;
   checkpointRecovery ??= new CheckpointRecoveryService(db.checkpoints);
@@ -1552,11 +1579,7 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       case 'terminal.resize': {
         try {
           return okResult(
-            getPtySessionService().resize(
-              cmd.params.sessionId,
-              cmd.params.cols,
-              cmd.params.rows,
-            ),
+            getPtySessionService().resize(cmd.params.sessionId, cmd.params.cols, cmd.params.rows),
           );
         } catch (error) {
           return ptyErrResult(error);
@@ -1863,6 +1886,12 @@ app.whenReady().then(() => {
   // Window first. Everything else is background work that must not race the
   // first paint or trigger Keychain / network before the user sees UI.
   createWindow();
+  // Warm AgentRuntime after first paint can start — do not await. Vitest
+  // imports this module, so skip the timer there; tests assert DB-only IPCs
+  // never construct the runtime themselves.
+  if (process.env['VITEST'] !== 'true') {
+    setImmediate(() => preheatRuntime());
+  }
 
   void initializeCheckpointRecovery().catch((error) => {
     console.error('[main] checkpoint recovery initialization failed', error);
