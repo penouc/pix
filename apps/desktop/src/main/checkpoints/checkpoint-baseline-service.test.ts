@@ -20,6 +20,8 @@ function createRepository(): string {
   execFileSync('git', ['init', '--quiet', dir]);
   execFileSync('git', ['-C', dir, 'config', 'user.email', 'fixture@example.invalid']);
   execFileSync('git', ['-C', dir, 'config', 'user.name', 'Fixture']);
+  execFileSync('git', ['-C', dir, 'config', 'commit.gpgsign', 'false']);
+  execFileSync('git', ['-C', dir, 'config', 'core.fsmonitor', 'false']);
   writeFileSync(path.join(dir, 'tracked.txt'), 'before\n');
   execFileSync('git', ['-C', dir, 'add', 'tracked.txt']);
   execFileSync('git', ['-C', dir, 'commit', '--quiet', '-m', 'initial']);

@@ -21,8 +21,10 @@ export {
   type ProviderAuthSummary,
 } from './credentials.js';
 export {
+  capSessionTitle,
   deriveSessionTitle,
   sanitizeSessionTitle,
   buildSessionTitleUserPrompt,
+  MAX_SESSION_TITLE_LENGTH,
   SESSION_TITLE_SYSTEM_PROMPT,
 } from './session-title.js';
