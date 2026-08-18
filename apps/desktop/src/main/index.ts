@@ -15,6 +15,7 @@ import fsp from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 import {
+  capSessionTitle,
   createAgentRuntime,
   deriveSessionTitle,
   describeAuthSources,
@@ -1204,7 +1205,7 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
           const derived =
             deriveSessionTitle(cmd.params.text) ??
             sanitizeSessionTitle(cmd.params.text) ??
-            cmd.params.text.trim().slice(0, 72);
+            (cmd.params.text.trim() ? capSessionTitle(cmd.params.text) : null);
           if (derived) pendingSessionTitles.set(meta.id, derived);
         }
         writeSnapshots.associateRun(ref.runId, checkpoint.id, project.path);

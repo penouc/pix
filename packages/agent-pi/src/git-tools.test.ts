@@ -30,6 +30,8 @@ beforeEach(() => {
   git(['init', '-q']);
   git(['config', 'user.email', 'test@example.com']);
   git(['config', 'user.name', 'Test']);
+  git(['config', 'commit.gpgsign', 'false']);
+  git(['config', 'core.fsmonitor', 'false']);
   writeFile('a.txt', 'alpha\n');
   git(['add', '-A']);
   git(['commit', '-q', '-m', 'feat: initial']);

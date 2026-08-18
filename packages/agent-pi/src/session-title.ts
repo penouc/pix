@@ -5,9 +5,13 @@
  * the post-processing so Fake/Pi and unit tests share one definition of "good".
  */
 
+/** Sidebar session titles — short enough for the task list and title bar. */
+export const MAX_SESSION_TITLE_LENGTH = 10;
+
 export const SESSION_TITLE_SYSTEM_PROMPT = [
   'You name coding-agent tasks for a sidebar list.',
-  'Reply with ONLY a short title (about 3–8 words).',
+  `Reply with ONLY a short title (at most ${MAX_SESSION_TITLE_LENGTH} characters).`,
+  'For Chinese, use at most 10 汉字. For English, use a very short phrase.',
   'No quotes, no trailing punctuation, no explanation, no markdown.',
   "Match the user's language.",
 ].join(' ');
@@ -21,7 +25,7 @@ export function buildSessionTitleUserPrompt(input: {
     ? clip(input.assistantText.trim(), 800)
     : '(no assistant reply yet)';
   return [
-    'Name this task based on the first exchange.',
+    `Name this task in at most ${MAX_SESSION_TITLE_LENGTH} characters based on the first exchange.`,
     '',
     'User:',
     user,
@@ -29,6 +33,15 @@ export function buildSessionTitleUserPrompt(input: {
     'Assistant:',
     assistant,
   ].join('\n');
+}
+
+/** Hard cap for sidebar display (counts Unicode code points, not UTF-16 units). */
+export function capSessionTitle(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return trimmed;
+  const chars = [...trimmed];
+  if (chars.length <= MAX_SESSION_TITLE_LENGTH) return trimmed;
+  return chars.slice(0, MAX_SESSION_TITLE_LENGTH).join('');
 }
 
 /** Collapse a model reply (or heuristic line) into a sidebar-safe title. */
@@ -56,10 +69,8 @@ export function sanitizeSessionTitle(raw: string | null | undefined): string | n
   // Reject replies that are clearly an explanation rather than a label.
   if (/^(here('s| is)|sure[, ]|i (would|can)|the title)/i.test(cleaned)) return null;
 
-  if (cleaned.length > 72) {
-    cleaned = `${cleaned.slice(0, 71).trimEnd()}…`;
-  }
-  return cleaned;
+  cleaned = capSessionTitle(cleaned);
+  return cleaned.length >= 2 ? cleaned : null;
 }
 
 /**
@@ -79,7 +90,7 @@ export function deriveSessionTitle(text: string): string | null {
     .trim();
   if (cleaned.length < 3) return null;
 
-  const capped = cleaned.length > 72 ? `${cleaned.slice(0, 71).trimEnd()}…` : cleaned;
+  const capped = capSessionTitle(cleaned);
   return capped.charAt(0).toUpperCase() + capped.slice(1);
 }
 
