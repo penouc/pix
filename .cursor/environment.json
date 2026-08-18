@@ -1,0 +1,16 @@
+{
+  "install": "pnpm install --frozen-lockfile\npnpm rebuild:native\npnpm run build:packages",
+  "terminals": [
+    {
+      "name": "website",
+      "command": "pnpm dev:website",
+      "description": "PiX marketing website Vite dev server at http://localhost:5174"
+    }
+  ],
+  "ports": [
+    {
+      "name": "website",
+      "port": 5174
+    }
+  ]
+}
