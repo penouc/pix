@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type {
   ApprovalDecision,
+  HistorySessionMeta,
   IndexHit,
   InputImage,
   ProjectSummary,
@@ -18,6 +19,7 @@ import { AskDialog } from '@/features/ask/AskDialog';
 import { AutomationsView } from '@/features/automations/AutomationsView';
 import { ChatPanel } from '@/features/chat/ChatPanel';
 import { DiffPanel } from '@/features/diff/DiffPanel';
+import { HistoryBrowser, type HistoryScope } from '@/features/history/HistoryBrowser';
 import { ProjectSidebar } from '@/features/projects/ProjectSidebar';
 import { PreflightBanner } from '@/features/preflight/PreflightBanner';
 import { SearchPalette, type PaletteCommand } from '@/features/search/SearchPalette';
@@ -34,7 +36,7 @@ import { useWorkspaceStore } from '@/stores/workspace-store';
  * shows an unstarted task (`blankRun`) until something is running, and the
  * sidebar's Tasks list is the switcher.
  */
-type View = 'run' | 'diff' | 'settings' | 'terminal' | 'automations' | 'skills';
+type View = 'run' | 'diff' | 'settings' | 'terminal' | 'automations' | 'skills' | 'history';
 
 export function App() {
   const [view, setView] = useState<View>('run');
@@ -45,6 +47,8 @@ export function App() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [dismissedApproval, setDismissedApproval] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [historyScope, setHistoryScope] = useState<HistoryScope>({ kind: 'none' });
+  const [historySessionKey, setHistorySessionKey] = useState<string | null>(null);
   const [composerInsert, setComposerInsert] = useState<{
     text?: string;
     images?: InputImage[];
@@ -271,6 +275,77 @@ export function App() {
   }, []);
 
   /**
+   * Resume an external agent session inside PiX via ACP: open the project,
+   * create a workbench session, switch to the run view, then start the agent.
+   */
+  const continueInPix = useCallback(
+    async (meta: HistorySessionMeta) => {
+      if (!meta.projectPath) {
+        throw new Error('This session has no project directory to resume in.');
+      }
+      setProjectError(null);
+      let project = await invoke<ProjectSummary>({
+        method: 'project.open',
+        params: { path: meta.projectPath },
+      });
+      if (!project.trusted) {
+        project = await invoke<ProjectSummary>({
+          method: 'project.setTrust',
+          params: { projectId: project.id, trusted: true },
+        });
+      }
+      setProject(project);
+      const created = await invoke<SessionSummary>({
+        method: 'session.create',
+        params: {
+          projectId: project.id,
+          title: meta.title ? `Continue · ${meta.title}` : 'Continue in PiX',
+        },
+      });
+      setSession(created);
+      resetSessionView();
+      setScope(project.id, created.id);
+      setBlankRun(false);
+      setView('run');
+      await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
+      await queryClient.invalidateQueries({ queryKey: ['session.list', project.id] });
+
+      await invoke({
+        method: 'acp.start',
+        params: {
+          agent: meta.agent,
+          cwd: meta.projectPath,
+          prompt: 'Continue where we left off.',
+          resumeSessionId: meta.nativeId,
+          historyKey: meta.key,
+          pixSessionId: created.id,
+          pixProjectId: project.id,
+        },
+      });
+    },
+    [queryClient, setProject, setSession, resetSessionView, setScope],
+  );
+
+  const selectHistorySession = useCallback(
+    (meta: HistorySessionMeta) => {
+      setHistorySessionKey(meta.key);
+      if (meta.origin === 'pix' && meta.pixSessionId && meta.pixProjectId) {
+        selectSession({
+          id: meta.pixSessionId,
+          projectId: meta.pixProjectId,
+          title: meta.title || 'Session',
+          createdAt: meta.createdAt,
+          updatedAt: meta.updatedAt,
+          archived: false,
+        });
+        return;
+      }
+      setView('history');
+    },
+    [selectSession],
+  );
+
+  /**
    * Act on a file or code hit from ⌘K. A hit in another project switches to that
    * project first — the index searches all of them, so a result you cannot reach
    * would be worse than no result. There is no in-app file viewer, so the file
@@ -423,7 +498,7 @@ export function App() {
   const main = (
     <div className="flex h-full min-h-0 flex-col">
       <PreflightBanner />
-      <div className="flex min-h-0 min-w-0 flex-1">
+      <div className="flex min-h-0 min-w-0 w-full flex-1">
         {view === 'settings' ? (
           <SettingsView
             initialTab={settingsTab}
@@ -435,6 +510,11 @@ export function App() {
           <AutomationsView onOpenSession={openSessionById} />
         ) : view === 'skills' ? (
           <SkillsView onRunSkill={useSkill} />
+        ) : view === 'history' ? (
+          <HistoryBrowser
+            sessionKey={historySessionKey}
+            onContinueInPix={continueInPix}
+          />
         ) : view === 'diff' ? (
           <DiffPanel
             onContinue={() => setView('run')}
@@ -468,6 +548,14 @@ export function App() {
         <ProjectSidebar
           activeNav={view}
           isBlankRun={blankRun}
+          historyScope={historyScope}
+          historySessionKey={historySessionKey}
+          onHistoryScope={(scope) => {
+            setHistoryScope(scope);
+            setHistorySessionKey(null);
+            if (scope.kind !== 'none') setView('history');
+          }}
+          onSelectHistorySession={selectHistorySession}
           onOpenSettings={() => {
             if (view === 'settings') {
               setView('run');
@@ -518,6 +606,30 @@ export function App() {
               commands={commands}
               onClose={() => setSearchOpen(false)}
               onOpenSession={(session) => selectSession(session)}
+              onOpenHistory={(meta) => {
+                setSearchOpen(false);
+                if (meta.origin === 'pix' && meta.pixSessionId && meta.pixProjectId) {
+                  selectSession({
+                    id: meta.pixSessionId,
+                    projectId: meta.pixProjectId,
+                    title: meta.title,
+                    createdAt: meta.createdAt,
+                    updatedAt: meta.updatedAt,
+                    archived: false,
+                  });
+                  return;
+                }
+                setHistoryScope(
+                  meta.projectPath
+                    ? {
+                        kind: 'project',
+                        path: meta.projectPath,
+                        name: meta.projectName || meta.projectPath,
+                      }
+                    : { kind: 'agent', agent: meta.agent },
+                );
+                selectHistorySession(meta);
+              }}
               onOpenFile={(hit) => void openIndexHit(hit)}
               onRunSkill={useSkill}
             />

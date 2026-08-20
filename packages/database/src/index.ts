@@ -1,3 +1,5 @@
+export { SqliteHistoryRepository, projectNameOf, normalizeProjectPath } from './sqlite-history-repository.js';
+export type { HistoryListInput, HistoryWriteInput } from './sqlite-history-repository.js';
 export type { SessionMessageRepository } from './session-message-repository.js';
 export { SqliteSessionMessageRepository } from './sqlite-session-message-repository.js';
 export type { SessionRepository } from './session-repository.js';

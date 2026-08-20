@@ -2,7 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { Code2, FileText, Search, Sparkles, SquareTerminal, Zap } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import type { IndexHit, IndexSearchResult, SessionSummary, SkillInfo } from '@pi-desktop/protocol';
+import type {
+  HistorySessionMeta,
+  IndexHit,
+  IndexSearchResult,
+  SessionSummary,
+  SkillInfo,
+} from '@pi-desktop/protocol';
+import { HISTORY_AGENT_DISPLAY } from '@pi-desktop/protocol';
 
 import { Badge } from '@/components/ui/badge';
 import { invoke } from '@/lib/ipc';
@@ -35,12 +42,14 @@ export function SearchPalette({
   onClose,
   commands,
   onOpenSession,
+  onOpenHistory,
   onOpenFile,
   onRunSkill,
 }: {
   onClose: () => void;
   commands: PaletteCommand[];
   onOpenSession: (session: SessionSummary) => void;
+  onOpenHistory?: (session: HistorySessionMeta) => void;
   onOpenFile: (hit: IndexHit) => void;
   onRunSkill: (skill: SkillInfo) => void;
 }) {
@@ -54,21 +63,28 @@ export function SearchPalette({
     queryFn: () => invoke<SessionSummary[]>({ method: 'session.list', params: {} }),
   });
 
-  const skills = useQuery({
-    queryKey: ['skills.list', project?.id],
-    // Palette is opened on demand; still avoid walking skill roots with no project.
-    enabled: Boolean(project),
-    queryFn: () =>
-      invoke<SkillInfo[]>({ method: 'skills.list', params: { projectId: project?.id } }),
-  });
-
-  // One tick behind the keystrokes: the index query is cheap, but there is no
-  // reason to run it on every character of a path being typed.
   const [debounced, setDebounced] = useState('');
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(query.trim()), 90);
     return () => clearTimeout(timer);
   }, [query]);
+
+  const history = useQuery({
+    queryKey: ['history.list', 'palette', debounced],
+    enabled: debounced.length > 0,
+    queryFn: () =>
+      invoke<{ sessions: HistorySessionMeta[] }>({
+        method: 'history.list',
+        params: { titleQuery: debounced, limit: 12 },
+      }),
+  });
+
+  const skills = useQuery({
+    queryKey: ['skills.list', project?.id],
+    enabled: Boolean(project),
+    queryFn: () =>
+      invoke<SkillInfo[]>({ method: 'skills.list', params: { projectId: project?.id } }),
+  });
 
   const indexed = useQuery({
     queryKey: ['index.search', debounced],
@@ -85,9 +101,6 @@ export function SearchPalette({
     const match = (text: string) => !needle || text.toLowerCase().includes(needle);
     const out: Hit[] = [];
 
-    // The empty palette recommends the seven most recently active sessions.
-    // Once the user types, do not keep that recommendation cap: every matching
-    // conversation should remain discoverable.
     const matchingSessions = (sessions.data ?? []).filter((session) => match(session.title));
     const visibleSessions = needle ? matchingSessions : matchingSessions.slice(0, 7);
     for (const session of visibleSessions) {
@@ -98,6 +111,19 @@ export function SearchPalette({
         title: session.title,
         hint: `session ${session.id.slice(0, 8)}`,
         run: () => onOpenSession(session),
+      });
+    }
+
+    for (const session of history.data?.sessions ?? []) {
+      // PiX sessions are already listed under Tasks.
+      if (session.origin === 'pix') continue;
+      out.push({
+        key: `history:${session.key}`,
+        group: 'History',
+        icon: <Sparkles className="h-3.5 w-3.5 opacity-70" />,
+        title: session.title || 'Untitled',
+        hint: `${HISTORY_AGENT_DISPLAY[session.agent] ?? session.agent} · ${session.projectName || '—'}`,
+        run: () => onOpenHistory?.(session),
       });
     }
 
@@ -156,10 +182,12 @@ export function SearchPalette({
     query,
     project?.id,
     sessions.data,
+    history.data,
     indexed.data,
     skills.data,
     commands,
     onOpenSession,
+    onOpenHistory,
     onOpenFile,
     onRunSkill,
   ]);

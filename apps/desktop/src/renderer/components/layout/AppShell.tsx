@@ -54,12 +54,12 @@ export function AppShell({
             aria-label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
             aria-pressed={!sidebarCollapsed}
             onClick={() => setPref('sidebarCollapsed', !sidebarCollapsed)}
-            className="grid h-6 w-6 cursor-pointer place-items-center rounded-md border-0 bg-transparent text-muted transition-colors hover:bg-foreground/[0.08] hover:text-foreground focus-visible:outline-2 focus-visible:outline-accent"
+            className="grid h-8 w-8 cursor-pointer place-items-center rounded-lg border-0 bg-transparent text-muted transition-colors hover:bg-foreground/[0.08] hover:text-foreground focus-visible:outline-2 focus-visible:outline-accent"
           >
             {sidebarCollapsed ? (
-              <PanelLeftOpen className="h-3.5 w-3.5" />
+              <PanelLeftOpen className="h-[18px] w-[18px]" />
             ) : (
-              <PanelLeftClose className="h-3.5 w-3.5" />
+              <PanelLeftClose className="h-[18px] w-[18px]" />
             )}
           </button>
         }

@@ -13,6 +13,7 @@ import type {
   UpdateState,
   UiFlags,
 } from '@pi-desktop/protocol';
+import { HISTORY_AGENT_DISPLAY } from '@pi-desktop/protocol';
 
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
@@ -499,7 +500,144 @@ function ProjectsTab() {
         />
       </Group>
       <IndexingGroup />
+      <ArchivedHistoryGroup />
     </>
+  );
+}
+
+type ArchivedList = {
+  projects: Array<{ path: string; name: string; archivedAt: number }>;
+  sessions: Array<{
+    key: string;
+    title: string;
+    agent: string;
+    projectPath: string;
+    projectName: string;
+    archivedAt: number;
+  }>;
+};
+
+function ArchivedHistoryGroup() {
+  const queryClient = useQueryClient();
+  const archived = useQuery({
+    queryKey: ['history.listArchived'],
+    queryFn: () => invoke<ArchivedList>({ method: 'history.listArchived', params: {} }),
+  });
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  async function unarchiveProject(path: string, name: string) {
+    setBusyKey(`project:${path}`);
+    try {
+      await invoke({
+        method: 'history.archiveProject',
+        params: { path, archived: false, name },
+      });
+      await queryClient.invalidateQueries({ queryKey: ['history.listArchived'] });
+      await queryClient.invalidateQueries({ queryKey: ['history.nav'] });
+    } catch (err) {
+      console.error('[settings] unarchive project failed', err);
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function unarchiveSession(key: string) {
+    setBusyKey(`session:${key}`);
+    try {
+      await invoke({
+        method: 'history.archiveSession',
+        params: { key, archived: false },
+      });
+      await queryClient.invalidateQueries({ queryKey: ['history.listArchived'] });
+      await queryClient.invalidateQueries({ queryKey: ['history.list'] });
+      await queryClient.invalidateQueries({ queryKey: ['history.nav'] });
+    } catch (err) {
+      console.error('[settings] unarchive session failed', err);
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  const projects = archived.data?.projects ?? [];
+  const sessions = archived.data?.sessions ?? [];
+  const empty = !archived.isLoading && projects.length === 0 && sessions.length === 0;
+
+  return (
+    <Group label="Archived">
+      <Row
+        stacked
+        name="Archived projects & sessions"
+        desc="Items hidden from the sidebar. Unarchive to bring them back under Agents or Projects."
+      >
+        {archived.isLoading ? (
+          <div className="text-[12px] text-muted">Loading…</div>
+        ) : empty ? (
+          <div className="text-[12px] text-muted">Nothing archived yet.</div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {projects.length ? (
+              <div className="flex flex-col gap-1.5">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+                  Projects
+                </div>
+                {projects.map((item) => (
+                  <div
+                    key={item.path}
+                    className="flex items-center gap-3 rounded-xl bg-surface px-3 py-2"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[12.5px] font-bold">{item.name}</span>
+                      <span className="block truncate text-[11px] text-muted" title={item.path}>
+                        {item.path}
+                      </span>
+                    </span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={busyKey === `project:${item.path}`}
+                      onClick={() => void unarchiveProject(item.path, item.name)}
+                    >
+                      Unarchive
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {sessions.length ? (
+              <div className="flex flex-col gap-1.5">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+                  Sessions
+                </div>
+                {sessions.map((item) => (
+                  <div
+                    key={item.key}
+                    className="flex items-center gap-3 rounded-xl bg-surface px-3 py-2"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[12.5px] font-bold">{item.title}</span>
+                      <span className="block truncate text-[11px] text-muted">
+                        {(HISTORY_AGENT_DISPLAY[
+                          item.agent as keyof typeof HISTORY_AGENT_DISPLAY
+                        ] ?? item.agent) +
+                          (item.projectName ? ` · ${item.projectName}` : '')}
+                      </span>
+                    </span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={busyKey === `session:${item.key}`}
+                      onClick={() => void unarchiveSession(item.key)}
+                    >
+                      Unarchive
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        )}
+      </Row>
+    </Group>
   );
 }
 

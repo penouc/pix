@@ -798,6 +798,108 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
     params: ClearRememberedInputSchema.optional(),
   }),
   z.object({ method: z.literal('system.revealPath'), params: RevealPathInputSchema }),
+  // History library (Wake-style multi-agent session index)
+  z.object({
+    method: z.literal('history.nav'),
+    params: z.object({}).optional(),
+  }),
+  z.object({
+    method: z.literal('history.list'),
+    params: z
+      .object({
+        agent: z.string().optional(),
+        projectPath: z.string().optional(),
+        favoriteOnly: z.boolean().optional(),
+        titleQuery: z.string().optional(),
+        limit: z.number().int().positive().max(500).optional(),
+        offset: z.number().int().nonnegative().optional(),
+      })
+      .optional(),
+  }),
+  z.object({
+    method: z.literal('history.transcript'),
+    params: z.object({ key: z.string().min(1) }),
+  }),
+  z.object({
+    method: z.literal('history.refresh'),
+    params: z.object({}).optional(),
+  }),
+  z.object({
+    method: z.literal('history.star'),
+    params: z.object({ key: z.string().min(1), favorite: z.boolean() }),
+  }),
+  z.object({
+    method: z.literal('history.resume'),
+    params: z.object({
+      key: z.string().min(1),
+      target: z.enum(['terminal', 'acp']).default('terminal'),
+      /** macOS Terminal / iTerm / Warp / … id from history.listTerminals */
+      terminalApp: z.string().min(1).optional(),
+    }),
+  }),
+  z.object({
+    method: z.literal('history.listTerminals'),
+    params: z.object({}).optional(),
+  }),
+  z.object({
+    method: z.literal('history.delete'),
+    params: z.object({ key: z.string().min(1) }),
+  }),
+  z.object({
+    method: z.literal('history.archiveProject'),
+    params: z.object({
+      path: z.string().min(1),
+      archived: z.boolean(),
+      name: z.string().optional(),
+    }),
+  }),
+  z.object({
+    method: z.literal('history.archiveSession'),
+    params: z.object({
+      key: z.string().min(1),
+      archived: z.boolean(),
+    }),
+  }),
+  z.object({
+    method: z.literal('history.listArchived'),
+    params: z.object({}).optional(),
+  }),
+  // ACP external agent runs
+  z.object({
+    method: z.literal('acp.listAgents'),
+    params: z.object({}).optional(),
+  }),
+  z.object({
+    method: z.literal('acp.start'),
+    params: z.object({
+      agent: z.string().min(1),
+      cwd: z.string().min(1),
+      prompt: z.string().min(1),
+      resumeSessionId: z.string().optional(),
+      historyKey: z.string().optional(),
+      /** When set, ACP stream events are scoped to this PiX workbench session. */
+      pixSessionId: z.string().min(1).optional(),
+      pixProjectId: z.string().min(1).optional(),
+    }),
+  }),
+  z.object({
+    method: z.literal('acp.prompt'),
+    params: z.object({
+      runId: z.string().min(1),
+      prompt: z.string().min(1),
+    }),
+  }),
+  z.object({
+    method: z.literal('acp.abort'),
+    params: z.object({ runId: z.string().min(1) }),
+  }),
+  z.object({
+    method: z.literal('acp.resolvePermission'),
+    params: z.object({
+      requestId: z.string().min(1),
+      optionId: z.string().min(1),
+    }),
+  }),
 ]);
 export type IpcCommand = z.infer<typeof IpcCommandSchema>;
 export type IpcMethod = IpcCommand['method'];

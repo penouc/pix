@@ -5,6 +5,7 @@ import type { SessionRepository } from './session-repository.js';
 import type { CheckpointRepository } from './checkpoint-repository.js';
 import { openDatabase, type SqliteDatabase } from './sqlite-connection.js';
 import { SqliteCheckpointRepository } from './sqlite-checkpoint-repository.js';
+import { SqliteHistoryRepository } from './sqlite-history-repository.js';
 import { SqliteIndexRepository } from './sqlite-index-repository.js';
 import { SqliteProjectRepository } from './sqlite-project-repository.js';
 import { SqliteRunMetricsRepository } from './sqlite-run-metrics-repository.js';
@@ -26,6 +27,7 @@ export class DesktopDatabase {
   readonly runMetrics: SqliteRunMetricsRepository;
   readonly index: SqliteIndexRepository;
   readonly todos: SqliteTodoRepository;
+  readonly history: SqliteHistoryRepository;
   readonly dbPath: string;
 
   private constructor(dbPath: string, db: SqliteDatabase) {
@@ -38,6 +40,7 @@ export class DesktopDatabase {
     this.runMetrics = new SqliteRunMetricsRepository(db);
     this.index = new SqliteIndexRepository(db);
     this.todos = new SqliteTodoRepository(db);
+    this.history = new SqliteHistoryRepository(db);
   }
 
   static open(dbPath: string): DesktopDatabase {

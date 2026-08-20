@@ -311,4 +311,97 @@ ALTER TABLE run_metrics ADD COLUMN cache_write_tokens INTEGER;
 DELETE FROM session_log_sync;
 `,
   },
+  {
+    version: 17,
+    name: 'history_library',
+    sql: `
+CREATE TABLE IF NOT EXISTS history_sessions (
+  key TEXT PRIMARY KEY NOT NULL,
+  agent_id TEXT NOT NULL,
+  native_id TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  project_path TEXT NOT NULL DEFAULT '',
+  project_name TEXT NOT NULL DEFAULT '',
+  file_path TEXT NOT NULL,
+  created_at INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL DEFAULT 0,
+  message_count INTEGER NOT NULL DEFAULT 0,
+  model TEXT,
+  tokens_used INTEGER,
+  file_mtime INTEGER NOT NULL DEFAULT 0,
+  file_size INTEGER NOT NULL DEFAULT 0,
+  origin TEXT NOT NULL DEFAULT 'external' CHECK (origin IN ('pix', 'external')),
+  pix_session_id TEXT,
+  pix_project_id TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_history_sessions_updated
+  ON history_sessions (updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_history_sessions_agent
+  ON history_sessions (agent_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_history_sessions_project
+  ON history_sessions (project_path, updated_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_history_sessions_file
+  ON history_sessions (file_path);
+
+CREATE TABLE IF NOT EXISTS history_messages (
+  id INTEGER PRIMARY KEY,
+  session_key TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  role TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'text',
+  text TEXT NOT NULL,
+  tool_name TEXT,
+  thinking TEXT,
+  ts INTEGER,
+  FOREIGN KEY (session_key) REFERENCES history_sessions(key) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_history_messages_session
+  ON history_messages (session_key, seq);
+
+CREATE TABLE IF NOT EXISTS history_user_data (
+  session_key TEXT PRIMARY KEY NOT NULL,
+  favorite INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0, 1)),
+  pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
+  updated_at INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS history_tombstones (
+  file_path TEXT PRIMARY KEY NOT NULL,
+  deleted_at INTEGER NOT NULL
+);
+`,
+  },
+  {
+    version: 18,
+    name: 'history_archived_projects',
+    sql: `
+CREATE TABLE IF NOT EXISTS history_archived_projects (
+  project_path TEXT PRIMARY KEY NOT NULL,
+  project_name TEXT NOT NULL DEFAULT '',
+  archived_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_history_archived_projects_at
+  ON history_archived_projects (archived_at DESC);
+`,
+  },
+  {
+    version: 19,
+    name: 'history_archived_sessions',
+    sql: `
+CREATE TABLE IF NOT EXISTS history_archived_sessions (
+  session_key TEXT PRIMARY KEY NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  agent_id TEXT NOT NULL DEFAULT '',
+  project_path TEXT NOT NULL DEFAULT '',
+  project_name TEXT NOT NULL DEFAULT '',
+  archived_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_history_archived_sessions_at
+  ON history_archived_sessions (archived_at DESC);
+`,
+  },
 ];

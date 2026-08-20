@@ -81,6 +81,11 @@ import { UpdateService } from './updates/update-service.js';
 import { runPreflight } from './platform/environment.js';
 import { windowChromeOptions, windowsTitleBarOverlay } from './platform/window-chrome.js';
 import { ipcMethodNeedsRuntime } from './ipc-runtime-gate.js';
+import { HistoryService } from './history/history-service.js';
+import { resumeInTerminal, listExternalTerminals } from './history/resume-terminal.js';
+import { AcpSupervisor } from './acp/supervisor.js';
+import { detectAcpAgents } from './acp/detect.js';
+import type { HistoryAgentId } from '@pi-desktop/protocol';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -110,6 +115,22 @@ let notifications: NotificationService | null = null;
 let providerLogins: ProviderLoginService | null = null;
 let updates: UpdateService | null = null;
 let sessionLogSync: SessionLogSyncService | null = null;
+let historyService: HistoryService | null = null;
+let acpSupervisor: AcpSupervisor | null = null;
+
+function getHistoryService(): HistoryService {
+  if (!historyService) {
+    if (!desktopDb) throw new Error('HistoryService not ready — open the database first');
+    historyService = new HistoryService(desktopDb);
+    historyService.startWatching();
+  }
+  return historyService;
+}
+
+function getAcpSupervisor(): AcpSupervisor {
+  acpSupervisor ??= new AcpSupervisor();
+  return acpSupervisor;
+}
 
 function getSessionLogSync(): SessionLogSyncService {
   sessionLogSync ??= new SessionLogSyncService(
@@ -268,6 +289,11 @@ async function getDb(): Promise<DesktopDatabase> {
       console.error('[main] legacy JSON migration failed', error);
     }
     desktopDb = db;
+    historyService = new HistoryService(db);
+    historyService.startWatching();
+    void historyService.refresh(true).catch((error) => {
+      console.error('[main] history initial scan failed', error);
+    });
     void getSessionLogSync()
       .sync()
       .then(({ imported }) => {
@@ -406,9 +432,18 @@ function createWindow(): void {
 
   if (process.env['VITE_DEV_SERVER_URL']) {
     void mainWindow.loadURL(process.env['VITE_DEV_SERVER_URL']);
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     void mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
+  }
+
+  // Dev: open Chromium DevTools once the page is up (calling it before load
+  // is flaky with vite-plugin-electron hot restarts).
+  if (!app.isPackaged || process.env['VITE_DEV_SERVER_URL'] || process.env['PIX_OPEN_DEVTOOLS'] === '1') {
+    mainWindow.webContents.once('did-finish-load', () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      if (mainWindow.webContents.isDevToolsOpened()) return;
+      mainWindow.webContents.openDevTools({ mode: 'detach' });
+    });
   }
 
   mainWindow.on('closed', () => {
@@ -894,7 +929,11 @@ async function ensurePersistedRuntimeSession(
 export async function handleInvoke(raw: unknown): Promise<IpcResult> {
   const parsed = parseIpcCommand(raw);
   if (!parsed.success) {
-    return errResult('INVALID_COMMAND', parsed.error.message);
+    const issue = parsed.error.issues[0];
+    const hint = issue
+      ? `${issue.path.join('.') || 'command'}: ${issue.message}`
+      : 'Invalid IPC command';
+    return errResult('INVALID_COMMAND', hint);
   }
 
   const cmd = parsed.data;
@@ -1267,6 +1306,18 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         // The Terminal panel raises approvals through its own pipeline; try it
         // first so one Renderer UI can answer both sources.
         if (terminalService?.resolveApproval(cmd.params.requestId, cmd.params.decision)) {
+          return okResult({ ok: true });
+        }
+        // ACP external agents: map PiX decisions onto ACP option ids.
+        const acpOption =
+          cmd.params.decision === 'deny'
+            ? 'reject-once'
+            : cmd.params.decision === 'allow-once' ||
+                cmd.params.decision === 'allow-session' ||
+                cmd.params.decision === 'allow-project'
+              ? 'allow-once'
+              : null;
+        if (acpOption && getAcpSupervisor().resolvePermission(cmd.params.requestId, acpOption)) {
           return okResult({ ok: true });
         }
         await agent.approve(cmd.params.requestId, cmd.params.decision);
@@ -1797,6 +1848,210 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         shell.showItemInFolder(cmd.params.path);
         return okResult({ ok: true });
       }
+      case 'history.nav': {
+        await getDb();
+        return okResult(await getHistoryService().nav());
+      }
+      case 'history.list': {
+        await getDb();
+        return okResult(getHistoryService().list(cmd.params ?? {}));
+      }
+      case 'history.transcript': {
+        await getDb();
+        const transcript = await getHistoryService().transcript(cmd.params.key);
+        if (!transcript) return errResult('NOT_FOUND', 'History session not found');
+        return okResult(transcript);
+      }
+      case 'history.refresh': {
+        await getDb();
+        return okResult(await getHistoryService().refresh(true));
+      }
+      case 'history.star': {
+        await getDb();
+        const starred = getHistoryService().setFavorite(cmd.params.key, cmd.params.favorite);
+        if (!starred) return errResult('NOT_FOUND', 'History session not found');
+        return okResult(starred);
+      }
+      case 'history.delete': {
+        await getDb();
+        getHistoryService().delete(cmd.params.key);
+        return okResult({ ok: true });
+      }
+      case 'history.archiveProject': {
+        await getDb();
+        return okResult(
+          getHistoryService().setProjectArchived(
+            cmd.params.path,
+            cmd.params.archived,
+            cmd.params.name,
+          ),
+        );
+      }
+      case 'history.archiveSession': {
+        await getDb();
+        const archived = getHistoryService().setSessionArchived(
+          cmd.params.key,
+          cmd.params.archived,
+        );
+        if (!archived) return errResult('NOT_FOUND', 'History session not found');
+        return okResult(archived);
+      }
+      case 'history.listArchived': {
+        await getDb();
+        return okResult(getHistoryService().listArchived());
+      }
+      case 'history.resume': {
+        await getDb();
+        const meta = (await getDb()).history.get(cmd.params.key);
+        if (!meta) return errResult('NOT_FOUND', 'History session not found');
+        if (cmd.params.target === 'acp') {
+          if (meta.origin === 'pix') {
+            return errResult('INVALID', 'PiX sessions open in the workbench, not via ACP');
+          }
+          // Caller starts an ACP run with resumeSessionId — return launch hints.
+          return okResult({
+            mode: 'acp' as const,
+            agent: meta.agent,
+            cwd: meta.projectPath,
+            resumeSessionId: meta.nativeId,
+            historyKey: meta.key,
+          });
+        }
+        return okResult(await resumeInTerminal(meta, cmd.params.terminalApp ?? 'terminal'));
+      }
+      case 'history.listTerminals': {
+        return okResult({ terminals: await listExternalTerminals() });
+      }
+      case 'acp.listAgents': {
+        return okResult(await detectAcpAgents(true));
+      }
+      case 'acp.start': {
+        let seq = 0;
+        const nextSeq = () => seq++;
+        const pixSessionId = cmd.params.pixSessionId;
+        const pixProjectId = cmd.params.pixProjectId;
+        const runId = randomUUID();
+        if (pixSessionId && pixProjectId) {
+          broadcastEvent({
+            type: 'run.started',
+            sessionId: pixSessionId,
+            projectId: pixProjectId,
+            runId,
+            sequence: nextSeq(),
+            timestamp: Date.now(),
+            model: { providerId: cmd.params.agent, modelId: 'acp' },
+          });
+          broadcastEvent({
+            type: 'message.completed',
+            sessionId: pixSessionId,
+            projectId: pixProjectId,
+            runId,
+            sequence: nextSeq(),
+            timestamp: Date.now(),
+            messageId: `acp-user-${runId}`,
+            role: 'user',
+            content: cmd.params.prompt,
+          });
+        }
+        const handle = await getAcpSupervisor().start({
+          agent: cmd.params.agent as HistoryAgentId,
+          cwd: cmd.params.cwd,
+          prompt: cmd.params.prompt,
+          resumeSessionId: cmd.params.resumeSessionId,
+          runId,
+          onEvent: (event) => {
+            const eventRunId = event.type === 'permission' ? event.request.runId : event.runId;
+            const scope = {
+              sessionId: pixSessionId ?? `acp:${eventRunId}`,
+              projectId: pixProjectId ?? 'acp',
+              runId: eventRunId,
+              sequence: nextSeq(),
+              timestamp: Date.now(),
+            };
+            if (event.type === 'text') {
+              broadcastEvent({
+                type: 'message.delta',
+                ...scope,
+                messageId: `acp-msg-${scope.runId}`,
+                role: 'assistant',
+                delta: event.text,
+              });
+            } else if (event.type === 'thinking') {
+              broadcastEvent({
+                type: 'thinking.delta',
+                ...scope,
+                messageId: `acp-think-${scope.runId}`,
+                delta: event.text,
+              });
+            } else if (event.type === 'tool') {
+              broadcastEvent({
+                type: 'tool.requested',
+                ...scope,
+                toolCallId: randomUUID(),
+                toolName: event.tool,
+                inputSummary: event.detail ?? event.tool,
+                riskLevel: 'workspace-write',
+              });
+            } else if (event.type === 'permission') {
+              broadcastEvent({
+                type: 'approval.requested',
+                ...scope,
+                requestId: event.request.requestId,
+                toolName: event.request.title,
+                riskLevel: 'sensitive',
+                summary: event.request.title,
+                reasons: event.request.options.map((o) => o.name),
+                affectedPaths: [],
+                rememberable: false,
+              });
+            } else if (event.type === 'error') {
+              broadcastEvent({
+                type: 'run.failed',
+                ...scope,
+                error: { code: 'ACP_ERROR', message: event.message, retryable: false },
+              });
+            } else if (event.type === 'done') {
+              broadcastEvent({
+                type: 'run.completed',
+                ...scope,
+              });
+            }
+          },
+        });
+        return okResult({
+          runId: handle.runId,
+          sessionId: handle.sessionId,
+          agent: handle.agent,
+        });
+      }
+      case 'acp.prompt': {
+        return errResult(
+          'UNSUPPORTED',
+          'Follow-up ACP prompts are not wired yet — start a new run or resume in the terminal.',
+        );
+      }
+      case 'acp.abort': {
+        getAcpSupervisor().abort(cmd.params.runId);
+        return okResult({ ok: true });
+      }
+      case 'acp.resolvePermission': {
+        const ok = getAcpSupervisor().resolvePermission(
+          cmd.params.requestId,
+          cmd.params.optionId,
+        );
+        if (!ok) return errResult('NOT_FOUND', 'Permission request not found');
+        broadcastEvent({
+          type: 'approval.resolved',
+          sessionId: 'acp',
+          projectId: 'acp',
+          runId: 'acp',
+          sequence: 0,
+          requestId: cmd.params.requestId,
+          decision: cmd.params.optionId.startsWith('reject') ? 'deny' : 'allow-once',
+          timestamp: Date.now(),
+        });
+        return okResult({ ok: true });
+      }
       case 'settings.setDefaultProjectsFolder': {
         getProviderSettings().setDefaultProjectsFolder(cmd.params.path);
         return okResult(getProviderSettings().getUiFlags());
@@ -1939,6 +2194,9 @@ app.on('before-quit', () => {
   ptySessionService = null;
   void runtime?.dispose();
   runtime = null;
+  historyService?.stopWatching();
+  historyService = null;
+  acpSupervisor = null;
   desktopDb?.close();
   desktopDb = null;
   desktopDbInit = null;
