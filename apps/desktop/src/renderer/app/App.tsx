@@ -19,7 +19,7 @@ import { AskDialog } from '@/features/ask/AskDialog';
 import { AutomationsView } from '@/features/automations/AutomationsView';
 import { ChatPanel } from '@/features/chat/ChatPanel';
 import { DiffPanel } from '@/features/diff/DiffPanel';
-import { HistoryBrowser, type HistoryScope } from '@/features/history/HistoryBrowser';
+import { HistoryBrowser, type HistoryBootLive, type HistoryScope } from '@/features/history/HistoryBrowser';
 import { ProjectSidebar } from '@/features/projects/ProjectSidebar';
 import { PreflightBanner } from '@/features/preflight/PreflightBanner';
 import { SearchPalette, type PaletteCommand } from '@/features/search/SearchPalette';
@@ -49,6 +49,7 @@ export function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [historyScope, setHistoryScope] = useState<HistoryScope>({ kind: 'none' });
   const [historySessionKey, setHistorySessionKey] = useState<string | null>(null);
+  const [historyBootLive, setHistoryBootLive] = useState<HistoryBootLive | null>(null);
   const [composerInsert, setComposerInsert] = useState<{
     text?: string;
     images?: InputImage[];
@@ -281,6 +282,7 @@ export function App() {
 
   const selectHistorySession = useCallback(
     (meta: HistorySessionMeta) => {
+      setHistoryBootLive(null);
       setHistorySessionKey(meta.key);
       if (meta.origin === 'pix' && meta.pixSessionId && meta.pixProjectId) {
         selectSession({
@@ -464,7 +466,11 @@ export function App() {
         ) : view === 'skills' ? (
           <SkillsView onRunSkill={useSkill} />
         ) : view === 'history' ? (
-          <HistoryBrowser sessionKey={historySessionKey} />
+          <HistoryBrowser
+            sessionKey={historySessionKey}
+            bootLive={historyBootLive}
+            onBootLiveConsumed={() => setHistoryBootLive(null)}
+          />
         ) : view === 'diff' ? (
           <DiffPanel
             onContinue={() => setView('run')}
@@ -503,9 +509,16 @@ export function App() {
           onHistoryScope={(scope) => {
             setHistoryScope(scope);
             setHistorySessionKey(null);
+            setHistoryBootLive(null);
             if (scope.kind !== 'none') setView('history');
           }}
           onSelectHistorySession={selectHistorySession}
+          onStartExternalAgent={(boot) => {
+            setHistorySessionKey(null);
+            setHistoryBootLive(boot);
+            setHistoryScope({ kind: 'agent', agent: boot.agent });
+            setView('history');
+          }}
           onOpenSettings={() => {
             if (view === 'settings') {
               setView('run');

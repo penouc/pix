@@ -32,17 +32,53 @@ export type HistoryScope =
   | { kind: 'agent'; agent: string }
   | { kind: 'project'; path: string; name: string };
 
+/** Start a fresh ACP session (no transcript / no resume) from the sidebar. */
+export type HistoryBootLive = {
+  agent: string;
+  projectPath: string;
+  projectName?: string;
+};
+
 type ExternalTerminal = { id: string; name: string; appPath?: string };
 
 function historyLiveSessionId(key: string): string {
   return `acp-history:${key}`;
 }
 
+function bootLiveMeta(boot: HistoryBootLive): HistorySessionMeta {
+  const now = Date.now();
+  const agent = boot.agent as HistorySessionMeta['agent'];
+  const label = HISTORY_AGENT_DISPLAY[agent] ?? boot.agent;
+  return {
+    key: `live:${boot.agent}:${boot.projectPath}`,
+    agent,
+    /** Empty-ish sentinel: Continue/ACP skip resume when this marker is used. */
+    nativeId: '__new__',
+    title: `New ${label}`,
+    projectPath: boot.projectPath,
+    projectName: boot.projectName || boot.projectPath.split('/').pop() || 'project',
+    filePath: '',
+    createdAt: now,
+    updatedAt: now,
+    messageCount: 0,
+    favorite: false,
+    origin: 'external',
+  };
+}
+
 /**
  * External history transcript. Continue reveals an in-place composer and drives
  * the agent over ACP — no hop to a separate PiX session.
  */
-export function HistoryBrowser({ sessionKey }: { sessionKey: string | null }) {
+export function HistoryBrowser({
+  sessionKey,
+  bootLive,
+  onBootLiveConsumed,
+}: {
+  sessionKey: string | null;
+  bootLive?: HistoryBootLive | null;
+  onBootLiveConsumed?: () => void;
+}) {
   const [terminalApp, setTerminalApp] = useState('terminal');
   const [terminalMenuOpen, setTerminalMenuOpen] = useState(false);
   const [continuing, setContinuing] = useState(false);
@@ -51,6 +87,8 @@ export function HistoryBrowser({ sessionKey }: { sessionKey: string | null }) {
   const [connectError, setConnectError] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  /** Keeps header/composer meta after bootLive is consumed or while live. */
+  const [activeMeta, setActiveMeta] = useState<HistorySessionMeta | null>(null);
   const queryClient = useQueryClient();
   const terminalBtnRef = useRef<HTMLButtonElement>(null);
   const terminalMenuRef = useRef<HTMLDivElement>(null);
@@ -73,7 +111,7 @@ export function HistoryBrowser({ sessionKey }: { sessionKey: string | null }) {
 
   const transcript = useQuery({
     queryKey: ['history.transcript', sessionKey],
-    enabled: Boolean(sessionKey),
+    enabled: Boolean(sessionKey) && !bootLive,
     queryFn: () =>
       invoke<HistoryTranscript>({
         method: 'history.transcript',
@@ -100,12 +138,13 @@ export function HistoryBrowser({ sessionKey }: { sessionKey: string | null }) {
     if (terminalApp !== selectedTerminal.id) setTerminalApp(selectedTerminal.id);
   }, [selectedTerminal, terminalApp]);
 
-  // Leaving a session tears down the ACP process and clears live UI state.
+  // Leaving a history session tears down the ACP process and clears live UI state.
   useEffect(() => {
     setLive(false);
     setConnectError(null);
     setDraft('');
     setSending(false);
+    setActiveMeta(null);
     const prevRun = acpRunIdRef.current;
     setAcpRunId(null);
     acpRunIdRef.current = null;
@@ -122,6 +161,18 @@ export function HistoryBrowser({ sessionKey }: { sessionKey: string | null }) {
       }
     };
   }, []);
+
+  // Sidebar "New session" on an external agent boots straight into live ACP.
+  useEffect(() => {
+    if (!bootLive) return;
+    const meta = bootLiveMeta(bootLive);
+    setActiveMeta(meta);
+    void (async () => {
+      await continueSession(meta, { force: true });
+      onBootLiveConsumed?.();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- boot once per payload
+  }, [bootLive?.agent, bootLive?.projectPath]);
 
   useEffect(() => {
     if (!live) return;
@@ -150,15 +201,24 @@ export function HistoryBrowser({ sessionKey }: { sessionKey: string | null }) {
     }
   }
 
-  async function continueSession(meta: HistorySessionMeta) {
-    if (continuing || live) return;
+  async function continueSession(meta: HistorySessionMeta, opts?: { force?: boolean }) {
+    if (continuing) return;
+    if (live && !opts?.force) return;
     if (!meta.projectPath) {
       window.alert('This session has no project directory to resume in.');
       return;
     }
     setContinuing(true);
     setConnectError(null);
+    setActiveMeta(meta);
     try {
+      const prevRun = acpRunIdRef.current;
+      if (opts?.force && prevRun) {
+        await invoke({ method: 'acp.abort', params: { runId: prevRun } }).catch(() => undefined);
+        setAcpRunId(null);
+        acpRunIdRef.current = null;
+      }
+
       const pixSessionId = historyLiveSessionId(meta.key);
       const pixProjectId = 'acp-history';
       resetSessionView();
@@ -177,7 +237,9 @@ export function HistoryBrowser({ sessionKey }: { sessionKey: string | null }) {
         params: {
           agent: meta.agent,
           cwd: meta.projectPath,
-          resumeSessionId: meta.nativeId,
+          ...(meta.nativeId && meta.nativeId !== '__new__'
+            ? { resumeSessionId: meta.nativeId }
+            : {}),
           historyKey: meta.key,
           pixSessionId,
           pixProjectId,
@@ -219,7 +281,9 @@ export function HistoryBrowser({ sessionKey }: { sessionKey: string | null }) {
             agent: meta.agent,
             cwd: meta.projectPath,
             prompt: text,
-            resumeSessionId: meta.nativeId,
+            ...(meta.nativeId && meta.nativeId !== '__new__'
+            ? { resumeSessionId: meta.nativeId }
+            : {}),
             historyKey: meta.key,
             pixSessionId,
             pixProjectId,
@@ -260,14 +324,18 @@ export function HistoryBrowser({ sessionKey }: { sessionKey: string | null }) {
     }
   }
 
-  const selected = transcript.data?.meta ?? null;
+  const selected =
+    activeMeta ??
+    transcript.data?.meta ??
+    (bootLive ? bootLiveMeta(bootLive) : null);
   const isExternal = selected && selected.origin !== 'pix';
+  const isFreshLive = Boolean(selected && selected.nativeId === '__new__');
 
-  if (!sessionKey) {
+  if (!sessionKey && !bootLive && !selected) {
     return <HistoryEmptyHint />;
   }
 
-  if (transcript.isLoading && !selected) {
+  if (sessionKey && !bootLive && transcript.isLoading && !selected) {
     return (
       <div className="flex h-full w-full min-w-0 flex-1 items-center justify-center text-[12px] text-muted">
         Loading session…
@@ -275,7 +343,7 @@ export function HistoryBrowser({ sessionKey }: { sessionKey: string | null }) {
     );
   }
 
-  if (transcript.isError) {
+  if (sessionKey && !bootLive && transcript.isError && !selected) {
     return (
       <div className="flex h-full w-full min-w-0 flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
         <div className="text-[14px] font-medium">Couldn’t open this session</div>
@@ -325,46 +393,50 @@ export function HistoryBrowser({ sessionKey }: { sessionKey: string | null }) {
         >
           <RefreshCw className="h-3.5 w-3.5" />
         </button>
-        <button
-          type="button"
-          title={selected.favorite ? 'Unstar' : 'Star'}
-          onClick={() => void toggleStar(selected)}
-          className="grid h-8 w-8 place-items-center rounded-md border border-border hover:bg-foreground/[0.06]"
-        >
-          <Star className={cn('h-3.5 w-3.5', selected.favorite && 'fill-current text-accent')} />
-        </button>
-        <div className="relative">
+        {!isFreshLive ? (
           <button
-            ref={terminalBtnRef}
             type="button"
-            onClick={() => setTerminalMenuOpen((open) => !open)}
-            className="flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-[12px] hover:bg-foreground/[0.06]"
+            title={selected.favorite ? 'Unstar' : 'Star'}
+            onClick={() => void toggleStar(selected)}
+            className="grid h-8 w-8 place-items-center rounded-md border border-border hover:bg-foreground/[0.06]"
           >
-            <Terminal className="h-3.5 w-3.5" />
-            <span className="max-w-[7rem] truncate">{selectedTerminal?.name ?? 'Terminal'}</span>
-            <ChevronDown className="h-3 w-3 text-muted" />
+            <Star className={cn('h-3.5 w-3.5', selected.favorite && 'fill-current text-accent')} />
           </button>
-          {terminalMenuOpen ? (
-            <div
-              ref={terminalMenuRef}
-              className="absolute right-0 top-[calc(100%+6px)] z-40 min-w-[11rem] overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-[var(--shadow-md)]"
+        ) : null}
+        {!isFreshLive ? (
+          <div className="relative">
+            <button
+              ref={terminalBtnRef}
+              type="button"
+              onClick={() => setTerminalMenuOpen((open) => !open)}
+              className="flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-[12px] hover:bg-foreground/[0.06]"
             >
-              {terminalOptions.map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => void resumeTerminal(selected.key, opt.id)}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12.5px] hover:bg-foreground/[0.06]"
-                >
-                  <span className="min-w-0 flex-1 truncate">{opt.name}</span>
-                  {opt.id === selectedTerminal?.id ? (
-                    <Check className="h-3.5 w-3.5 flex-none text-accent" />
-                  ) : null}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
+              <Terminal className="h-3.5 w-3.5" />
+              <span className="max-w-[7rem] truncate">{selectedTerminal?.name ?? 'Terminal'}</span>
+              <ChevronDown className="h-3 w-3 text-muted" />
+            </button>
+            {terminalMenuOpen ? (
+              <div
+                ref={terminalMenuRef}
+                className="absolute right-0 top-[calc(100%+6px)] z-40 min-w-[11rem] overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-[var(--shadow-md)]"
+              >
+                {terminalOptions.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => void resumeTerminal(selected.key, opt.id)}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12.5px] hover:bg-foreground/[0.06]"
+                  >
+                    <span className="min-w-0 flex-1 truncate">{opt.name}</span>
+                    {opt.id === selectedTerminal?.id ? (
+                      <Check className="h-3.5 w-3.5 flex-none text-accent" />
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {!live ? (
           <button
             type="button"
@@ -379,11 +451,11 @@ export function HistoryBrowser({ sessionKey }: { sessionKey: string | null }) {
 
       <div className="relative min-h-0 flex-1">
         <div ref={scrollRef} className="h-full overflow-y-auto px-5 py-5">
-          {transcript.isLoading ? (
+          {transcript.isLoading && !isFreshLive ? (
             <div className="text-[12px] text-muted">Loading transcript…</div>
           ) : (
             <HistoryChatTranscript
-              messages={transcript.data?.messages ?? []}
+              messages={isFreshLive ? [] : (transcript.data?.messages ?? [])}
               agent={selected.agent}
               mode={live ? 'live' : 'readonly'}
             />

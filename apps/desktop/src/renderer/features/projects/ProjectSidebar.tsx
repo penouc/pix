@@ -22,7 +22,7 @@ import type {
 } from '@pi-desktop/protocol';
 import { HISTORY_AGENT_DISPLAY } from '@pi-desktop/protocol';
 
-import type { HistoryScope } from '@/features/history/HistoryBrowser';
+import type { HistoryScope, HistoryBootLive } from '@/features/history/HistoryBrowser';
 import { invoke } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useAgentStreamStore } from '@/stores/agent-stream-store';
@@ -44,6 +44,7 @@ interface ProjectSidebarProps {
   historySessionKey: string | null;
   onHistoryScope: (scope: HistoryScope) => void;
   onSelectHistorySession: (session: HistorySessionMeta) => void;
+  onStartExternalAgent: (boot: HistoryBootLive) => void;
 }
 
 export function ProjectSidebar({
@@ -62,6 +63,7 @@ export function ProjectSidebar({
   historySessionKey,
   onHistoryScope,
   onSelectHistorySession,
+  onStartExternalAgent,
 }: ProjectSidebarProps) {
   const project = useWorkspaceStore((s) => s.project);
   const session = useWorkspaceStore((s) => s.session);
@@ -174,6 +176,42 @@ export function ProjectSidebar({
       }
     }
     onNewTask(prior);
+  }
+
+  async function handleNewSessionForProject(item: HistoryProjectNav) {
+    setOpenError(null);
+    // Prefer PiX project when linked; otherwise open the folder then create a task.
+    if (item.pixProjectId) {
+      const opened = await openProjectPath(item.path);
+      if (!opened) return;
+      onNewTask(session);
+      return;
+    }
+    const opened = await openProjectPath(item.path);
+    if (!opened) return;
+    onNewTask(session);
+  }
+
+  function handleNewSessionForAgent(agent: HistoryNav['agents'][number]) {
+    setOpenError(null);
+    if (agent.agent === 'pix') {
+      void handleNewTask();
+      return;
+    }
+    if (!agent.runnable) {
+      setOpenError(`${agent.displayName || agent.agent} isn’t available for a new session yet.`);
+      return;
+    }
+    const cwd = project?.path;
+    if (!cwd) {
+      setOpenError('Open a project first, then start a new agent session.');
+      return;
+    }
+    onStartExternalAgent({
+      agent: agent.agent,
+      projectPath: cwd,
+      projectName: project?.name,
+    });
   }
 
   const busy = opening;
@@ -374,6 +412,14 @@ export function ProjectSidebar({
                             : { kind: 'agent', agent: agent.agent },
                         )
                       }
+                      actions={[
+                        {
+                          title: 'New session',
+                          icon: <Plus className="h-3 w-3" />,
+                          disabled: busy || (agent.agent !== 'pix' && !agent.runnable),
+                          onClick: () => handleNewSessionForAgent(agent),
+                        },
+                      ]}
                     />
                     {sessionListUnder(expanded)}
                   </div>
@@ -422,6 +468,14 @@ export function ProjectSidebar({
                                     : { kind: 'agent', agent: agent.agent },
                                 )
                               }
+                              actions={[
+                                {
+                                  title: 'New session',
+                                  icon: <Plus className="h-3 w-3" />,
+                                  disabled: busy || (agent.agent !== 'pix' && !agent.runnable),
+                                  onClick: () => handleNewSessionForAgent(agent),
+                                },
+                              ]}
                             />
                             {sessionListUnder(expanded)}
                           </div>
@@ -469,12 +523,20 @@ export function ProjectSidebar({
                         void openProjectPath(item.path);
                       }
                     }}
-                    action={{
-                      title: 'Archive project',
-                      icon: <Archive className="h-3 w-3" />,
-                      disabled: archivingPath === item.path,
-                      onClick: () => void setProjectArchived(item, true),
-                    }}
+                    actions={[
+                      {
+                        title: 'New session',
+                        icon: <Plus className="h-3 w-3" />,
+                        disabled: busy,
+                        onClick: () => void handleNewSessionForProject(item),
+                      },
+                      {
+                        title: 'Archive project',
+                        icon: <Archive className="h-3 w-3" />,
+                        disabled: archivingPath === item.path,
+                        onClick: () => void setProjectArchived(item, true),
+                      },
+                    ]}
                   />
                   {sessionListUnder(expanded)}
                 </div>
@@ -581,7 +643,7 @@ function FilterRow({
   muted,
   title,
   onClick,
-  action,
+  actions,
 }: {
   label: string;
   count: number;
@@ -589,12 +651,12 @@ function FilterRow({
   muted?: boolean;
   title?: string;
   onClick?: () => void;
-  action?: {
+  actions?: Array<{
     title: string;
     icon: ReactNode;
     disabled?: boolean;
     onClick: () => void;
-  };
+  }>;
 }) {
   return (
     <div
@@ -628,25 +690,30 @@ function FilterRow({
         {label}
         <span className="ml-1.5 text-[11px] text-foreground/40">{count}</span>
       </button>
-      {action ? (
-        <button
-          type="button"
-          title={action.title}
-          aria-label={action.title}
-          disabled={action.disabled}
-          onMouseDown={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-          }}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            action.onClick();
-          }}
-          className="hidden h-5 w-5 flex-none cursor-pointer items-center justify-center rounded-full text-muted group-hover:flex hover:bg-foreground/[0.1] hover:text-foreground disabled:opacity-40"
-        >
-          {action.icon}
-        </button>
+      {actions?.length ? (
+        <div className="hidden flex-none items-center gap-0.5 group-hover:flex">
+          {actions.map((action) => (
+            <button
+              key={action.title}
+              type="button"
+              title={action.title}
+              aria-label={action.title}
+              disabled={action.disabled}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                action.onClick();
+              }}
+              className="flex h-5 w-5 cursor-pointer items-center justify-center rounded-full text-muted hover:bg-foreground/[0.1] hover:text-foreground disabled:opacity-40"
+            >
+              {action.icon}
+            </button>
+          ))}
+        </div>
       ) : null}
     </div>
   );
