@@ -881,6 +881,28 @@ function ensureRuntime(): AgentRuntime {
           db.todos.save(sessionId, items);
         },
       },
+      userMemoryPersistence: {
+        list: async () => {
+          const db = await getDb();
+          return db.memories.list();
+        },
+        add: async (content, source) => {
+          const db = await getDb();
+          return db.memories.add({ content, source });
+        },
+        forget: async (keyOrContent) => {
+          const db = await getDb();
+          const needle = keyOrContent.trim().toLowerCase();
+          if (!needle) return false;
+          const all = db.memories.list();
+          const hit =
+            all.find((m) => m.id === keyOrContent) ??
+            all.find((m) => m.content.toLowerCase() === needle) ??
+            all.find((m) => m.content.toLowerCase().includes(needle));
+          if (!hit) return false;
+          return db.memories.delete(hit.id);
+        },
+      },
     });
     runtime.subscribe((event) => broadcastEvent(event));
     // Restore the approval mode the user chose in Settings.
@@ -1160,6 +1182,7 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
           title: cmd.params.title,
           model,
           autoModel: getProviderSettings().getAutoModelConfig(),
+          temporary: cmd.params.temporary,
         });
         const summary = await sessions.put({
           id: runtimeSession.id,
@@ -1168,6 +1191,7 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
           createdAt: runtimeSession.createdAt,
           updatedAt: runtimeSession.updatedAt,
           archived: false,
+          ...(cmd.params.temporary ? { temporary: true } : {}),
         });
         getNotifications().setSessionTitle(summary.id, summary.title);
         return okResult(summary satisfies SessionSummary);
@@ -1859,6 +1883,45 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
             runs: row.runs,
           })),
         );
+      }
+      case 'memory.list': {
+        return okResult(db.memories.list());
+      }
+      case 'memory.add': {
+        try {
+          return okResult(
+            db.memories.add({
+              content: cmd.params.content,
+              source: cmd.params.source ?? 'user',
+            }),
+          );
+        } catch (error) {
+          return errResult(
+            'MEMORY_WRITE_FAILED',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      }
+      case 'memory.update': {
+        try {
+          const updated = db.memories.update(cmd.params.id, cmd.params.content);
+          if (!updated) return errResult('MEMORY_NOT_FOUND', 'Memory not found');
+          return okResult(updated);
+        } catch (error) {
+          return errResult(
+            'MEMORY_WRITE_FAILED',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      }
+      case 'memory.delete': {
+        const ok = db.memories.delete(cmd.params.id);
+        if (!ok) return errResult('MEMORY_NOT_FOUND', 'Memory not found');
+        return okResult({ ok: true });
+      }
+      case 'memory.clear': {
+        const deleted = db.memories.clear();
+        return okResult({ deleted });
       }
       case 'audit.summary': {
         return okResult(await readAuditSummary());

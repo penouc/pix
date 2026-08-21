@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+import {
+  AddMemoryInputSchema,
+  ClearMemoriesInputSchema,
+  DeleteMemoryInputSchema,
+  ListMemoriesInputSchema,
+  UpdateMemoryInputSchema,
+} from './memory.js';
+
 export const ModelRefSchema = z.object({
   providerId: z.string().min(1),
   modelId: z.string().min(1),
@@ -59,6 +67,11 @@ export const CreateSessionInputSchema = z.object({
   projectId: z.string().min(1),
   title: z.string().optional(),
   model: ModelSelectionSchema.optional(),
+  /**
+   * Temporary chat: does not read or write user saved memories (ChatGPT-style).
+   * Project memory tools still work unless the runtime also gates them.
+   */
+  temporary: z.boolean().optional(),
 });
 export type CreateSessionInput = z.infer<typeof CreateSessionInputSchema>;
 
@@ -763,6 +776,11 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('audit.summary'), params: z.object({}).optional() }),
   z.object({ method: z.literal('usage.summary'), params: UsageSummaryInputSchema.optional() }),
   z.object({ method: z.literal('usage.projects'), params: UsageSummaryInputSchema.optional() }),
+  z.object({ method: z.literal('memory.list'), params: ListMemoriesInputSchema }),
+  z.object({ method: z.literal('memory.add'), params: AddMemoryInputSchema }),
+  z.object({ method: z.literal('memory.update'), params: UpdateMemoryInputSchema }),
+  z.object({ method: z.literal('memory.delete'), params: DeleteMemoryInputSchema }),
+  z.object({ method: z.literal('memory.clear'), params: ClearMemoriesInputSchema }),
   z.object({ method: z.literal('agent.setApprovalMode'), params: SetApprovalModeInputSchema }),
   z.object({
     method: z.literal('agent.getApprovalMode'),

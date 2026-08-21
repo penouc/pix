@@ -28,6 +28,8 @@ export type { Migration } from './migrations.js';
 export { SqliteRunMetricsRepository } from './sqlite-run-metrics-repository.js';
 export { SqliteTodoRepository } from './sqlite-todo-repository.js';
 export type { TodoRepository } from './todo-repository.js';
+export { SqliteUserMemoryRepository } from './sqlite-user-memory-repository.js';
+export type { UserMemoryRepository } from './user-memory-repository.js';
 export { SqliteIndexRepository, toMatchQuery } from './sqlite-index-repository.js';
 export type {
   IndexRepository,

@@ -404,4 +404,22 @@ CREATE INDEX IF NOT EXISTS idx_history_archived_sessions_at
   ON history_archived_sessions (archived_at DESC);
 `,
   },
+  {
+    version: 20,
+    name: 'user_memories_and_temporary_sessions',
+    sql: `
+CREATE TABLE IF NOT EXISTS user_memories (
+  id TEXT PRIMARY KEY NOT NULL,
+  content TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'user' CHECK (source IN ('user', 'agent')),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_memories_updated
+  ON user_memories (updated_at DESC);
+
+ALTER TABLE sessions ADD COLUMN temporary INTEGER NOT NULL DEFAULT 0 CHECK (temporary IN (0, 1));
+`,
+  },
 ];

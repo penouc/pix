@@ -53,15 +53,25 @@ export function classifyRisk(tool: NormalizedToolCall): RiskAssessment {
       }
       break;
     case 'memory': {
-      // #20: recall is read-only; retain/forget write `.pi-desktop/agent/memory.json`.
+      // recall is read-only. User-scope writes hit app SQLite (safe).
+      // Project-scope retain/forget write `.pi-desktop/agent/memory.json`.
       const action =
         tool.args && typeof tool.args === 'object' && 'action' in tool.args
           ? String((tool.args as { action?: unknown }).action ?? '')
           : '';
+      const scope =
+        tool.args && typeof tool.args === 'object' && 'scope' in tool.args
+          ? String((tool.args as { scope?: unknown }).scope ?? 'project')
+          : 'project';
       if (action === 'recall') {
         if (!tool.escapesWorkspace && !tool.hitsProtectedPath) {
           level = 'safe';
           if (reasons.length === 0) reasons.push('Memory recall is read-only');
+        }
+      } else if (scope === 'user') {
+        if (!tool.escapesWorkspace && !tool.hitsProtectedPath) {
+          level = 'safe';
+          if (reasons.length === 0) reasons.push('Writes user saved memories in the app database');
         }
       } else {
         raise('workspace-write', 'Writes project memory notes');

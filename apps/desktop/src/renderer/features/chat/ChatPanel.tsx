@@ -945,7 +945,10 @@ export function ChatPanel({
     try {
       let active = session;
       if (!active) {
-        active = await createTask();
+        active = await createTask(
+          undefined,
+          useWorkspaceStore.getState().pendingTemporary ? { temporary: true } : undefined,
+        );
         if (!active) {
           useAgentStreamStore.setState({
             status: 'failed',
@@ -1135,16 +1138,26 @@ export function ChatPanel({
     useAgentStreamStore.setState({ pendingPlan: null });
   }
 
+  const pendingTemporary = useWorkspaceStore((s) => s.pendingTemporary);
   const tone = statusTone(status);
-  const runTitle = blank ? 'New task' : (session?.title ?? 'No session');
+  const runTitle = blank
+    ? pendingTemporary
+      ? 'Temporary chat'
+      : 'New task'
+    : (session?.title ?? 'No session');
   const runMeta = blank
-    ? [project?.name ?? 'no project', branch.data?.branch, 'not started yet']
+    ? [
+        project?.name ?? 'no project',
+        branch.data?.branch,
+        pendingTemporary ? 'no memory' : 'not started yet',
+      ]
         .filter(Boolean)
         .join(' · ')
     : [
         activeRunId ? `run ${activeRunId.slice(0, 8)}` : null,
         startedAt ? formatDuration(startedAt) : null,
         usage?.totalTokens != null ? `${formatTokens(usage.totalTokens)} tokens` : null,
+        session?.temporary ? 'temporary' : null,
       ]
         .filter(Boolean)
         .join(' · ');
@@ -1162,7 +1175,10 @@ export function ChatPanel({
             <div className="font-mono text-[10.5px] leading-snug text-muted">{runMeta}</div>
           ) : null}
         </div>
-        {blank ? <Badge tone="neutral">not started</Badge> : null}
+        {blank ? (
+          <Badge tone="neutral">{pendingTemporary ? 'temporary' : 'not started'}</Badge>
+        ) : null}
+        {!blank && session?.temporary ? <Badge tone="neutral">temporary</Badge> : null}
         {!blank && (isCompacting || compacting) ? (
           <Badge tone="accent-2" className="gap-1.5">
             <span style={dotStyle('wait', 6)} />

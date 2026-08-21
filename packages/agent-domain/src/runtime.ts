@@ -30,6 +30,8 @@ export interface CreateSessionOptions {
   model?: ModelSelection;
   /** Auto routing policy (role pins + fallback chain) from Settings. */
   autoModel?: AutoModelConfig;
+  /** Temporary chat: skip user saved-memory inject and user-scope writes. */
+  temporary?: boolean;
 }
 
 export interface AgentSession {

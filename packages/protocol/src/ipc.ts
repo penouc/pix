@@ -147,6 +147,10 @@ export const SessionSummarySchema = z.object({
    * the run's checkpoints and snapshots stay recoverable (plan §11 / M7).
    */
   deletedAt: z.number().int().nonnegative().optional(),
+  /**
+   * Temporary chat: user saved memories are neither injected nor updated.
+   */
+  temporary: z.boolean().optional(),
 });
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;
 

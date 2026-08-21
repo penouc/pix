@@ -59,7 +59,8 @@ import {
   createLspReferencesTool,
   createLspRenameTool,
 } from './lsp-tools.js';
-import { createLearnSkillTool, createMemoryTool } from './memory-tools.js';
+import { createLearnSkillTool, createMemoryTool, formatSavedMemoriesPrompt } from './memory-tools.js';
+import type { UserMemoryPersistence } from './memory-tools.js';
 import { loadMcpConfig, McpBridge } from './mcp-bridge.js';
 import { createWebSearchTool } from './web-search.js';
 
@@ -163,6 +164,8 @@ export interface PiAgentRuntimeOptions {
    * lives only as long as the runtime instance.
    */
   todoPersistence?: TodoPersistence | null;
+  /** ChatGPT-style user saved memories (Settings → Memory). */
+  userMemoryPersistence?: UserMemoryPersistence | null;
 }
 
 interface SessionRecord {
@@ -216,6 +219,7 @@ export class PiAgentRuntime implements AgentRuntime {
   private beforeWriteToolHandler: BeforeWriteToolHandler | null = null;
   private afterWriteToolHandler: AfterWriteToolHandler | null = null;
   private readonly todoPersistence: TodoPersistence | null;
+  private readonly userMemoryPersistence: UserMemoryPersistence | null;
   private disposed = false;
   private initPromise: Promise<void> | null = null;
 
@@ -224,6 +228,7 @@ export class PiAgentRuntime implements AgentRuntime {
     this.allowModelNetwork = options.allowModelNetwork ?? false;
     this.hydrateEnvAuth = options.hydrateEnvAuth ?? true;
     this.todoPersistence = options.todoPersistence ?? null;
+    this.userMemoryPersistence = options.userMemoryPersistence ?? null;
   }
 
   /** Non-secret summary of which providers have credentials. */
@@ -267,9 +272,17 @@ export class PiAgentRuntime implements AgentRuntime {
       projectPath: options.projectPath,
     });
     try {
+      const temporary = Boolean(options.temporary);
+      const savedMemories =
+        !temporary && this.userMemoryPersistence
+          ? await this.userMemoryPersistence.list()
+          : [];
+      const memoryPrompt = formatSavedMemoriesPrompt(savedMemories);
+
       const resourceLoader = new DefaultResourceLoader({
         cwd: options.projectPath,
         agentDir: this.agentDir!,
+        ...(memoryPrompt ? { appendSystemPrompt: [memoryPrompt] } : {}),
         extensionFactories: [
           {
             name: 'pi-desktop-permissions',
@@ -376,10 +389,15 @@ export class PiAgentRuntime implements AgentRuntime {
             },
           },
           {
-            // #20 — project memory + learn→skill.
+            // #20 — project memory + learn→skill; user scope → saved memories.
             name: 'pi-desktop-memory',
             factory: (pi) => {
-              pi.registerTool(createMemoryTool());
+              pi.registerTool(
+                createMemoryTool({
+                  userStore: this.userMemoryPersistence,
+                  userDisabled: temporary,
+                }),
+              );
               pi.registerTool(createLearnSkillTool());
             },
           },

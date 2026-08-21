@@ -1,6 +1,7 @@
 import type { AgentRuntime } from '@pi-desktop/agent-domain';
 
 import type { TodoPersistence } from './collab-tools.js';
+import type { UserMemoryPersistence } from './memory-tools.js';
 import { FakeAgentRuntime } from './fake-runtime.js';
 import { PiAgentRuntime, type PiAgentRuntimeOptions } from './pi-runtime.js';
 
@@ -15,6 +16,8 @@ export interface AgentRuntimeFactoryOptions extends PiAgentRuntimeOptions {
    * fake runtime ignores it (it keeps its own in-memory lists).
    */
   todoPersistence?: TodoPersistence | null;
+  /** ChatGPT-style user saved memories. */
+  userMemoryPersistence?: UserMemoryPersistence | null;
 }
 
 /**
@@ -37,5 +40,6 @@ export function createAgentRuntime(options: AgentRuntimeFactoryOptions = {}): Ag
     agentDir: options.agentDir,
     allowModelNetwork: options.allowModelNetwork,
     todoPersistence: options.todoPersistence ?? null,
+    userMemoryPersistence: options.userMemoryPersistence ?? null,
   });
 }

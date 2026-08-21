@@ -29,7 +29,10 @@ export function useCreateTask() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function createTask(into?: ProjectSummary): Promise<SessionSummary | null> {
+  async function createTask(
+    into?: ProjectSummary,
+    options?: { temporary?: boolean },
+  ): Promise<SessionSummary | null> {
     const target = into ?? project;
     if (!target) return null;
     setBusy(true);
@@ -44,7 +47,11 @@ export function useCreateTask() {
       setProject(trusted);
       const created = await invoke<SessionSummary>({
         method: 'session.create',
-        params: { projectId: trusted.id, title: 'New task' },
+        params: {
+          projectId: trusted.id,
+          title: options?.temporary ? 'Temporary chat' : 'New task',
+          ...(options?.temporary ? { temporary: true } : {}),
+        },
       });
       /*
        * Apply the model chosen in the composer. The picker can be used before any

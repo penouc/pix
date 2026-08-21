@@ -126,7 +126,7 @@ export function App() {
   }, [applyEvent, queryClient]);
 
   const newTask = useCallback(
-    (previous?: SessionSummary | null) => {
+    (previous?: SessionSummary | null, options?: { temporary?: boolean }) => {
       const workspace = useWorkspaceStore.getState();
       const current = previous === undefined ? workspace.session : previous;
       if (current) setPriorSession(current);
@@ -146,6 +146,7 @@ export function App() {
       setSession(null);
       resetSessionView();
       if (workspace.project) setScope(workspace.project.id, null);
+      useWorkspaceStore.getState().setPendingTemporary(Boolean(options?.temporary));
       setBlankRun(true);
       setView('run');
     },

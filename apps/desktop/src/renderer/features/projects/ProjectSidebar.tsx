@@ -3,6 +3,7 @@ import {
   Archive,
   ChevronDown,
   ChevronRight,
+  EyeOff,
   FolderOpen,
   Plus,
   Search,
@@ -30,7 +31,7 @@ import { useWorkspaceStore } from '@/stores/workspace-store';
 
 interface ProjectSidebarProps {
   onOpenSettings: () => void;
-  onNewTask: (previousSession: SessionSummary | null) => void;
+  onNewTask: (previousSession: SessionSummary | null, options?: { temporary?: boolean }) => void;
   onSelectSession: (session: SessionSummary, project?: ProjectSummary) => void;
   onOpenSearch: () => void;
   onOpenAutomations: () => void;
@@ -176,6 +177,33 @@ export function ProjectSidebar({
       }
     }
     onNewTask(prior);
+  }
+
+  async function handleTemporaryChat(into?: ProjectSummary) {
+    const prior = session;
+    let target = into ?? project;
+    if (into && into.id !== project?.id) {
+      target = await openProjectPath(into.path);
+      if (!target) return;
+    }
+    if (!target) {
+      setOpening(true);
+      setOpenError(null);
+      try {
+        target = await invoke<ProjectSummary>({ method: 'project.openPlayground' });
+        setProject(target);
+        setSession(null);
+        resetSessionView();
+        setScope(target.id, null);
+        void recent.refetch();
+      } catch (err) {
+        setOpenError(err instanceof Error ? err.message : String(err));
+        return;
+      } finally {
+        setOpening(false);
+      }
+    }
+    onNewTask(prior, { temporary: true });
   }
 
   async function handleNewSessionForProject(item: HistoryProjectNav) {
@@ -361,6 +389,13 @@ export function ProjectSidebar({
           active={activeNav === 'run' && isBlankRun}
           disabled={busy}
           onClick={() => void handleNewTask()}
+        />
+        <NavItem
+          icon={<EyeOff className="h-[15px] w-[15px]" />}
+          label="Temporary"
+          title="Chat without reading or writing saved memories"
+          disabled={busy}
+          onClick={() => void handleTemporaryChat()}
         />
         <NavItem
           icon={<Search className="h-[15px] w-[15px]" />}

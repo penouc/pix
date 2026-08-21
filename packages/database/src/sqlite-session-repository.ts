@@ -14,6 +14,7 @@ interface SessionRow {
   updated_at: number;
   archived: number;
   deleted_at: number | null;
+  temporary?: number | null;
 }
 
 /**
@@ -53,14 +54,14 @@ export class SqliteSessionRepository implements SessionRepository {
           .prepare(
             // `includeArchived` means archived, not deleted: a soft-deleted
             // session stays out of every list.
-            `SELECT id, project_id, title, created_at, updated_at, archived, deleted_at
+            `SELECT id, project_id, title, created_at, updated_at, archived, deleted_at, temporary
              FROM sessions WHERE project_id = ? AND deleted_at IS NULL
              ORDER BY updated_at DESC`,
           )
           .all(projectId) as unknown as SessionRow[])
       : (db
           .prepare(
-            `SELECT id, project_id, title, created_at, updated_at, archived, deleted_at
+            `SELECT id, project_id, title, created_at, updated_at, archived, deleted_at, temporary
              FROM sessions WHERE project_id = ? AND archived = 0 AND deleted_at IS NULL
              ORDER BY updated_at DESC`,
           )
@@ -71,7 +72,7 @@ export class SqliteSessionRepository implements SessionRepository {
   listAll(): SessionSummary[] {
     const rows = this.requireDb()
       .prepare(
-        `SELECT id, project_id, title, created_at, updated_at, archived, deleted_at
+        `SELECT id, project_id, title, created_at, updated_at, archived, deleted_at, temporary
          FROM sessions
          WHERE archived = 0 AND deleted_at IS NULL
          ORDER BY updated_at DESC, created_at DESC`,
@@ -84,14 +85,19 @@ export class SqliteSessionRepository implements SessionRepository {
     const db = this.requireDb();
     const row = db
       .prepare(
-        `SELECT id, project_id, title, created_at, updated_at, archived, deleted_at
+        `SELECT id, project_id, title, created_at, updated_at, archived, deleted_at, temporary
          FROM sessions WHERE id = ?`,
       )
       .get(sessionId) as unknown as SessionRow | undefined;
     return row ? rowToSummary(row) : undefined;
   }
 
-  async create(input: { id?: string; projectId: string; title: string }): Promise<SessionSummary> {
+  async create(input: {
+    id?: string;
+    projectId: string;
+    title: string;
+    temporary?: boolean;
+  }): Promise<SessionSummary> {
     await this.init();
     const now = Date.now();
     const session: SessionSummary = {
@@ -101,6 +107,7 @@ export class SqliteSessionRepository implements SessionRepository {
       createdAt: now,
       updatedAt: now,
       archived: false,
+      ...(input.temporary ? { temporary: true } : {}),
     };
     return this.put(session);
   }
@@ -109,15 +116,16 @@ export class SqliteSessionRepository implements SessionRepository {
     await this.init();
     const db = this.requireDb();
     db.prepare(
-      `INSERT INTO sessions (id, project_id, title, created_at, updated_at, archived, deleted_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO sessions (id, project_id, title, created_at, updated_at, archived, deleted_at, temporary)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          project_id = excluded.project_id,
          title = excluded.title,
          created_at = excluded.created_at,
          updated_at = excluded.updated_at,
          archived = excluded.archived,
-         deleted_at = excluded.deleted_at`,
+         deleted_at = excluded.deleted_at,
+         temporary = excluded.temporary`,
     ).run(
       session.id,
       session.projectId,
@@ -126,6 +134,7 @@ export class SqliteSessionRepository implements SessionRepository {
       session.updatedAt,
       session.archived ? 1 : 0,
       session.deletedAt ?? null,
+      session.temporary ? 1 : 0,
     );
     return session;
   }
@@ -218,5 +227,6 @@ function rowToSummary(row: SessionRow): SessionSummary {
     updatedAt: row.updated_at,
     archived: row.archived === 1,
     ...(row.deleted_at != null ? { deletedAt: row.deleted_at } : {}),
+    ...(row.temporary === 1 ? { temporary: true } : {}),
   };
 }

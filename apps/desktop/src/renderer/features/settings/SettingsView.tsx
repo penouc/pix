@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { Switch } from '@/components/ui/switch';
 import { SettingsPanel } from '@/features/settings/SettingsPanel';
+import { MemoryTab } from '@/features/settings/MemoryTab';
 import { UsageTab } from '@/features/settings/UsageTab';
 import { invoke } from '@/lib/ipc';
 import { credentialStorageLabel } from '@/lib/platform';
@@ -28,6 +29,7 @@ import { useUiPrefsStore } from '@/stores/ui-prefs-store';
 export type SettingsTabId =
   | 'providers'
   | 'permissions'
+  | 'memory'
   | 'projects'
   | 'checkpoints'
   | 'appearance'
@@ -50,6 +52,12 @@ const TABS: Array<{ id: TabId; name: string; title: string; desc: string }> = [
     name: 'Permissions',
     title: 'Permissions & security',
     desc: 'What the agent may do on its own, and what always stops for you.',
+  },
+  {
+    id: 'memory',
+    name: 'Memory',
+    title: 'Saved memories',
+    desc: 'Facts PiX keeps about you across projects — like ChatGPT Memory.',
   },
   {
     id: 'projects',
@@ -163,6 +171,7 @@ export function SettingsView({
             {tab === 'appearance' ? <AppearanceTab /> : null}
             {tab === 'notifications' ? <NotificationsTab /> : null}
             {tab === 'usage' ? <UsageTab /> : null}
+            {tab === 'memory' ? <MemoryTab /> : null}
             {tab === 'permissions' ? <PermissionsTab /> : null}
             {tab === 'projects' ? <ProjectsTab /> : null}
             {tab === 'checkpoints' ? <CheckpointsTab /> : null}

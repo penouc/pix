@@ -12,6 +12,7 @@ import { SqliteRunMetricsRepository } from './sqlite-run-metrics-repository.js';
 import { SqliteSessionMessageRepository } from './sqlite-session-message-repository.js';
 import { SqliteSessionRepository } from './sqlite-session-repository.js';
 import { SqliteTodoRepository } from './sqlite-todo-repository.js';
+import { SqliteUserMemoryRepository } from './sqlite-user-memory-repository.js';
 import type { TodoRepository } from './todo-repository.js';
 
 /**
@@ -28,6 +29,7 @@ export class DesktopDatabase {
   readonly index: SqliteIndexRepository;
   readonly todos: SqliteTodoRepository;
   readonly history: SqliteHistoryRepository;
+  readonly memories: SqliteUserMemoryRepository;
   readonly dbPath: string;
 
   private constructor(dbPath: string, db: SqliteDatabase) {
@@ -41,6 +43,7 @@ export class DesktopDatabase {
     this.index = new SqliteIndexRepository(db);
     this.todos = new SqliteTodoRepository(db);
     this.history = new SqliteHistoryRepository(db);
+    this.memories = new SqliteUserMemoryRepository(db);
   }
 
   static open(dbPath: string): DesktopDatabase {

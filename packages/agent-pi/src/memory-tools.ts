@@ -5,35 +5,35 @@ import type { AgentToolResult } from '@earendil-works/pi-agent-core';
 import { defineTool, type ExtensionContext } from '@earendil-works/pi-coding-agent';
 import { Type, type Static } from 'typebox';
 
+import type { SavedMemory } from '@pi-desktop/protocol';
+
 /*
  * #20 — project-scoped memory + learn→skill (self-built, no cloud).
+ * Phase-1 ChatGPT-style: optional `scope: "user"` talks to SQLite saved
+ * memories (injected store), also injected into the system prompt.
  *
- * `memory` gives the agent a durable per-project scratchpad:
+ * `memory` gives the agent a durable scratchpad:
  *
- *   - retain   — save a note (project convention, discovered constraint,
- *                lesson, decision) under a key
- *   - recall   — read notes (all, or by key / fuzzy match)
+ *   - retain   — save a note under a key (project) or as free-text (user)
+ *   - recall   — read notes
  *   - forget   — drop a note
  *
- * Notes live in `<project>/.pi-desktop/agent/memory.json` — gitignored (the
- * repo ignores `.pi-desktop/`), project-scoped, and plain JSON so it
- * survives restarts with zero infrastructure.
- *
- * `learn` writes a skill: `<project>/.pi/skills/<name>/SKILL.md`. That is the
- * exact directory Pi's DefaultResourceLoader and the desktop SkillsService
- * scan for project skills, so a written skill shows up in the `$` picker and
- * is loaded by the runtime on the next session. This is the "可选把教训写成
- * skill" half of #20.
- *
- * Risk classification: recall is `safe`; retain/forget/learn write files
- * under the workspace → `workspace-write` (approval-gated in Ask mode,
- * blocked in Plan Mode).
+ * Project notes live in `<project>/.pi-desktop/agent/memory.json`.
+ * User saved memories live in the app SQLite DB (Settings → Memory).
  */
 
 export interface MemoryNote {
   key: string;
   value: string;
   updatedAt: number;
+}
+
+/** App-owned user saved memories. Wired from Main → PiAgentRuntime. */
+export interface UserMemoryPersistence {
+  list(): Promise<SavedMemory[]>;
+  add(content: string, source?: SavedMemory['source']): Promise<SavedMemory>;
+  /** Forget by id or content substring. */
+  forget(keyOrContent: string): Promise<boolean>;
 }
 
 const MAX_MEMORY_BYTES = 256 * 1024;
@@ -102,13 +102,33 @@ export function applyMemoryOp(
   }
 }
 
+/** System-prompt block for ChatGPT-style always-on saved memories. */
+export function formatSavedMemoriesPrompt(memories: SavedMemory[]): string {
+  if (!memories.length) return '';
+  const lines = memories.map((m) => `- ${m.content}`);
+  return [
+    '## Saved memories',
+    'Durable facts about the user across projects. Prefer these over guessing. When the user asks to remember or forget something about themselves, use the memory tool with scope="user". Do not store secrets.',
+    ...lines,
+  ].join('\n');
+}
+
 const memorySchema = Type.Object({
   action: Type.Union([
     Type.Literal('retain', { description: 'Save a note under a key' }),
     Type.Literal('recall', { description: 'Read saved notes' }),
     Type.Literal('forget', { description: 'Drop a note by key' }),
   ]),
-  /** retain/forget: the note key. recall: optional filter. */
+  /**
+   * project (default) — per-repo JSON scratchpad.
+   * user — ChatGPT-style saved memories in the app database.
+   */
+  scope: Type.Optional(
+    Type.Union([Type.Literal('project'), Type.Literal('user')], {
+      description: 'project = repo notes; user = cross-project saved memories',
+    }),
+  ),
+  /** retain/forget: the note key (project) or id/snippet (user). recall: optional filter. */
   key: Type.Optional(Type.String({ description: 'Note key' })),
   /** retain: the note body. recall: optional fuzzy match. */
   value: Type.Optional(Type.String({ description: 'Note body (retain) or search text (recall)' })),
@@ -123,15 +143,23 @@ const learnSchema = Type.Object({
 });
 type LearnParams = Static<typeof learnSchema>;
 
-export function createMemoryTool() {
+export function createMemoryTool(options?: {
+  userStore?: UserMemoryPersistence | null;
+  /** Temporary chats block user-scope memory. */
+  userDisabled?: boolean;
+}) {
+  const userStore = options?.userStore ?? null;
+  const userDisabled = Boolean(options?.userDisabled);
+
   return defineTool({
     name: 'memory',
-    label: 'Project memory',
+    label: 'Memory',
     description:
-      'A durable per-project scratchpad. retain saves a note (a convention, constraint, lesson, or decision) under a key; recall reads notes; forget drops one. Notes persist across sessions in .pi-desktop/agent/memory.json. Writing is approval-gated.',
-    promptSnippet: 'memory — project-scoped retain/recall notes',
+      'Durable notes. scope=project (default): per-repo scratchpad in .pi-desktop/agent/memory.json. scope=user: cross-project saved memories (also listed in Settings → Memory). retain / recall / forget. Do not store secrets.',
+    promptSnippet: 'memory — project or user saved notes (retain/recall/forget)',
     promptGuidelines: [
-      'retain project conventions, constraints and hard-won lessons so future sessions do not re-discover them.',
+      'Use scope="user" when the user asks you to remember something about them across projects (preferences, name, constraints).',
+      'Use scope="project" (default) for repo conventions, decisions, and hard-won lessons.',
       'recall before starting work that depends on prior decisions.',
       'Keep values concise and factual; do not store secrets.',
     ],
@@ -144,6 +172,108 @@ export function createMemoryTool() {
       _onUpdate?: unknown,
       ctx?: ExtensionContext,
     ): Promise<AgentToolResult<{ notes: MemoryNote[] }>> {
+      const scope = params.scope === 'user' ? 'user' : 'project';
+
+      if (scope === 'user') {
+        if (userDisabled) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'User memory is disabled in Temporary chat. Start a normal task to save memories.',
+              },
+            ],
+            details: { notes: [] },
+          };
+        }
+        if (!userStore) {
+          return {
+            content: [{ type: 'text', text: 'User memory store is not available.' }],
+            details: { notes: [] },
+          };
+        }
+
+        if (params.action === 'recall') {
+          const all = await userStore.list();
+          const filter = (params.value ?? params.key ?? '').trim().toLowerCase();
+          const matched = filter
+            ? all.filter((m) => m.content.toLowerCase().includes(filter) || m.id === filter)
+            : all;
+          const text = matched.length
+            ? matched.map((m) => `- ${m.content}`).join('\n')
+            : 'No matching saved memories.';
+          return {
+            content: [{ type: 'text', text }],
+            details: {
+              notes: matched.map((m) => ({
+                key: m.id,
+                value: m.content,
+                updatedAt: m.updatedAt,
+              })),
+            },
+          };
+        }
+
+        if (params.action === 'retain') {
+          const content = (params.value ?? params.key ?? '').trim();
+          if (!content) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: 'Nothing to retain — provide value (the fact to remember).',
+                },
+              ],
+              details: { notes: [] },
+            };
+          }
+          try {
+            const saved = await userStore.add(content, 'agent');
+            return {
+              content: [{ type: 'text', text: `Saved memory: ${saved.content}` }],
+              details: {
+                notes: [{ key: saved.id, value: saved.content, updatedAt: saved.updatedAt }],
+              },
+            };
+          } catch (error) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Memory write failed: ${error instanceof Error ? error.message : String(error)}`,
+                },
+              ],
+              details: { notes: [] },
+            };
+          }
+        }
+
+        if (params.action === 'forget') {
+          const key = (params.key ?? params.value ?? '').trim();
+          if (!key) {
+            return {
+              content: [{ type: 'text', text: 'Provide key or value to forget.' }],
+              details: { notes: [] },
+            };
+          }
+          const ok = await userStore.forget(key);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: ok ? `Forgot memory matching "${key}".` : `No saved memory matched "${key}".`,
+              },
+            ],
+            details: { notes: [] },
+          };
+        }
+
+        return {
+          content: [{ type: 'text', text: 'Unknown memory action.' }],
+          details: { notes: [] },
+        };
+      }
+
       const projectPath = ctx?.cwd ?? process.cwd();
       const notes = loadMemory(projectPath);
 
@@ -175,7 +305,10 @@ export function createMemoryTool() {
         } catch (error) {
           return {
             content: [
-              { type: 'text', text: `Memory write failed: ${error instanceof Error ? error.message : String(error)}` },
+              {
+                type: 'text',
+                text: `Memory write failed: ${error instanceof Error ? error.message : String(error)}`,
+              },
             ],
             details: { notes },
           };
@@ -201,7 +334,10 @@ export function createMemoryTool() {
         } catch (error) {
           return {
             content: [
-              { type: 'text', text: `Memory write failed: ${error instanceof Error ? error.message : String(error)}` },
+              {
+                type: 'text',
+                text: `Memory write failed: ${error instanceof Error ? error.message : String(error)}`,
+              },
             ],
             details: { notes },
           };
@@ -246,7 +382,10 @@ export function createLearnSkillTool() {
       const projectPath = ctx?.cwd ?? process.cwd();
       const name = params.name.trim().replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
       if (!name) {
-        return { content: [{ type: 'text', text: 'Skill name must not be empty.' }], details: { path: '' } };
+        return {
+          content: [{ type: 'text', text: 'Skill name must not be empty.' }],
+          details: { path: '' },
+        };
       }
       const dir = path.join(projectPath, '.pi', 'skills', name);
       const file = path.join(dir, 'SKILL.md');
@@ -263,7 +402,10 @@ export function createLearnSkillTool() {
       writeFileSync(file, `${frontmatter}${body}\n`, 'utf8');
       return {
         content: [
-          { type: 'text', text: `Skill written to .pi/skills/${name}/SKILL.md (command /skill:${name}).` },
+          {
+            type: 'text',
+            text: `Skill written to .pi/skills/${name}/SKILL.md (command /skill:${name}).`,
+          },
         ],
         details: { path: file },
       };
