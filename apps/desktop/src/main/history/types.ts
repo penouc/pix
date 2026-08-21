@@ -102,13 +102,19 @@ function stripTrailingSlash(p: string): string {
 }
 
 function pathDepth(projectPath: string): number {
-  return projectPath.replace(/\\/g, '/').split('/').filter(Boolean).length;
+  const parts = projectPath
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter(Boolean)
+    // Windows drive letter (C:) is not a path segment for depth.
+    .filter((part, index) => !(index === 0 && /^[A-Za-z]:$/.test(part)));
+  return parts.length;
 }
 
 /** `/`, `/Users`, `/Users/x`, `/tmp` etc. must not swallow every child project. */
 export function isBroadProjectPath(projectPath: string): boolean {
   const p = normalizeProjectPath(projectPath);
-  if (!p || p === '/') return true;
+  if (!p || p === '/' || /^[A-Za-z]:\\?$/.test(p)) return true;
   return pathDepth(p) < 3;
 }
 
@@ -153,7 +159,7 @@ export function resolveProjectIdentities(knownPaths: string[]): Map<string, stri
   const out = new Map<string, string>();
   for (const p of normalized) {
     let id = afterGit.get(p) ?? p;
-    const ancestors = mergeTargets.filter((t) => id === t || id.startsWith(`${t}/`));
+    const ancestors = mergeTargets.filter((t) => isSameOrAncestorPath(t, id));
     if (ancestors.length) {
       ancestors.sort((a, b) => a.length - b.length);
       id = ancestors[0]!;
@@ -161,6 +167,13 @@ export function resolveProjectIdentities(knownPaths: string[]): Map<string, stri
     out.set(p, id);
   }
   return out;
+}
+
+/** True when `child` is `parent` or lives under it (OS-aware separators). */
+function isSameOrAncestorPath(parent: string, child: string): boolean {
+  if (child === parent) return true;
+  const prefix = parent.endsWith(path.sep) ? parent : `${parent}${path.sep}`;
+  return child.startsWith(prefix);
 }
 
 /** Single-path helper when the full known set is not available yet. */

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { openDatabase } from './sqlite-connection.js';
-import { SqliteHistoryRepository } from './sqlite-history-repository.js';
+import { normalizeProjectPath, SqliteHistoryRepository } from './sqlite-history-repository.js';
 
 describe('SqliteHistoryRepository', () => {
   it('writes, lists, favorites, and tombstones sessions', () => {
@@ -51,7 +51,10 @@ describe('SqliteHistoryRepository', () => {
     history.setProjectArchived('/tmp/demo', true, 'demo');
     expect(history.isProjectArchived('/tmp/demo')).toBe(true);
     expect(history.listArchivedProjects()).toEqual([
-      expect.objectContaining({ path: '/tmp/demo', name: 'demo' }),
+      expect.objectContaining({
+        path: normalizeProjectPath('/tmp/demo'),
+        name: 'demo',
+      }),
     ]);
     history.setProjectArchived('/tmp/demo', false);
     expect(history.isProjectArchived('/tmp/demo')).toBe(false);
