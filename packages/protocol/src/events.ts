@@ -265,7 +265,7 @@ export const DesktopAgentEventSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('history.updated'),
     timestamp: z.number().int().nonnegative(),
-    reason: z.enum(['scan', 'detect', 'manual']).optional(),
+    reason: z.enum(['scan', 'detect', 'manual', 'pix-session']).optional(),
   }),
   /**
    * Todo checklist changed (#11). Session-scoped — the agent can rewrite the

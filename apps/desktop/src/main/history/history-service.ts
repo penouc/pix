@@ -410,71 +410,93 @@ export class HistoryService {
     if (mapping.size) this.db.history.remapProjectPaths(mapping);
   }
 
+  /**
+   * Mirror one PiX session into the history library so Agents/Projects sidebar
+   * lists stay current without waiting for a full disk scan.
+   * Temporary chats are intentionally omitted (ChatGPT-style).
+   */
+  projectPixSession(sessionId: string): HistorySessionMeta | null {
+    const session = this.db.sessions.get(sessionId);
+    if (!session || session.deletedAt || session.temporary) return null;
+    return this.writePixSessionProjection(session);
+  }
+
   private async projectPixSessions(): Promise<void> {
     const sessions = this.db.sessions.listAll();
     for (const session of sessions) {
-      if (session.deletedAt) continue;
-      const project = this.db.projects.get(session.projectId);
-      const known = [
-        ...this.db.history.distinctProjectPaths(),
-        ...this.db.projects.listRecent(100).map((p) => p.path),
-      ];
-      const projectPath = resolveProjectIdentity(project?.path ?? '', known);
-      const messages = this.db.sessionMessages.list(session.id);
-      const units = messages.map((entry, seq) => {
-        if (entry.kind === 'message') {
-          return {
-            seq,
-            role: entry.role,
-            kind: 'text' as const,
-            text: entry.text,
-            timestamp: session.updatedAt,
-          };
-        }
-        if (entry.kind === 'thinking') {
-          return {
-            seq,
-            role: 'assistant' as const,
-            kind: 'thinking' as const,
-            text: entry.content,
-            thinking: entry.content,
-            timestamp: session.updatedAt,
-          };
-        }
+      if (session.deletedAt || session.temporary) continue;
+      this.writePixSessionProjection(session);
+    }
+  }
+
+  private writePixSessionProjection(session: {
+    id: string;
+    projectId: string;
+    title: string;
+    createdAt: number;
+    updatedAt: number;
+  }): HistorySessionMeta {
+    const project = this.db.projects.get(session.projectId);
+    const known = [
+      ...this.db.history.distinctProjectPaths(),
+      ...this.db.projects.listRecent(100).map((p) => p.path),
+    ];
+    const projectPath = resolveProjectIdentity(project?.path ?? '', known);
+    const messages = this.db.sessionMessages.list(session.id);
+    const units = messages.map((entry, seq) => {
+      if (entry.kind === 'message') {
+        return {
+          seq,
+          role: entry.role,
+          kind: 'text' as const,
+          text: entry.text,
+          timestamp: session.updatedAt,
+        };
+      }
+      if (entry.kind === 'thinking') {
         return {
           seq,
           role: 'assistant' as const,
-          kind: 'tool' as const,
-          text: entry.inputSummary ?? '',
-          toolName: entry.toolName,
+          kind: 'thinking' as const,
+          text: entry.content,
+          thinking: entry.content,
           timestamp: session.updatedAt,
         };
-      });
-      const meta: HistorySessionMeta = {
-        key: `pix:${session.id}`,
-        agent: 'pix',
-        nativeId: session.id,
-        title: session.title,
-        projectPath,
-        projectName: project?.name ?? projectNameOf(projectPath),
-        filePath: `pix://${session.id}`,
-        createdAt: session.createdAt,
-        updatedAt: session.updatedAt,
-        messageCount: messages.filter((m) => m.kind === 'message').length,
-        model: null,
-        tokensUsed: null,
-        favorite: false,
-        origin: 'pix',
-        pixSessionId: session.id,
-        pixProjectId: session.projectId,
+      }
+      return {
+        seq,
+        role: 'assistant' as const,
+        kind: 'tool' as const,
+        text: entry.inputSummary ?? '',
+        toolName: entry.toolName,
+        timestamp: session.updatedAt,
       };
-      this.db.history.writeSession({
-        meta,
-        fileMtime: session.updatedAt,
-        fileSize: units.length,
-        units,
-      });
-    }
+    });
+    const meta: HistorySessionMeta = {
+      key: `pix:${session.id}`,
+      agent: 'pix',
+      nativeId: session.id,
+      title: session.title,
+      projectPath,
+      projectName: project?.name ?? projectNameOf(projectPath),
+      filePath: `pix://${session.id}`,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+      messageCount: messages.filter((m) => m.kind === 'message').length,
+      model: null,
+      tokensUsed: null,
+      favorite: false,
+      origin: 'pix',
+      pixSessionId: session.id,
+      pixProjectId: session.projectId,
+    };
+    this.db.history.writeSession({
+      meta,
+      fileMtime: session.updatedAt,
+      fileSize: units.length,
+      units,
+    });
+    return meta;
   }
 
   private async scanFile(adapter: HistoryAgentAdapter, filePath: string): Promise<void> {

@@ -87,6 +87,10 @@ export function useCreateTask() {
       resetSessionView();
       setScope(trusted.id, created.id);
       await queryClient.invalidateQueries({ queryKey: ['session.list', trusted.id] });
+      if (!created.temporary) {
+        await queryClient.invalidateQueries({ queryKey: ['history.nav'] });
+        await queryClient.invalidateQueries({ queryKey: ['history.list'] });
+      }
       return created;
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

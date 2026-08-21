@@ -523,6 +523,44 @@ function persistSessionMessage(
   );
 }
 
+/**
+ * Mirror a PiX session into the Agents/Projects history library.
+ * Debounced so transcript appends from the same turn can land first.
+ * Temporary chats are skipped.
+ */
+const pendingPixHistorySync = new Set<string>();
+let pixHistorySyncTimer: ReturnType<typeof setTimeout> | null = null;
+
+function schedulePixHistorySync(sessionId: string, delayMs = 120): void {
+  pendingPixHistorySync.add(sessionId);
+  if (pixHistorySyncTimer) clearTimeout(pixHistorySyncTimer);
+  pixHistorySyncTimer = setTimeout(() => {
+    pixHistorySyncTimer = null;
+    const ids = [...pendingPixHistorySync];
+    pendingPixHistorySync.clear();
+    void (async () => {
+      try {
+        const db = await getDb();
+        let projected = 0;
+        for (const id of ids) {
+          const session = db.sessions.get(id);
+          if (!session || session.temporary || session.deletedAt) continue;
+          if (getHistoryService().projectPixSession(id)) projected += 1;
+        }
+        if (projected > 0) {
+          broadcastEvent({
+            type: 'history.updated',
+            timestamp: Date.now(),
+            reason: 'pix-session',
+          });
+        }
+      } catch (error) {
+        console.error('[main] projecting PiX session into history failed', error);
+      }
+    })();
+  }, delayMs);
+}
+
 function broadcastEvent(event: unknown): void {
   const parsed = parseDesktopAgentEvent(event);
   if (!parsed.success) {
@@ -640,6 +678,8 @@ function broadcastEvent(event: unknown): void {
           ? 'failed'
           : 'cancelled';
     void applyPendingSessionTitle(data.sessionId, data.projectId, outcome);
+    // 聊完一轮 → 同步进 Agents → Pix / Projects（等 transcript 落库再投影）。
+    schedulePixHistorySync(data.sessionId, 180);
     void automationScheduler
       ?.handleRunFinished({
         runId: data.runId,
@@ -848,6 +888,7 @@ async function applyPendingSessionTitle(
 
     const renamed = await db.sessions.rename(sessionId, title);
     getNotifications().setSessionTitle(sessionId, renamed.title);
+    if (!renamed.temporary) schedulePixHistorySync(sessionId, 0);
     // LLM naming finishes after run.completed already refreshed the list, so
     // push a dedicated (Zod-validated) event the sidebar can react to.
     broadcastEvent({
@@ -1194,6 +1235,9 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
           ...(cmd.params.temporary ? { temporary: true } : {}),
         });
         getNotifications().setSessionTitle(summary.id, summary.title);
+        // Sidebar Agents/Projects read history_sessions — project as soon as the
+        // task exists so it shows under PiX / its project (Temporary stays out).
+        if (!summary.temporary) schedulePixHistorySync(summary.id, 0);
         return okResult(summary satisfies SessionSummary);
       }
       case 'session.list': {
@@ -1220,6 +1264,7 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       }
       case 'session.rename': {
         const summary = await sessions.rename(cmd.params.sessionId, cmd.params.title);
+        if (!summary.temporary) schedulePixHistorySync(summary.id, 0);
         return okResult(summary);
       }
       case 'session.archive': {
@@ -1297,6 +1342,8 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
           sessionId: meta.id,
         });
         await sessions.touch(cmd.params.sessionId);
+        // First send: land under Agents → Pix / the project even before the run ends.
+        if (!meta.temporary) schedulePixHistorySync(meta.id);
         // First successful send completes onboarding step 3 (run started).
         getProviderSettings().patchOnboarding({ hasFirstRun: true });
         return okResult(ref);
