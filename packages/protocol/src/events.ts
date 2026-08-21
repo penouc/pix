@@ -259,6 +259,15 @@ export const DesktopAgentEventSchema = z.discriminatedUnion('type', [
     timestamp: z.number().int().nonnegative(),
   }),
   /**
+   * History library finished a background scan / ACP detect pass. Sidebar
+   * invalidates `history.nav` / `history.list` — never block first paint on this.
+   */
+  z.object({
+    type: z.literal('history.updated'),
+    timestamp: z.number().int().nonnegative(),
+    reason: z.enum(['scan', 'detect', 'manual']).optional(),
+  }),
+  /**
    * Todo checklist changed (#11). Session-scoped — the agent can rewrite the
    * list between runs and the sidebar must follow it either way. The full list
    * is sent every time so a missed event cannot leave a stale sidebar.

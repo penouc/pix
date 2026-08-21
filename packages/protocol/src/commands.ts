@@ -874,7 +874,8 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
     params: z.object({
       agent: z.string().min(1),
       cwd: z.string().min(1),
-      prompt: z.string().min(1),
+      /** Empty / omitted = connect & resume only; send turns with acp.prompt. */
+      prompt: z.string().optional(),
       resumeSessionId: z.string().optional(),
       historyKey: z.string().optional(),
       /** When set, ACP stream events are scoped to this PiX workbench session. */

@@ -275,15 +275,17 @@ export function ToolCard({
 }
 
 /**
- * Read-only history transcript using the same message chrome as ChatPanel.
- * Not a live ChatPanel — no composer / fork / Pi runtime.
+ * History transcript using the same message chrome as ChatPanel.
+ * Live follow-ups append below via ACP; this block stays archival.
  */
 export function HistoryChatTranscript({
   messages,
   agent,
+  mode = 'readonly',
 }: {
   messages: HistoryMessage[];
   agent: string;
+  mode?: 'readonly' | 'live';
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
@@ -297,7 +299,7 @@ export function HistoryChatTranscript({
   return (
     <div className="mx-auto flex w-full min-w-0 max-w-[760px] flex-col gap-3">
       <div className="self-center rounded-full bg-foreground/[0.05] px-3 py-1 text-center text-[11px] leading-snug text-muted">
-        Read-only · {agentLabel}
+        {mode === 'live' ? `Archive · ${agentLabel}` : `Read-only · ${agentLabel}`}
       </div>
       {messages.map((m) => {
         const key = String(m.seq);

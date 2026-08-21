@@ -432,8 +432,10 @@ export function ProjectSidebar({
                 </div>
               ) : null}
             </>
+          ) : nav.isLoading ? (
+            <EmptyHint>Loading…</EmptyHint>
           ) : (
-            <EmptyHint>Scanning agents…</EmptyHint>
+            <EmptyHint>No agents yet</EmptyHint>
           )}
         </div>
 
@@ -478,6 +480,8 @@ export function ProjectSidebar({
                 </div>
               );
             })
+          ) : nav.isLoading ? (
+            <EmptyHint>Loading…</EmptyHint>
           ) : (
             <EmptyHint>No projects yet — open a folder to begin</EmptyHint>
           )}

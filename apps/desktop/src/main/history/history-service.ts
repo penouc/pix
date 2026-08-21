@@ -24,7 +24,7 @@ import {
   type HistoryAgentAdapter,
   type SessionFileRef,
 } from './types.js';
-import { detectAcpAgents } from '../acp/detect.js';
+import { detectAcpAgents, getCachedAcpAgents } from '../acp/detect.js';
 
 const RUNNABLE = new Set<HistoryAgentId>([
   'pix',
@@ -41,6 +41,7 @@ export class HistoryService {
   private adapters: HistoryAgentAdapter[] = [];
   private watchers: FSWatcher[] = [];
   private scanning = false;
+  private scanPromise: Promise<{ scanned: number; durationMs: number }> | null = null;
   private lastScanAt = 0;
 
   constructor(private readonly db: DesktopDatabase) {
@@ -84,14 +85,32 @@ export class HistoryService {
   }
 
   async refresh(force = false): Promise<{ scanned: number; durationMs: number }> {
-    if (this.scanning) return { scanned: 0, durationMs: 0 };
+    if (this.scanPromise) {
+      if (!force) return this.scanPromise;
+      // Wait for the in-flight pass, then start a forced one.
+      await this.scanPromise.catch(() => undefined);
+    }
     if (!force && Date.now() - this.lastScanAt < 5_000) {
       return { scanned: 0, durationMs: 0 };
     }
+    this.scanPromise = this.runRefresh(force);
+    try {
+      return await this.scanPromise;
+    } finally {
+      this.scanPromise = null;
+    }
+  }
+
+  private async runRefresh(force: boolean): Promise<{ scanned: number; durationMs: number }> {
+    if (this.scanning) return { scanned: 0, durationMs: 0 };
     this.scanning = true;
     const started = Date.now();
     let scanned = 0;
     try {
+      // Hot-reload can close SQLite while a prior scan is still draining.
+      if (!this.dbIsOpen()) {
+        return { scanned: 0, durationMs: 0 };
+      }
       this.adapters = [
         new ClaudeHistoryAdapter(),
         new CodexHistoryAdapter(),
@@ -103,10 +122,17 @@ export class HistoryService {
       this.mergeProjectPaths();
       const known = this.db.history.knownFiles();
       for (const adapter of this.adapters) {
+        if (!this.dbIsOpen()) break;
         const files = await adapter.listSessionFiles();
         for (const ref of files) {
+          if (!this.dbIsOpen()) break;
           if (isCredentialPath(ref.filePath)) continue;
-          if (this.db.history.isTombstoned(ref.filePath)) continue;
+          try {
+            if (this.db.history.isTombstoned(ref.filePath)) continue;
+          } catch (error) {
+            if (isDbClosedError(error)) return { scanned, durationMs: Date.now() - started };
+            throw error;
+          }
           const prev = known.get(ref.filePath);
           // force=true re-parses everything so adapter fixes (e.g. Codex titles) land.
           // Also re-ingest Codex rows stuck as Untitled from the previous parser.
@@ -117,25 +143,50 @@ export class HistoryService {
           if (!force && prev && prev.mtime === ref.mtimeMs && prev.size === ref.size && !staleUntitled) {
             continue;
           }
-          const ok = await this.ingest(adapter, ref);
-          if (ok) scanned += 1;
+          try {
+            const ok = await this.ingest(adapter, ref);
+            if (ok) scanned += 1;
+          } catch (error) {
+            if (isDbClosedError(error)) return { scanned, durationMs: Date.now() - started };
+            console.warn(`[history] ingest failed ${adapter.agent()} ${ref.filePath}:`, error);
+          }
         }
       }
       this.lastScanAt = Date.now();
+    } catch (error) {
+      if (isDbClosedError(error)) {
+        return { scanned, durationMs: Date.now() - started };
+      }
+      throw error;
     } finally {
       this.scanning = false;
     }
     return { scanned, durationMs: Date.now() - started };
   }
 
+  private dbIsOpen(): boolean {
+    try {
+      // node:sqlite throws ERR_INVALID_STATE once closed.
+      this.db.db.prepare('SELECT 1').get();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async nav(): Promise<HistoryNav> {
-    // Only scan on first open — archive/star/list should read SQLite immediately.
-    if (!this.lastScanAt) {
-      await this.refresh(true);
+    // Sidebar first paint must not wait on disk ingest or login-shell PATH probes.
+    if (!this.lastScanAt && !this.scanPromise) {
+      void this.refresh(false).catch((error) => {
+        console.error('[history] background scan failed', error);
+      });
+    }
+    const cached = getCachedAcpAgents();
+    if (!cached) {
+      void detectAcpAgents(true).catch(() => undefined);
     }
     const counts = this.db.history.agentCounts();
-    const acp = await detectAcpAgents();
-    const acpById = new Map(acp.map((a) => [a.id, a]));
+    const acpById = new Map((cached ?? []).map((a) => [a.id, a]));
 
     const agentIds: HistoryAgentId[] = [
       'pix',
@@ -476,4 +527,11 @@ export class HistoryService {
       return false;
     }
   }
+}
+
+function isDbClosedError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const code = 'code' in error ? String((error as { code?: unknown }).code) : '';
+  const message = error instanceof Error ? error.message : String(error);
+  return code === 'ERR_INVALID_STATE' || /database is not open/i.test(message);
 }

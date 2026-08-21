@@ -156,7 +156,8 @@ class AcpClient {
 export interface AcpStartInput {
   agent: HistoryAgentId;
   cwd: string;
-  prompt: string;
+  /** Empty = connect/resume only; first turn comes via prompt(). */
+  prompt?: string;
   resumeSessionId?: string;
   /** Caller-supplied id so UI can bind stream events before spawn returns. */
   runId?: string;
@@ -176,7 +177,15 @@ export interface AcpRunHandle {
  * via onEvent — the caller must resolve them (never auto-allow).
  */
 export class AcpSupervisor {
-  private runs = new Map<string, { client: AcpClient; sessionId: string | null; agent: HistoryAgentId }>();
+  private runs = new Map<
+    string,
+    {
+      client: AcpClient;
+      sessionId: string | null;
+      agent: HistoryAgentId;
+      onEvent: (event: AcpRunEvent) => void;
+    }
+  >();
   private permissions = new Map<string, AcpPermissionRequest>();
 
   async start(input: AcpStartInput): Promise<AcpRunHandle> {
@@ -190,8 +199,17 @@ export class AcpSupervisor {
     }
 
     const runId = input.runId ?? randomUUID();
-    const client = new AcpClient(info.command, info.args, input.cwd, process.env);
-    this.runs.set(runId, { client, sessionId: null, agent: input.agent });
+    const childEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      ...(info.env ?? {}),
+    };
+    const client = new AcpClient(info.command, info.args, input.cwd, childEnv);
+    this.runs.set(runId, {
+      client,
+      sessionId: null,
+      agent: input.agent,
+      onEvent: input.onEvent,
+    });
 
     client.onUpdate = (params) => {
       const update = (params.update ?? params) as Record<string, unknown>;
@@ -277,23 +295,12 @@ export class AcpSupervisor {
       const run = this.runs.get(runId);
       if (run) run.sessionId = sessionId;
 
-      // Return the handle immediately — awaiting the prompt would block IPC
-      // until the whole turn finishes, so the UI never switches.
-      void client
-        .sessionPrompt(sessionId!, input.prompt)
-        .then(() => {
-          input.onEvent({ type: 'done', runId, sessionId });
-        })
-        .catch((err) => {
-          input.onEvent({
-            type: 'error',
-            runId,
-            message: err instanceof Error ? err.message : String(err),
-          });
-          input.onEvent({ type: 'done', runId, sessionId });
-          client.kill();
-          this.runs.delete(runId);
-        });
+      const firstPrompt = input.prompt?.trim() ?? '';
+      if (firstPrompt) {
+        // Return the handle immediately — awaiting the prompt would block IPC
+        // until the whole turn finishes, so the UI never switches.
+        this.queuePrompt(runId, firstPrompt);
+      }
     } catch (err) {
       input.onEvent({
         type: 'error',
@@ -309,13 +316,36 @@ export class AcpSupervisor {
       runId,
       agent: input.agent,
       sessionId: this.runs.get(runId)?.sessionId ?? null,
-      prompt: async (text: string) => {
-        const run = this.runs.get(runId);
-        if (!run?.sessionId) throw new Error('ACP run is not active');
-        await run.client.sessionPrompt(run.sessionId, text);
-      },
+      prompt: (text: string) => this.prompt(runId, text),
       abort: () => this.abort(runId),
     };
+  }
+
+  /** Send a follow-up (or first) turn on an already-connected ACP run. */
+  async prompt(runId: string, text: string): Promise<void> {
+    const run = this.runs.get(runId);
+    if (!run?.sessionId) throw new Error('ACP run is not active');
+    this.queuePrompt(runId, text);
+  }
+
+  private queuePrompt(runId: string, text: string): void {
+    const run = this.runs.get(runId);
+    if (!run?.sessionId) throw new Error('ACP run is not active');
+    const { client, sessionId, onEvent } = run;
+    void client
+      .sessionPrompt(sessionId, text)
+      .then(() => {
+        onEvent({ type: 'done', runId, sessionId });
+      })
+      .catch((err) => {
+        onEvent({
+          type: 'error',
+          runId,
+          message: err instanceof Error ? err.message : String(err),
+        });
+        onEvent({ type: 'done', runId, sessionId });
+        // Keep the process alive for another try unless the session is gone.
+      });
   }
 
   abort(runId: string): void {

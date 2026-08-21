@@ -86,6 +86,7 @@ import { resumeInTerminal, listExternalTerminals } from './history/resume-termin
 import { AcpSupervisor } from './acp/supervisor.js';
 import { detectAcpAgents } from './acp/detect.js';
 import type { HistoryAgentId } from '@pi-desktop/protocol';
+import type { AcpRunEvent } from './acp/supervisor.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -117,6 +118,11 @@ let updates: UpdateService | null = null;
 let sessionLogSync: SessionLogSyncService | null = null;
 let historyService: HistoryService | null = null;
 let acpSupervisor: AcpSupervisor | null = null;
+/** Per-run scope so acp.prompt can keep streaming into the same session. */
+const acpRunScopes = new Map<
+  string,
+  { pixSessionId: string; pixProjectId: string; nextSeq: () => number; turn: number }
+>();
 
 function getHistoryService(): HistoryService {
   if (!historyService) {
@@ -289,11 +295,24 @@ async function getDb(): Promise<DesktopDatabase> {
       console.error('[main] legacy JSON migration failed', error);
     }
     desktopDb = db;
+    historyService?.stopWatching();
     historyService = new HistoryService(db);
     historyService.startWatching();
-    void historyService.refresh(true).catch((error) => {
-      console.error('[main] history initial scan failed', error);
-    });
+    void (async () => {
+      try {
+        await Promise.all([
+          historyService!.refresh(true),
+          detectAcpAgents(true),
+        ]);
+        broadcastEvent({
+          type: 'history.updated',
+          timestamp: Date.now(),
+          reason: 'scan',
+        });
+      } catch (error) {
+        console.error('[main] history initial scan failed', error);
+      }
+    })();
     void getSessionLogSync()
       .sync()
       .then(({ imported }) => {
@@ -1864,7 +1883,13 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       }
       case 'history.refresh': {
         await getDb();
-        return okResult(await getHistoryService().refresh(true));
+        const result = await getHistoryService().refresh(true);
+        broadcastEvent({
+          type: 'history.updated',
+          timestamp: Date.now(),
+          reason: 'manual',
+        });
+        return okResult(result);
       }
       case 'history.star': {
         await getDb();
@@ -1928,10 +1953,76 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       case 'acp.start': {
         let seq = 0;
         const nextSeq = () => seq++;
-        const pixSessionId = cmd.params.pixSessionId;
-        const pixProjectId = cmd.params.pixProjectId;
+        const pixSessionId = cmd.params.pixSessionId ?? `acp:${randomUUID()}`;
+        const pixProjectId = cmd.params.pixProjectId ?? 'acp';
         const runId = randomUUID();
-        if (pixSessionId && pixProjectId) {
+        const prompt = cmd.params.prompt?.trim() ?? '';
+        acpRunScopes.set(runId, { pixSessionId, pixProjectId, nextSeq, turn: 0 });
+
+        const broadcastAcp = (event: AcpRunEvent) => {
+          const scopeMeta = acpRunScopes.get(runId);
+          const turn = scopeMeta?.turn ?? 0;
+          const eventRunId = event.type === 'permission' ? event.request.runId : event.runId;
+          const scope = {
+            sessionId: pixSessionId,
+            projectId: pixProjectId,
+            runId: eventRunId,
+            sequence: nextSeq(),
+            timestamp: Date.now(),
+          };
+          if (event.type === 'text') {
+            broadcastEvent({
+              type: 'message.delta',
+              ...scope,
+              messageId: `acp-msg-${scope.runId}-${turn}`,
+              role: 'assistant',
+              delta: event.text,
+            });
+          } else if (event.type === 'thinking') {
+            broadcastEvent({
+              type: 'thinking.delta',
+              ...scope,
+              messageId: `acp-think-${scope.runId}-${turn}`,
+              delta: event.text,
+            });
+          } else if (event.type === 'tool') {
+            broadcastEvent({
+              type: 'tool.requested',
+              ...scope,
+              toolCallId: randomUUID(),
+              toolName: event.tool,
+              inputSummary: event.detail ?? event.tool,
+              riskLevel: 'workspace-write',
+            });
+          } else if (event.type === 'permission') {
+            broadcastEvent({
+              type: 'approval.requested',
+              ...scope,
+              requestId: event.request.requestId,
+              toolName: event.request.title,
+              riskLevel: 'sensitive',
+              summary: event.request.title,
+              reasons: event.request.options.map((o) => o.name),
+              affectedPaths: [],
+              rememberable: false,
+            });
+          } else if (event.type === 'error') {
+            broadcastEvent({
+              type: 'run.failed',
+              ...scope,
+              error: { code: 'ACP_ERROR', message: event.message, retryable: false },
+            });
+          } else if (event.type === 'done') {
+            broadcastEvent({
+              type: 'run.completed',
+              ...scope,
+            });
+          }
+        };
+
+        if (prompt) {
+          const scopeMeta = acpRunScopes.get(runId)!;
+          scopeMeta.turn += 1;
           broadcastEvent({
             type: 'run.started',
             sessionId: pixSessionId,
@@ -1948,90 +2039,76 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
             runId,
             sequence: nextSeq(),
             timestamp: Date.now(),
-            messageId: `acp-user-${runId}`,
+            messageId: `acp-user-${runId}-${scopeMeta.turn}`,
             role: 'user',
-            content: cmd.params.prompt,
+            content: prompt,
           });
         }
-        const handle = await getAcpSupervisor().start({
-          agent: cmd.params.agent as HistoryAgentId,
-          cwd: cmd.params.cwd,
-          prompt: cmd.params.prompt,
-          resumeSessionId: cmd.params.resumeSessionId,
-          runId,
-          onEvent: (event) => {
-            const eventRunId = event.type === 'permission' ? event.request.runId : event.runId;
-            const scope = {
-              sessionId: pixSessionId ?? `acp:${eventRunId}`,
-              projectId: pixProjectId ?? 'acp',
-              runId: eventRunId,
-              sequence: nextSeq(),
-              timestamp: Date.now(),
-            };
-            if (event.type === 'text') {
-              broadcastEvent({
-                type: 'message.delta',
-                ...scope,
-                messageId: `acp-msg-${scope.runId}`,
-                role: 'assistant',
-                delta: event.text,
-              });
-            } else if (event.type === 'thinking') {
-              broadcastEvent({
-                type: 'thinking.delta',
-                ...scope,
-                messageId: `acp-think-${scope.runId}`,
-                delta: event.text,
-              });
-            } else if (event.type === 'tool') {
-              broadcastEvent({
-                type: 'tool.requested',
-                ...scope,
-                toolCallId: randomUUID(),
-                toolName: event.tool,
-                inputSummary: event.detail ?? event.tool,
-                riskLevel: 'workspace-write',
-              });
-            } else if (event.type === 'permission') {
-              broadcastEvent({
-                type: 'approval.requested',
-                ...scope,
-                requestId: event.request.requestId,
-                toolName: event.request.title,
-                riskLevel: 'sensitive',
-                summary: event.request.title,
-                reasons: event.request.options.map((o) => o.name),
-                affectedPaths: [],
-                rememberable: false,
-              });
-            } else if (event.type === 'error') {
-              broadcastEvent({
-                type: 'run.failed',
-                ...scope,
-                error: { code: 'ACP_ERROR', message: event.message, retryable: false },
-              });
-            } else if (event.type === 'done') {
-              broadcastEvent({
-                type: 'run.completed',
-                ...scope,
-              });
-            }
-          },
-        });
-        return okResult({
-          runId: handle.runId,
-          sessionId: handle.sessionId,
-          agent: handle.agent,
-        });
+
+        try {
+          const handle = await getAcpSupervisor().start({
+            agent: cmd.params.agent as HistoryAgentId,
+            cwd: cmd.params.cwd,
+            prompt: prompt || undefined,
+            resumeSessionId: cmd.params.resumeSessionId,
+            runId,
+            onEvent: broadcastAcp,
+          });
+          return okResult({
+            runId: handle.runId,
+            sessionId: handle.sessionId,
+            agent: handle.agent,
+            pixSessionId,
+            pixProjectId,
+          });
+        } catch (error) {
+          acpRunScopes.delete(runId);
+          return errResult(
+            'ACP_START_FAILED',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
       }
       case 'acp.prompt': {
-        return errResult(
-          'UNSUPPORTED',
-          'Follow-up ACP prompts are not wired yet — start a new run or resume in the terminal.',
-        );
+        const scope = acpRunScopes.get(cmd.params.runId);
+        if (!scope) {
+          return errResult('NOT_FOUND', 'ACP run is not active — Continue again to reconnect.');
+        }
+        const { pixSessionId, pixProjectId, nextSeq } = scope;
+        scope.turn += 1;
+        broadcastEvent({
+          type: 'run.started',
+          sessionId: pixSessionId,
+          projectId: pixProjectId,
+          runId: cmd.params.runId,
+          sequence: nextSeq(),
+          timestamp: Date.now(),
+          model: { providerId: 'acp', modelId: 'acp' },
+        });
+        broadcastEvent({
+          type: 'message.completed',
+          sessionId: pixSessionId,
+          projectId: pixProjectId,
+          runId: cmd.params.runId,
+          sequence: nextSeq(),
+          timestamp: Date.now(),
+          messageId: `acp-user-${cmd.params.runId}-${scope.turn}`,
+          role: 'user',
+          content: cmd.params.prompt,
+        });
+        try {
+          await getAcpSupervisor().prompt(cmd.params.runId, cmd.params.prompt);
+          return okResult({ ok: true });
+        } catch (error) {
+          return errResult(
+            'ACP_PROMPT_FAILED',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
       }
       case 'acp.abort': {
         getAcpSupervisor().abort(cmd.params.runId);
+        acpRunScopes.delete(cmd.params.runId);
         return okResult({ ok: true });
       }
       case 'acp.resolvePermission': {

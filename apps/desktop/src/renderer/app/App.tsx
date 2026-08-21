@@ -103,6 +103,11 @@ export function App() {
         });
         return;
       }
+      if (event.type === 'history.updated') {
+        void queryClient.invalidateQueries({ queryKey: ['history.nav'] });
+        void queryClient.invalidateQueries({ queryKey: ['history.list'] });
+        return;
+      }
       // Interactive Terminal PTY stream — TerminalView subscribes separately.
       if (event.type === 'terminal.data' || event.type === 'terminal.exit') {
         return;
@@ -273,58 +278,6 @@ export function App() {
     setComposerInsert({ text: `${skill.command} `, token: Date.now() });
     setView('run');
   }, []);
-
-  /**
-   * Resume an external agent session inside PiX via ACP: open the project,
-   * create a workbench session, switch to the run view, then start the agent.
-   */
-  const continueInPix = useCallback(
-    async (meta: HistorySessionMeta) => {
-      if (!meta.projectPath) {
-        throw new Error('This session has no project directory to resume in.');
-      }
-      setProjectError(null);
-      let project = await invoke<ProjectSummary>({
-        method: 'project.open',
-        params: { path: meta.projectPath },
-      });
-      if (!project.trusted) {
-        project = await invoke<ProjectSummary>({
-          method: 'project.setTrust',
-          params: { projectId: project.id, trusted: true },
-        });
-      }
-      setProject(project);
-      const created = await invoke<SessionSummary>({
-        method: 'session.create',
-        params: {
-          projectId: project.id,
-          title: meta.title ? `Continue · ${meta.title}` : 'Continue in PiX',
-        },
-      });
-      setSession(created);
-      resetSessionView();
-      setScope(project.id, created.id);
-      setBlankRun(false);
-      setView('run');
-      await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
-      await queryClient.invalidateQueries({ queryKey: ['session.list', project.id] });
-
-      await invoke({
-        method: 'acp.start',
-        params: {
-          agent: meta.agent,
-          cwd: meta.projectPath,
-          prompt: 'Continue where we left off.',
-          resumeSessionId: meta.nativeId,
-          historyKey: meta.key,
-          pixSessionId: created.id,
-          pixProjectId: project.id,
-        },
-      });
-    },
-    [queryClient, setProject, setSession, resetSessionView, setScope],
-  );
 
   const selectHistorySession = useCallback(
     (meta: HistorySessionMeta) => {
@@ -511,10 +464,7 @@ export function App() {
         ) : view === 'skills' ? (
           <SkillsView onRunSkill={useSkill} />
         ) : view === 'history' ? (
-          <HistoryBrowser
-            sessionKey={historySessionKey}
-            onContinueInPix={continueInPix}
-          />
+          <HistoryBrowser sessionKey={historySessionKey} />
         ) : view === 'diff' ? (
           <DiffPanel
             onContinue={() => setView('run')}
