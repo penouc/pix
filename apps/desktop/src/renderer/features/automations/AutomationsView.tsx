@@ -189,7 +189,7 @@ export function AutomationsView({ onOpenSession }: { onOpenSession: (sessionId: 
                 {AUTOMATION_EXAMPLES.map((example) => (
                   <div
                     key={example.name}
-                    className="flex min-h-[176px] flex-col gap-2.5 rounded-[22px] border border-border bg-background p-4 shadow-[var(--shadow-sm)]"
+                    className="flex min-h-[176px] flex-col gap-2.5 rounded-xl border border-border bg-background p-4 shadow-[var(--shadow-sm)]"
                   >
                     <div className="text-[14px] font-bold">{example.name}</div>
                     <div className="flex flex-wrap gap-1.5">
@@ -237,7 +237,7 @@ export function AutomationsView({ onOpenSession }: { onOpenSession: (sessionId: 
             return (
               <div
                 key={automation.id}
-                className="flex flex-col gap-2.5 rounded-[22px] border border-border bg-background p-4 shadow-[var(--shadow-sm)]"
+                className="flex flex-col gap-2.5 rounded-xl border border-border bg-background p-4 shadow-[var(--shadow-sm)]"
               >
                 <div className="flex items-start gap-3">
                   <div className="min-w-0 flex-1">
@@ -404,7 +404,7 @@ function AutomationEditor({
   const triggerKind = value.trigger.kind;
 
   return (
-    <div className="mb-4 flex flex-col gap-3.5 rounded-[24px] border border-border bg-surface p-5">
+    <div className="mb-4 flex flex-col gap-3.5 rounded-xl border border-border bg-surface p-5">
       <div className="text-[13.5px] font-bold">
         {draft.id ? 'Edit automation' : 'New automation'}
       </div>
@@ -422,7 +422,7 @@ function AutomationEditor({
       <label className="flex flex-col gap-1.5">
         <span className="text-xs text-muted">Prompt sent to the agent</span>
         <textarea
-          className="input min-h-[72px] resize-y rounded-[18px] bg-background py-2"
+          className="input min-h-[72px] resize-y bg-background py-2"
           value={value.prompt}
           onChange={(event) => setValue({ ...value, prompt: event.target.value })}
           placeholder="Run the unit tests and fix any failing suite."

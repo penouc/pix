@@ -220,7 +220,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
             </p>
             <div className="flex gap-2">
               <input
-                className="flex-1 rounded-xl border border-border bg-surface-raised px-3 py-2 text-sm outline-none focus:border-border-strong"
+                className="flex-1 rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm outline-none focus:border-border-strong"
                 type="password"
                 autoComplete="off"
                 placeholder="DeepSeek API key"
@@ -274,7 +274,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
               searchPlaceholder="Search providers…"
             />
             <input
-              className="rounded-xl border border-border bg-surface-raised px-3 py-2 text-sm outline-none focus:border-border-strong"
+              className="rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm outline-none focus:border-border-strong"
               type="password"
               autoComplete="off"
               placeholder={chosen?.apiKeyLabel ?? 'API key'}

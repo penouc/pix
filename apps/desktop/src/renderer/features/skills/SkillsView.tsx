@@ -155,7 +155,7 @@ export function SkillsView({ onRunSkill }: { onRunSkill: (skill: SkillInfo) => v
               {SKILL_EXAMPLES.map((example) => (
                 <div
                   key={example.id}
-                  className="flex min-h-[168px] flex-col gap-2.5 rounded-[22px] border border-border bg-background p-4 shadow-[var(--shadow-sm)]"
+                  className="flex min-h-[168px] flex-col gap-2.5 rounded-xl border border-border bg-background p-4 shadow-[var(--shadow-sm)]"
                 >
                   <div className="flex items-center gap-2.5">
                     <span className="rounded-full bg-accent-100 px-2.5 py-[3px] font-mono text-[12px] text-accent-800">
@@ -187,7 +187,7 @@ export function SkillsView({ onRunSkill }: { onRunSkill: (skill: SkillInfo) => v
             </div>
           </div>
         ) : filtered.length === 0 && !skills.isLoading ? (
-          <div className="rounded-[20px] border border-dashed border-foreground/20 px-5 py-7 text-center text-[12.5px] text-muted">
+          <div className="rounded-xl border border-dashed border-foreground/20 px-5 py-7 text-center text-[12.5px] text-muted">
             No skills match this search and scope.
           </div>
         ) : (
@@ -196,7 +196,7 @@ export function SkillsView({ onRunSkill }: { onRunSkill: (skill: SkillInfo) => v
               <div
                 key={skill.id}
                 className={cn(
-                  'flex min-h-[168px] flex-col gap-2.5 rounded-[22px] border border-border bg-background p-4 shadow-[var(--shadow-sm)] transition-opacity',
+                  'flex min-h-[168px] flex-col gap-2.5 rounded-xl border border-border bg-background p-4 shadow-[var(--shadow-sm)] transition-opacity',
                   !skill.enabled && 'opacity-60',
                 )}
               >

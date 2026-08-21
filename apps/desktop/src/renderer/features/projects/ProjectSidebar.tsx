@@ -142,6 +142,7 @@ export function ProjectSidebar({
       resetSessionView();
       setScope(opened.id, null);
       void recent.refetch();
+      void queryClient.invalidateQueries({ queryKey: ['history.nav'] });
       onProjectSwitched();
       return opened;
     } catch (err) {

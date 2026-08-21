@@ -506,7 +506,7 @@ export function HistoryBrowser({
               {connectError ? (
                 <div className="mb-2 px-1 text-[11.5px] text-danger">{connectError}</div>
               ) : null}
-              <div className="density-composer overflow-hidden rounded-[26px] border border-border bg-surface shadow-[var(--shadow-sm)]">
+              <div className="density-composer overflow-hidden border border-border bg-surface shadow-[var(--shadow-sm)]">
                 <textarea
                   ref={composerRef}
                   rows={1}

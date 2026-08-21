@@ -88,7 +88,7 @@
   --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --text-base: 13px;
   --leading-base: 1.5;
-  --radius-panel: 16px;
+  --radius-panel: 12px;
 }
 
 /* Aliases under the design system's own names, so markup transcribed from the
@@ -107,9 +107,9 @@
   --space-6: 26.4px;
   --space-8: 35.2px;
 
-  --radius-sm: 8px;
-  --radius-md: 16px;
-  --radius-lg: 28px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
 
   --shadow-sm: 0 1px 2px rgba(20, 21, 24, 0.07);
   --shadow-md: 0 3px 10px rgba(20, 21, 24, 0.09);
@@ -402,7 +402,7 @@
     flex-direction: column;
     gap: var(--space-2);
     padding: var(--space-3);
-    border-radius: calc(var(--radius-lg) * 1.15);
+    border-radius: var(--radius-lg);
     background: var(--color-surface);
   }
   .card-kicker {
@@ -439,18 +439,23 @@
     box-shadow: var(--shadow-lg);
   }
 
-  /* — inputs — */
+  /* — inputs — rounded rectangle, not stadium pills */
   .input {
     width: 100%;
     min-height: 32px;
-    padding: 6px 14px;
+    padding: 6px 12px;
     font: inherit;
     font-size: 13px;
     color: var(--color-text);
     caret-color: var(--color-accent);
     background: var(--color-surface);
     border: 1px solid var(--color-divider);
-    border-radius: 999px;
+    border-radius: var(--radius-md);
+  }
+  textarea.input {
+    min-height: 72px;
+    padding-block: 8px;
+    resize: vertical;
   }
   .input::placeholder {
     color: color-mix(in srgb, var(--color-text) 45%, transparent);
@@ -461,6 +466,11 @@
   .input:focus-visible {
     border-color: var(--color-accent);
     outline-offset: 0;
+  }
+
+  /* Main chat / history composer shell — same language as .input */
+  .density-composer {
+    border-radius: var(--radius-lg);
   }
 
   /* — select dropdown — */
@@ -490,7 +500,7 @@
     flex-direction: column;
     gap: var(--space-3);
     padding: var(--space-4);
-    border-radius: calc(var(--radius-lg) * 1.15);
+    border-radius: var(--radius-lg);
     background: var(--color-bg);
     box-shadow: var(--shadow-lg);
   }

@@ -331,6 +331,7 @@ export function App() {
       setScope(opened.id, null);
       setPriorSession(null);
       await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
+      await queryClient.invalidateQueries({ queryKey: ['history.nav'] });
       setBlankRun(true);
       setView('run');
     } catch (err) {
@@ -352,6 +353,7 @@ export function App() {
       setScope(opened.id, null);
       setPriorSession(null);
       await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
+      await queryClient.invalidateQueries({ queryKey: ['history.nav'] });
       setBlankRun(true);
       setView('run');
     } catch (err) {

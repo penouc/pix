@@ -104,7 +104,7 @@ export function ProviderLoginDialog({
       onClick={close}
     >
       <div
-        className="w-[440px] overflow-hidden rounded-[24px] bg-background shadow-[var(--shadow-lg)]"
+        className="w-[440px] overflow-hidden rounded-2xl bg-background shadow-[var(--shadow-lg)]"
         style={{ animation: 'pi-in .16s ease-out' }}
         role="dialog"
         aria-modal="true"
@@ -201,7 +201,7 @@ export function ProviderLoginDialog({
                 <div className="flex items-center gap-2">
                   <input
                     autoFocus
-                    className="min-w-0 flex-1 rounded-xl border border-border bg-surface px-3 py-2 font-mono text-[13px] outline-none focus:border-accent/50"
+                    className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 font-mono text-[13px] outline-none focus:border-accent/50"
                     type={state.questionKind === 'password' ? 'password' : 'text'}
                     placeholder={state.placeholder ?? ''}
                     value={answer}

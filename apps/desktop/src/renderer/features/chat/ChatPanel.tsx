@@ -277,6 +277,7 @@ export function ChatPanel({
       resetSessionView();
       setScope(opened.id, null);
       await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
+      await queryClient.invalidateQueries({ queryKey: ['history.nav'] });
       focusComposer();
     } catch (err) {
       if (err instanceof IpcError && err.code === 'CANCELLED') return;
@@ -335,6 +336,7 @@ export function ChatPanel({
       resetSessionView();
       setScope(opened.id, null);
       await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
+      await queryClient.invalidateQueries({ queryKey: ['history.nav'] });
       focusComposer();
     } catch (err) {
       setProjectSwitchError(err instanceof Error ? err.message : String(err));
@@ -1759,7 +1761,7 @@ export function ChatPanel({
             ) : null}
             <div
               className={cn(
-                'density-composer overflow-hidden rounded-[26px] border bg-surface shadow-[var(--shadow-sm)]',
+                'density-composer overflow-hidden border bg-surface shadow-[var(--shadow-sm)]',
                 draggingImages ? 'border-accent bg-accent/5' : 'border-border',
               )}
               onDragEnter={(event) => {

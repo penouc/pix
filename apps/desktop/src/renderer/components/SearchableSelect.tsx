@@ -134,7 +134,7 @@ export function SearchableSelect({
         disabled={disabled}
         onClick={() => setOpen((prev) => !prev)}
         className={cn(
-          'flex h-9 w-full cursor-pointer items-center justify-between gap-2 rounded-xl border border-border bg-surface-raised px-3 py-2 text-left text-sm transition-colors',
+          'flex h-9 w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2 text-left text-sm transition-colors',
           'hover:bg-foreground/[0.04] focus-visible:border-border-strong',
           disabled && 'cursor-not-allowed opacity-50',
           className,

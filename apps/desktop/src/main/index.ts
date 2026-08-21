@@ -1092,6 +1092,11 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         if (!isPlaygroundPath(project.path)) {
           getProviderSettings().patchOnboarding({ hasOpenedProject: true });
         }
+        broadcastEvent({
+          type: 'history.updated',
+          timestamp: Date.now(),
+          reason: 'manual',
+        });
         return okResult(decorateProject(project) satisfies ProjectSummary);
       }
       case 'project.pickFolder': {
@@ -1121,6 +1126,11 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         if (!isPlaygroundPath(project.path)) {
           getProviderSettings().patchOnboarding({ hasOpenedProject: true });
         }
+        broadcastEvent({
+          type: 'history.updated',
+          timestamp: Date.now(),
+          reason: 'manual',
+        });
         return okResult(decorateProject(project) satisfies ProjectSummary);
       }
       case 'project.listRecent': {
@@ -1141,6 +1151,11 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
         if (playground.name === 'playground') {
           playground = await projects.put({ ...playground, name: 'Scratch playground' });
         }
+        broadcastEvent({
+          type: 'history.updated',
+          timestamp: Date.now(),
+          reason: 'manual',
+        });
         return okResult(decorateProject(playground) satisfies ProjectSummary);
       }
       case 'project.setTrust': {

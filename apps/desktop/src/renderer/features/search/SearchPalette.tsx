@@ -244,7 +244,7 @@ export function SearchPalette({
       onClick={onClose}
     >
       <div
-        className="flex max-h-[520px] w-[620px] flex-col overflow-hidden rounded-[26px] bg-background shadow-[var(--shadow-lg)]"
+        className="flex max-h-[520px] w-[620px] flex-col overflow-hidden rounded-2xl bg-background shadow-[var(--shadow-lg)]"
         style={{ animation: 'pi-in .16s ease-out' }}
         role="dialog"
         aria-modal="true"
