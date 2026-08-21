@@ -31,6 +31,7 @@ describe('FakeAgentRuntime', () => {
       // App-level / Terminal PTY events share the bus but are not run-scoped.
       if (
         event.type === 'update.status' ||
+        event.type === 'history.updated' ||
         event.type === 'terminal.data' ||
         event.type === 'terminal.exit'
       ) {
