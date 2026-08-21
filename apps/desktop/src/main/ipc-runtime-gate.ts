@@ -119,6 +119,22 @@ export function ipcMethodNeedsRuntime(method: IpcMethod): boolean {
     case 'usage.summary':
     case 'usage.projects':
     case 'system.revealPath':
+    case 'history.nav':
+    case 'history.list':
+    case 'history.transcript':
+    case 'history.refresh':
+    case 'history.star':
+    case 'history.resume':
+    case 'history.listTerminals':
+    case 'history.delete':
+    case 'history.archiveProject':
+    case 'history.archiveSession':
+    case 'history.listArchived':
+    case 'acp.listAgents':
+    case 'acp.start':
+    case 'acp.prompt':
+    case 'acp.abort':
+    case 'acp.resolvePermission':
       return false;
   }
 }

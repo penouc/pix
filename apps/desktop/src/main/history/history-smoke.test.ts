@@ -57,7 +57,7 @@ describe('history library local smoke', () => {
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
 
     const nav = await service.nav();
-    expect(nav.agents.some((a) => a.count > 0 || a.id === 'pix')).toBe(true);
+    expect(nav.agents.some((a) => a.count > 0 || a.agent === 'pix')).toBe(true);
 
     const listed = service.list({ limit: 20 });
     // Fresh DB may only have external sessions after refresh
