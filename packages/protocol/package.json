@@ -1,6 +1,6 @@
 {
   "name": "@pi-desktop/protocol",
-  "version": "0.6.4",
+  "version": "0.6.6",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
