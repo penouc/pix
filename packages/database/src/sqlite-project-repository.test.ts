@@ -41,16 +41,16 @@ describe('SqliteProjectRepository + DesktopDatabase', () => {
     expect(again.id).toBe(opened.id);
   });
 
-  it('lists projects in stable name order', async () => {
+  it('lists projects by most recently opened', async () => {
     const db = await setup();
     await mkdir(path.join(dir, 'z-app'));
     await mkdir(path.join(dir, 'a-app'));
     await db.projects.open(path.join(dir, 'z-app'));
     await db.projects.open(path.join(dir, 'a-app'));
     expect(db.projects.listRecent().map((p) => p.name)).toEqual(['a-app', 'z-app']);
-    // Re-opening should not reshuffle the list.
+    // Re-opening bumps the folder to the front of the list.
     await db.projects.open(path.join(dir, 'z-app'));
-    expect(db.projects.listRecent().map((p) => p.name)).toEqual(['a-app', 'z-app']);
+    expect(db.projects.listRecent().map((p) => p.name)).toEqual(['z-app', 'a-app']);
   });
 
   it('shares one DB with sessions and migrates legacy JSON', async () => {

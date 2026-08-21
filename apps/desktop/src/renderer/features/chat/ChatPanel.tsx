@@ -49,6 +49,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ApprovalModePicker } from '@/features/chat/ApprovalModePicker';
 import { SessionModePicker } from '@/features/chat/SessionModePicker';
+import { upsertOpenedProjectInNav } from '@/features/projects/history-nav-cache';
 import {
   filterSlashCommands,
   matchSlashQuery,
@@ -276,8 +277,9 @@ export function ChatPanel({
       setProject(opened);
       resetSessionView();
       setScope(opened.id, null);
+      upsertOpenedProjectInNav(queryClient, opened);
       await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
-      await queryClient.invalidateQueries({ queryKey: ['history.nav'] });
+      await queryClient.refetchQueries({ queryKey: ['history.nav'] });
       focusComposer();
     } catch (err) {
       if (err instanceof IpcError && err.code === 'CANCELLED') return;
@@ -335,8 +337,9 @@ export function ChatPanel({
       setProject(opened);
       resetSessionView();
       setScope(opened.id, null);
+      upsertOpenedProjectInNav(queryClient, opened);
       await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
-      await queryClient.invalidateQueries({ queryKey: ['history.nav'] });
+      await queryClient.refetchQueries({ queryKey: ['history.nav'] });
       focusComposer();
     } catch (err) {
       setProjectSwitchError(err instanceof Error ? err.message : String(err));

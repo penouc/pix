@@ -24,6 +24,7 @@ import type {
 import { HISTORY_AGENT_DISPLAY } from '@pi-desktop/protocol';
 
 import type { HistoryScope, HistoryBootLive } from '@/features/history/HistoryBrowser';
+import { upsertOpenedProjectInNav } from '@/features/projects/history-nav-cache';
 import { invoke } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useAgentStreamStore } from '@/stores/agent-stream-store';
@@ -84,7 +85,7 @@ export function ProjectSidebar({
   const nav = useQuery({
     queryKey: ['history.nav'],
     queryFn: () => invoke<HistoryNav>({ method: 'history.nav', params: {} }),
-    staleTime: 10_000,
+    staleTime: 0,
   });
 
   const scopedSessions = useQuery({
@@ -141,8 +142,9 @@ export function ProjectSidebar({
       setSession(null);
       resetSessionView();
       setScope(opened.id, null);
+      upsertOpenedProjectInNav(queryClient, opened);
       void recent.refetch();
-      void queryClient.invalidateQueries({ queryKey: ['history.nav'] });
+      void queryClient.refetchQueries({ queryKey: ['history.nav'] });
       onProjectSwitched();
       return opened;
     } catch (err) {
@@ -169,7 +171,9 @@ export function ProjectSidebar({
         setSession(null);
         resetSessionView();
         setScope(target.id, null);
+        upsertOpenedProjectInNav(queryClient, target);
         void recent.refetch();
+        void queryClient.refetchQueries({ queryKey: ['history.nav'] });
       } catch (err) {
         setOpenError(err instanceof Error ? err.message : String(err));
         return;
@@ -196,7 +200,9 @@ export function ProjectSidebar({
         setSession(null);
         resetSessionView();
         setScope(target.id, null);
+        upsertOpenedProjectInNav(queryClient, target);
         void recent.refetch();
+        void queryClient.refetchQueries({ queryKey: ['history.nav'] });
       } catch (err) {
         setOpenError(err instanceof Error ? err.message : String(err));
         return;
@@ -267,7 +273,9 @@ export function ProjectSidebar({
       ...p,
       name: playgroundNames.get(p.path) ?? p.name,
     }));
-  const activeProjects = allProjects.slice(0, 24);
+  // Prefer recently active folders; keep the list long enough that a just-opened
+  // project is never clipped off the bottom of a busy history library.
+  const activeProjects = allProjects.slice(0, 80);
 
   function sessionListUnder(active: boolean) {
     if (!active) return null;

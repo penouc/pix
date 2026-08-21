@@ -13,6 +13,8 @@ import type {
   TodoItem,
 } from '@pi-desktop/protocol';
 
+import { upsertOpenedProjectInNav } from '@/features/projects/history-nav-cache';
+
 import { AppShell } from '@/components/layout/AppShell';
 import { ApprovalDialog } from '@/features/approvals/ApprovalDialog';
 import { AskDialog } from '@/features/ask/AskDialog';
@@ -330,8 +332,9 @@ export function App() {
       resetSessionView();
       setScope(opened.id, null);
       setPriorSession(null);
+      upsertOpenedProjectInNav(queryClient, opened);
       await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
-      await queryClient.invalidateQueries({ queryKey: ['history.nav'] });
+      await queryClient.refetchQueries({ queryKey: ['history.nav'] });
       setBlankRun(true);
       setView('run');
     } catch (err) {
@@ -352,8 +355,9 @@ export function App() {
       resetSessionView();
       setScope(opened.id, null);
       setPriorSession(null);
+      upsertOpenedProjectInNav(queryClient, opened);
       await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
-      await queryClient.invalidateQueries({ queryKey: ['history.nav'] });
+      await queryClient.refetchQueries({ queryKey: ['history.nav'] });
       setBlankRun(true);
       setView('run');
     } catch (err) {

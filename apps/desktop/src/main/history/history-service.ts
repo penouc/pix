@@ -216,9 +216,9 @@ export class HistoryService {
       });
     }
 
-    const pixProjects = this.db.projects.listRecent(50);
+    const pixProjects = this.db.projects.listRecent(200);
     const pixByPath = new Map(
-      pixProjects.map((p) => [normalizeProjectPath(p.path) || p.path, p.id] as const),
+      pixProjects.map((p) => [normalizeProjectPath(p.path) || p.path, p] as const),
     );
     const archivedPaths = this.db.history.archivedProjectPaths();
     const archivedMeta = new Map(
@@ -231,16 +231,18 @@ export class HistoryService {
     const byPath = new Map<string, HistoryProjectNav>();
     for (const p of this.db.history.projectCounts()) {
       const pathKey = normalizeProjectPath(p.path) || p.path;
+      if (!pathKey) continue;
+      const pix = pixByPath.get(pathKey);
       const prev = byPath.get(pathKey);
       if (prev) {
         byPath.set(pathKey, {
           ...prev,
           count: prev.count + p.count,
-          lastActive: Math.max(prev.lastActive, p.lastActive),
+          lastActive: Math.max(prev.lastActive, p.lastActive, pix?.lastOpenedAt ?? 0),
           name: prev.name || p.name || projectNameOf(pathKey),
           archived: prev.archived || archivedPaths.has(pathKey),
-          ...(prev.pixProjectId || pixByPath.get(pathKey)
-            ? { pixProjectId: prev.pixProjectId ?? pixByPath.get(pathKey) }
+          ...(prev.pixProjectId || pix?.id
+            ? { pixProjectId: prev.pixProjectId ?? pix?.id }
             : {}),
         });
         continue;
@@ -249,18 +251,22 @@ export class HistoryService {
         path: pathKey,
         name: p.name || projectNameOf(pathKey),
         count: p.count,
-        lastActive: p.lastActive,
+        lastActive: Math.max(p.lastActive, pix?.lastOpenedAt ?? 0),
         archived: archivedPaths.has(pathKey),
-        ...(pixByPath.get(pathKey) ? { pixProjectId: pixByPath.get(pathKey) } : {}),
+        ...(pix?.id ? { pixProjectId: pix.id } : {}),
       });
     }
     for (const item of pixProjects) {
       const pathKey = normalizeProjectPath(item.path) || item.path;
+      if (!pathKey) continue;
       const existing = byPath.get(pathKey);
       if (existing) {
-        if (!existing.pixProjectId) {
-          byPath.set(pathKey, { ...existing, pixProjectId: item.id });
-        }
+        byPath.set(pathKey, {
+          ...existing,
+          lastActive: Math.max(existing.lastActive, item.lastOpenedAt ?? 0),
+          ...(existing.pixProjectId ? {} : { pixProjectId: item.id }),
+          name: existing.name || item.name,
+        });
         continue;
       }
       byPath.set(pathKey, {
@@ -282,7 +288,9 @@ export class HistoryService {
         count: 0,
         lastActive: meta.archivedAt,
         archived: true,
-        ...(pixByPath.get(pathKey) ? { pixProjectId: pixByPath.get(pathKey) } : {}),
+        ...(pixByPath.get(pathKey)?.id
+          ? { pixProjectId: pixByPath.get(pathKey)!.id }
+          : {}),
       });
     }
 
