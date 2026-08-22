@@ -82,6 +82,11 @@ import { runPreflight } from './platform/environment.js';
 import { windowChromeOptions, windowsTitleBarOverlay } from './platform/window-chrome.js';
 import { ipcMethodNeedsRuntime } from './ipc-runtime-gate.js';
 import { HistoryService } from './history/history-service.js';
+import {
+  isPlaygroundPath,
+  playgroundDir,
+  playgroundDisplayName,
+} from './project-playground.js';
 import { resumeInTerminal, listExternalTerminals } from './history/resume-terminal.js';
 import { AcpSupervisor } from './acp/supervisor.js';
 import { detectAcpAgents } from './acp/detect.js';
@@ -208,15 +213,6 @@ function getProviderSettings(): ProviderSettingsStore {
   return providerSettings;
 }
 
-/** App-owned scratch workspace — not a user project folder. */
-function playgroundDir(): string {
-  return path.join(app.getPath('userData'), 'playground');
-}
-
-function isPlaygroundPath(projectPath: string): boolean {
-  return path.resolve(projectPath) === path.resolve(playgroundDir());
-}
-
 /** Tag playground projects at the IPC boundary (not persisted in SQLite). */
 function decorateProject(project: ProjectSummary): ProjectSummary {
   const playground = isPlaygroundPath(project.path);
@@ -225,8 +221,7 @@ function decorateProject(project: ProjectSummary): ProjectSummary {
     ...(playground
       ? {
           isPlayground: true,
-          // Keep the sidebar / picker label honest even if an older row stored "playground".
-          name: project.name === 'playground' ? 'Scratch playground' : project.name,
+          name: playgroundDisplayName(project.name),
         }
       : { isPlayground: false }),
   };

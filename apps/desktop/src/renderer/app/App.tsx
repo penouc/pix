@@ -333,7 +333,6 @@ export function App() {
       setScope(opened.id, null);
       setPriorSession(null);
       upsertOpenedProjectInNav(queryClient, opened);
-      await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
       await queryClient.refetchQueries({ queryKey: ['history.nav'] });
       setBlankRun(true);
       setView('run');
@@ -356,7 +355,6 @@ export function App() {
       setScope(opened.id, null);
       setPriorSession(null);
       upsertOpenedProjectInNav(queryClient, opened);
-      await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
       await queryClient.refetchQueries({ queryKey: ['history.nav'] });
       setBlankRun(true);
       setView('run');

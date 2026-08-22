@@ -278,7 +278,6 @@ export function ChatPanel({
       resetSessionView();
       setScope(opened.id, null);
       upsertOpenedProjectInNav(queryClient, opened);
-      await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
       await queryClient.refetchQueries({ queryKey: ['history.nav'] });
       focusComposer();
     } catch (err) {
@@ -338,7 +337,6 @@ export function ChatPanel({
       resetSessionView();
       setScope(opened.id, null);
       upsertOpenedProjectInNav(queryClient, opened);
-      await queryClient.invalidateQueries({ queryKey: ['project.listRecent'] });
       await queryClient.refetchQueries({ queryKey: ['history.nav'] });
       focusComposer();
     } catch (err) {

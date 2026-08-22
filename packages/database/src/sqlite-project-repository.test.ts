@@ -49,6 +49,7 @@ describe('SqliteProjectRepository + DesktopDatabase', () => {
     await db.projects.open(path.join(dir, 'a-app'));
     expect(db.projects.listRecent().map((p) => p.name)).toEqual(['a-app', 'z-app']);
     // Re-opening bumps the folder to the front of the list.
+    await new Promise((resolve) => setTimeout(resolve, 2));
     await db.projects.open(path.join(dir, 'z-app'));
     expect(db.projects.listRecent().map((p) => p.name)).toEqual(['z-app', 'a-app']);
   });

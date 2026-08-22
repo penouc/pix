@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { accessSync, existsSync, readFileSync, statSync } from 'node:fs';
+import { accessSync, existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 import type { ProjectSummary } from '@pi-desktop/protocol';
@@ -18,6 +18,17 @@ interface ProjectRow {
 
 export function projectIdForPath(projectPath: string): string {
   return createHash('sha256').update(projectPath).digest('hex').slice(0, 16);
+}
+
+/** Match history sidebar identity: resolve symlinks when the folder exists. */
+export function canonicalProjectPath(rawPath: string): string {
+  const resolved = path.resolve(rawPath);
+  try {
+    if (existsSync(resolved)) return realpathSync(resolved);
+  } catch {
+    /* keep resolved */
+  }
+  return resolved;
 }
 
 /**
@@ -75,20 +86,26 @@ export class SqliteProjectRepository implements ProjectRepository {
   }
 
   getByPath(projectPath: string): ProjectSummary | undefined {
-    const resolved = path.resolve(projectPath);
     const db = this.requireDb();
-    const row = db
-      .prepare(
-        `SELECT id, path, name, trusted, is_git, last_opened_at
-         FROM projects WHERE path = ?`,
-      )
-      .get(resolved) as unknown as ProjectRow | undefined;
-    return row ? rowToSummary(row) : undefined;
+    const candidates = new Set<string>([
+      path.resolve(projectPath),
+      canonicalProjectPath(projectPath),
+    ]);
+    for (const candidate of candidates) {
+      const row = db
+        .prepare(
+          `SELECT id, path, name, trusted, is_git, last_opened_at
+           FROM projects WHERE path = ?`,
+        )
+        .get(candidate) as unknown as ProjectRow | undefined;
+      if (row) return rowToSummary(row);
+    }
+    return undefined;
   }
 
   async open(rawPath: string): Promise<ProjectSummary> {
     await this.init();
-    const resolved = path.resolve(rawPath);
+    const resolved = canonicalProjectPath(rawPath);
     const st = statSync(resolved);
     if (!st.isDirectory()) {
       throw new Error(`Not a directory: ${resolved}`);

@@ -25,6 +25,7 @@ import {
   type SessionFileRef,
 } from './types.js';
 import { detectAcpAgents, getCachedAcpAgents } from '../acp/detect.js';
+import { isPlaygroundPath, playgroundDisplayName } from '../project-playground.js';
 
 const RUNNABLE = new Set<HistoryAgentId>([
   'pix',
@@ -216,10 +217,13 @@ export class HistoryService {
       });
     }
 
-    const pixProjects = this.db.projects.listRecent(200);
-    const pixByPath = new Map(
-      pixProjects.map((p) => [normalizeProjectPath(p.path) || p.path, p] as const),
-    );
+    const pixProjects = this.db.projects.listRecent(500);
+    const pixByPath = new Map<string, (typeof pixProjects)[number]>();
+    for (const item of pixProjects) {
+      const normalized = normalizeProjectPath(item.path) || item.path;
+      pixByPath.set(normalized, item);
+      if (item.path !== normalized) pixByPath.set(item.path, item);
+    }
     const archivedPaths = this.db.history.archivedProjectPaths();
     const archivedMeta = new Map(
       this.db.history.listArchivedProjects().map((p) => {
@@ -259,19 +263,23 @@ export class HistoryService {
     for (const item of pixProjects) {
       const pathKey = normalizeProjectPath(item.path) || item.path;
       if (!pathKey) continue;
+      const displayName = isPlaygroundPath(item.path)
+        ? playgroundDisplayName(item.name)
+        : item.name;
       const existing = byPath.get(pathKey);
       if (existing) {
         byPath.set(pathKey, {
           ...existing,
           lastActive: Math.max(existing.lastActive, item.lastOpenedAt ?? 0),
           ...(existing.pixProjectId ? {} : { pixProjectId: item.id }),
-          name: existing.name || item.name,
+          name: existing.name || displayName,
+          archived: existing.archived || archivedPaths.has(pathKey),
         });
         continue;
       }
       byPath.set(pathKey, {
         path: pathKey,
-        name: item.name,
+        name: displayName,
         count: 0,
         lastActive: item.lastOpenedAt ?? 0,
         archived: archivedPaths.has(pathKey),
@@ -294,7 +302,9 @@ export class HistoryService {
       });
     }
 
-    const projects = [...byPath.values()].sort((a, b) => b.lastActive - a.lastActive);
+    const projects = [...byPath.values()]
+      .filter((item) => !item.archived)
+      .sort((a, b) => b.lastActive - a.lastActive);
 
     const total = [...counts.values()].reduce((a, b) => a + b, 0);
     return { agents, projects, total };

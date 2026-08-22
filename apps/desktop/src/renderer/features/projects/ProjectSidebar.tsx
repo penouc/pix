@@ -12,7 +12,7 @@ import {
   Star,
   Zap,
 } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import type {
   HistoryNav,
@@ -24,7 +24,10 @@ import type {
 import { HISTORY_AGENT_DISPLAY } from '@pi-desktop/protocol';
 
 import type { HistoryScope, HistoryBootLive } from '@/features/history/HistoryBrowser';
-import { upsertOpenedProjectInNav } from '@/features/projects/history-nav-cache';
+import {
+  activeSidebarProjects,
+  upsertOpenedProjectInNav,
+} from '@/features/projects/history-nav-cache';
 import { invoke } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useAgentStreamStore } from '@/stores/agent-stream-store';
@@ -124,10 +127,10 @@ export function ProjectSidebar({
     onSelectHistorySession(sessions[0]!);
   }, [scopedSessions.data, historySessionKey, onSelectHistorySession]);
 
-  const recent = useQuery({
-    queryKey: ['project.listRecent'],
-    queryFn: () => invoke<ProjectSummary[]>({ method: 'project.listRecent' }),
-  });
+  const activeProjects = useMemo(
+    () => activeSidebarProjects(nav.data?.projects),
+    [nav.data?.projects],
+  );
 
   async function openProjectPath(path: string): Promise<ProjectSummary | null> {
     if (!path.trim() || opening) return null;
@@ -143,7 +146,6 @@ export function ProjectSidebar({
       resetSessionView();
       setScope(opened.id, null);
       upsertOpenedProjectInNav(queryClient, opened);
-      void recent.refetch();
       void queryClient.refetchQueries({ queryKey: ['history.nav'] });
       onProjectSwitched();
       return opened;
@@ -172,7 +174,6 @@ export function ProjectSidebar({
         resetSessionView();
         setScope(target.id, null);
         upsertOpenedProjectInNav(queryClient, target);
-        void recent.refetch();
         void queryClient.refetchQueries({ queryKey: ['history.nav'] });
       } catch (err) {
         setOpenError(err instanceof Error ? err.message : String(err));
@@ -201,7 +202,6 @@ export function ProjectSidebar({
         resetSessionView();
         setScope(target.id, null);
         upsertOpenedProjectInNav(queryClient, target);
-        void recent.refetch();
         void queryClient.refetchQueries({ queryKey: ['history.nav'] });
       } catch (err) {
         setOpenError(err instanceof Error ? err.message : String(err));
@@ -258,24 +258,6 @@ export function ProjectSidebar({
   const sessionsLoading = scopedSessions.isLoading;
   const visibleSessions = showAllSessions ? sessions : sessions.slice(0, 5);
   const hiddenSessionCount = Math.max(0, sessions.length - 5);
-  const playgroundNames = new Map(
-    (recent.data ?? [])
-      .filter((p) => p.isPlayground)
-      .map((p) => [
-        p.path,
-        p.name === 'playground' ? 'Scratch playground' : p.name,
-      ] as const),
-  );
-
-  const allProjects = (nav.data?.projects ?? [])
-    .filter((p) => !p.archived)
-    .map((p) => ({
-      ...p,
-      name: playgroundNames.get(p.path) ?? p.name,
-    }));
-  // Prefer recently active folders; keep the list long enough that a just-opened
-  // project is never clipped off the bottom of a busy history library.
-  const activeProjects = allProjects.slice(0, 80);
 
   function sessionListUnder(active: boolean) {
     if (!active) return null;
