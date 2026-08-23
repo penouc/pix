@@ -2,6 +2,8 @@ import path from 'node:path';
 
 import { app } from 'electron';
 
+import { canonicalProjectPath } from '@pi-desktop/database';
+
 /** App-owned scratch workspace — not a user project folder. */
 export function playgroundDir(): string {
   return path.join(app.getPath('userData'), 'playground');
@@ -9,8 +11,9 @@ export function playgroundDir(): string {
 
 export function isPlaygroundPath(projectPath: string): boolean {
   try {
-    if (!app.isReady()) return false;
-    return path.resolve(projectPath) === path.resolve(playgroundDir());
+    return (
+      canonicalProjectPath(projectPath) === canonicalProjectPath(playgroundDir())
+    );
   } catch {
     return false;
   }

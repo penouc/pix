@@ -1,7 +1,6 @@
 import {
   ArrowUp,
   Check,
-  ChevronDown,
   ChevronLeft,
   FileText,
   FolderOpen,
@@ -87,7 +86,6 @@ import {
   computeTokenRate,
   useAgentStreamStore,
   type QueuedMessage,
-  type ToolCallCard,
 } from '@/stores/agent-stream-store';
 import { composerDraftScope, useComposerDraftStore } from '@/stores/composer-draft-store';
 import { useUiPrefsStore } from '@/stores/ui-prefs-store';

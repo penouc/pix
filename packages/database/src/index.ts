@@ -18,7 +18,7 @@ export type {
   WriteSnapshotRecord,
 } from './checkpoint-repository.js';
 export { SqliteSessionRepository } from './sqlite-session-repository.js';
-export { SqliteProjectRepository, projectIdForPath } from './sqlite-project-repository.js';
+export { SqliteProjectRepository, projectIdForPath, canonicalProjectPath } from './sqlite-project-repository.js';
 export { SqliteCheckpointRepository } from './sqlite-checkpoint-repository.js';
 export { DesktopDatabase } from './desktop-database.js';
 export { openDatabase, applyMigrations } from './sqlite-connection.js';
