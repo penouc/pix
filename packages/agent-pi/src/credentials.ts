@@ -107,11 +107,9 @@ export async function hydrateRuntimeAuthFromEnv(
       try {
         // Bound setRuntimeApiKey — some providers may network-probe and hang on bad proxies.
         await Promise.race([
-          // The catalogue is bundled. Refreshing it over the network for every
-          // env key made startup wait up to 8 seconds per provider (OpenCode's
-          // shared key can configure two), while adding no models the picker
-          // does not already have.
-          runtime.setRuntimeApiKey(providerId, value, { allowNetwork: false }),
+          // Pi 0.84+ no longer accepts allowNetwork here; the bundled catalogue
+          // is used without a network refresh on startup.
+          runtime.setRuntimeApiKey(providerId, value),
           new Promise((_, reject) =>
             setTimeout(() => reject(new Error('setRuntimeApiKey timeout')), 8_000),
           ),

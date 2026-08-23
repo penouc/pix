@@ -25,7 +25,7 @@ export interface AgentRuntimeFactoryOptions extends PiAgentRuntimeOptions {
  *
  * - `PI_DESKTOP_FAKE_RUNTIME=1` → FakeAgentRuntime
  * - `forceFake: true` → FakeAgentRuntime
- * - otherwise → PiAgentRuntime (locked SDK 0.83.0)
+ * - otherwise → PiAgentRuntime (locked SDK 0.84.2)
  */
 export function createAgentRuntime(options: AgentRuntimeFactoryOptions = {}): AgentRuntime {
   const envFake =
