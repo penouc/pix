@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Archive,
   ChevronRight,
   EyeOff,
   FolderOpen,
@@ -12,8 +13,9 @@ import {
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
-import type { ProjectSummary, SessionSummary } from '@pi-desktop/protocol';
+import type { HistoryNav, HistoryProjectNav, ProjectSummary, SessionSummary } from '@pi-desktop/protocol';
 
+import { activeSidebarProjects, upsertOpenedProjectInNav } from '@/features/projects/history-nav-cache';
 import { invoke } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { dotStyle, statusTone, type RunStatus } from '@/lib/status';
@@ -66,6 +68,7 @@ export function ProjectSidebar({
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
+  const [archivingPath, setArchivingPath] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   // Expanding the project you just opened, without fighting a manual collapse:
@@ -89,10 +92,19 @@ export function ProjectSidebar({
   const busy = opening;
   const error = openError ?? externalError ?? null;
 
-  const recent = useQuery({
-    queryKey: ['project.listRecent'],
-    queryFn: () => invoke<ProjectSummary[]>({ method: 'project.listRecent' }),
+  const nav = useQuery({
+    queryKey: ['history.nav'],
+    queryFn: () => invoke<HistoryNav>({ method: 'history.nav', params: {} }),
+    staleTime: 10_000,
   });
+
+  const projects = activeSidebarProjects(nav.data?.projects, 80)
+    .map((item) => sidebarProjectFromNav(item))
+    .filter((item): item is SidebarProject => item !== null);
+
+  async function refreshProjects() {
+    await queryClient.invalidateQueries({ queryKey: ['history.nav'] });
+  }
 
   async function openProjectPath(path: string): Promise<ProjectSummary | null> {
     if (!path.trim() || opening) return null;
@@ -107,7 +119,8 @@ export function ProjectSidebar({
       setSession(null);
       resetSessionView();
       setScope(opened.id, null);
-      void recent.refetch();
+      upsertOpenedProjectInNav(queryClient, opened);
+      await refreshProjects();
       // No task is selected in the project you just switched to, so the run
       // screen would otherwise keep showing the previous project's thread.
       onProjectSwitched();
@@ -120,12 +133,65 @@ export function ProjectSidebar({
     }
   }
 
+  async function archiveProject(item: HistoryProjectNav) {
+    if (archivingPath) return;
+    setArchivingPath(item.path);
+    setOpenError(null);
+    queryClient.setQueryData<HistoryNav>(['history.nav'], (prev) => {
+      if (!prev) return prev;
+      const exists = prev.projects.some((project) => project.path === item.path);
+      const nextProjects = exists
+        ? prev.projects.map((project) =>
+            project.path === item.path ? { ...project, archived: true } : project,
+          )
+        : [
+            ...prev.projects,
+            {
+              path: item.path,
+              name: item.name,
+              count: item.count,
+              lastActive: item.lastActive,
+              archived: true,
+              ...(item.pixProjectId ? { pixProjectId: item.pixProjectId } : {}),
+            },
+          ];
+      return { ...prev, projects: nextProjects };
+    });
+    if (project?.path === item.path) {
+      setProject(null);
+      setSession(null);
+      resetSessionView();
+      setScope(null, null);
+    }
+    try {
+      await invoke({
+        method: 'history.archiveProject',
+        params: { path: item.path, archived: true, name: item.name },
+      });
+      await refreshProjects();
+      await queryClient.invalidateQueries({ queryKey: ['history.listArchived'] });
+    } catch (err) {
+      setOpenError(err instanceof Error ? err.message : String(err));
+      queryClient.setQueryData<HistoryNav>(['history.nav'], (prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          projects: prev.projects.map((project) =>
+            project.path === item.path ? { ...project, archived: false } : project,
+          ),
+        };
+      });
+    } finally {
+      setArchivingPath(null);
+    }
+  }
+
   /**
    * Prepare an unstarted task. Session creation is deliberately deferred until
    * the first message, so the project selector above the composer can still
    * change where the task belongs without leaving empty sessions behind.
    */
-  async function handleNewTask(into?: ProjectSummary) {
+  async function handleNewTask(into?: SidebarProject) {
     const prior = session;
     let target = into ?? project;
     if (into && into.id !== project?.id) {
@@ -141,7 +207,8 @@ export function ProjectSidebar({
         setSession(null);
         resetSessionView();
         setScope(target.id, null);
-        void recent.refetch();
+        upsertOpenedProjectInNav(queryClient, target);
+        await refreshProjects();
       } catch (err) {
         setOpenError(err instanceof Error ? err.message : String(err));
         return;
@@ -152,7 +219,7 @@ export function ProjectSidebar({
     onNewTask(prior);
   }
 
-  async function handleTemporaryChat(into?: ProjectSummary) {
+  async function handleTemporaryChat(into?: SidebarProject) {
     const prior = session;
     let target = into ?? project;
     if (into && into.id !== project?.id) {
@@ -168,7 +235,8 @@ export function ProjectSidebar({
         setSession(null);
         resetSessionView();
         setScope(target.id, null);
-        void recent.refetch();
+        upsertOpenedProjectInNav(queryClient, target);
+        await refreshProjects();
       } catch (err) {
         setOpenError(err instanceof Error ? err.message : String(err));
         return;
@@ -203,15 +271,6 @@ export function ProjectSidebar({
       setOpenError(err instanceof Error ? err.message : String(err));
     }
   }
-
-  const projects = (recent.data ?? []).slice(0, 24).map((item) =>
-    item.isPlayground
-      ? {
-          ...item,
-          name: item.name === 'playground' ? 'Scratch playground' : item.name,
-        }
-      : item,
-  );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -273,6 +332,7 @@ export function ProjectSidebar({
                 isActive={project?.id === item.id}
                 expanded={expanded.has(item.id)}
                 busy={busy}
+                archiving={archivingPath === item.path}
                 activeSessionId={activeSessionId}
                 runStatus={status as RunStatus}
                 selectedSessionId={session?.id ?? null}
@@ -281,9 +341,10 @@ export function ProjectSidebar({
                 onSelectSession={onSelectSession}
                 onDeleteSession={(task) => void deleteSession(task)}
                 onNewTask={() => void handleNewTask(item)}
+                onArchive={() => void archiveProject(item.nav)}
               />
             ))
-          ) : recent.isLoading ? (
+          ) : nav.isLoading ? (
             <EmptyHint>Loading…</EmptyHint>
           ) : (
             <EmptyHint>No projects yet — open a folder to begin</EmptyHint>
@@ -314,6 +375,7 @@ function ProjectBranch({
   isActive,
   expanded,
   busy,
+  archiving,
   activeSessionId,
   runStatus,
   selectedSessionId,
@@ -322,11 +384,13 @@ function ProjectBranch({
   onSelectSession,
   onDeleteSession,
   onNewTask,
+  onArchive,
 }: {
-  project: ProjectSummary;
+  project: SidebarProject;
   isActive: boolean;
   expanded: boolean;
   busy: boolean;
+  archiving: boolean;
   activeSessionId: string | null;
   runStatus: RunStatus;
   selectedSessionId: string | null;
@@ -335,6 +399,7 @@ function ProjectBranch({
   onSelectSession: (session: SessionSummary, project?: ProjectSummary) => void;
   onDeleteSession: (session: SessionSummary) => void;
   onNewTask: () => void;
+  onArchive: () => void;
 }) {
   const sessions = useQuery({
     queryKey: ['session.list', project.id],
@@ -382,6 +447,16 @@ function ProjectBranch({
         >
           <Plus className="h-3 w-3" />
         </button>
+        <button
+          type="button"
+          title={`Archive ${project.name}`}
+          aria-label={`Archive ${project.name}`}
+          disabled={busy || archiving}
+          onClick={onArchive}
+          className="hidden h-5 w-5 flex-none cursor-pointer items-center justify-center rounded-full text-muted group-hover:flex hover:bg-foreground/[0.1] hover:text-danger disabled:opacity-40"
+        >
+          <Archive className="h-3 w-3" />
+        </button>
       </div>
 
       {expanded ? (
@@ -402,7 +477,7 @@ function ProjectBranch({
                 >
                   <button
                     type="button"
-                    onClick={() => onSelectSession(item, project)}
+                    onClick={() => onSelectSession(item, projectSummary(project))}
                     className={cn(
                       'flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-[12.5px]',
                       isSelected
@@ -511,4 +586,32 @@ function SectionLabel({ children }: { children: string }) {
 
 function EmptyHint({ children }: { children: string }) {
   return <div className="px-1.5 py-1 text-[11.5px] text-foreground/40">{children}</div>;
+}
+
+interface SidebarProject {
+  id: string;
+  path: string;
+  name: string;
+  nav: HistoryProjectNav;
+}
+
+function sidebarProjectFromNav(item: HistoryProjectNav): SidebarProject | null {
+  if (!item.pixProjectId) return null;
+  return {
+    id: item.pixProjectId,
+    path: item.path,
+    name: item.name,
+    nav: item,
+  };
+}
+
+function projectSummary(item: SidebarProject): ProjectSummary {
+  return {
+    id: item.id,
+    path: item.path,
+    name: item.name,
+    trusted: true,
+    isGit: false,
+    lastOpenedAt: item.nav.lastActive,
+  };
 }
