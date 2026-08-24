@@ -509,21 +509,6 @@ export function App() {
         <ProjectSidebar
           activeNav={view}
           isBlankRun={blankRun}
-          historyScope={historyScope}
-          historySessionKey={historySessionKey}
-          onHistoryScope={(scope) => {
-            setHistoryScope(scope);
-            setHistorySessionKey(null);
-            setHistoryBootLive(null);
-            if (scope.kind !== 'none') setView('history');
-          }}
-          onSelectHistorySession={selectHistorySession}
-          onStartExternalAgent={(boot) => {
-            setHistorySessionKey(null);
-            setHistoryBootLive(boot);
-            setHistoryScope({ kind: 'agent', agent: boot.agent });
-            setView('history');
-          }}
           onOpenSettings={() => {
             if (view === 'settings') {
               setView('run');

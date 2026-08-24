@@ -576,7 +576,7 @@ function ArchivedHistoryGroup() {
       <Row
         stacked
         name="Archived projects & sessions"
-        desc="Items hidden from the sidebar. Unarchive to bring them back under Agents or Projects."
+        desc="Items hidden from the sidebar. Unarchive to bring them back under Projects."
       >
         {archived.isLoading ? (
           <div className="text-[12px] text-muted">Loading…</div>

@@ -1,7 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Archive,
-  ChevronDown,
   ChevronRight,
   EyeOff,
   FolderOpen,
@@ -9,27 +7,16 @@ import {
   Search,
   Settings,
   Sparkles,
-  Star,
+  X,
   Zap,
 } from 'lucide-react';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
-import type {
-  HistoryNav,
-  HistoryProjectNav,
-  HistorySessionMeta,
-  ProjectSummary,
-  SessionSummary,
-} from '@pi-desktop/protocol';
-import { HISTORY_AGENT_DISPLAY } from '@pi-desktop/protocol';
+import type { ProjectSummary, SessionSummary } from '@pi-desktop/protocol';
 
-import type { HistoryScope, HistoryBootLive } from '@/features/history/HistoryBrowser';
-import {
-  activeSidebarProjects,
-  upsertOpenedProjectInNav,
-} from '@/features/projects/history-nav-cache';
 import { invoke } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
+import { dotStyle, statusTone, type RunStatus } from '@/lib/status';
 import { useAgentStreamStore } from '@/stores/agent-stream-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 
@@ -40,22 +27,22 @@ interface ProjectSidebarProps {
   onOpenSearch: () => void;
   onOpenAutomations: () => void;
   onOpenSkills: () => void;
+  /** Open the OS folder picker directly — no intermediate dialog. */
   onBrowseForProject: () => void;
+  /** Error from a project opened elsewhere (⌘O), shown with the local ones. */
   externalError?: string | null;
+  /** Switched to another project — land on the unstarted-task screen. */
   onProjectSwitched: () => void;
+  /** Which nav entry reads as current. */
   activeNav: string;
+  /** True while the run screen is showing an unstarted task. */
   isBlankRun: boolean;
-  historyScope: HistoryScope;
-  historySessionKey: string | null;
-  onHistoryScope: (scope: HistoryScope) => void;
-  onSelectHistorySession: (session: HistorySessionMeta) => void;
-  onStartExternalAgent: (boot: HistoryBootLive) => void;
 }
 
 export function ProjectSidebar({
   onOpenSettings,
   onNewTask,
-  onSelectSession: _onSelectSession,
+  onSelectSession,
   onOpenSearch,
   onOpenAutomations,
   onOpenSkills,
@@ -64,73 +51,48 @@ export function ProjectSidebar({
   onProjectSwitched,
   activeNav,
   isBlankRun,
-  historyScope,
-  historySessionKey,
-  onHistoryScope,
-  onSelectHistorySession,
-  onStartExternalAgent,
 }: ProjectSidebarProps) {
   const project = useWorkspaceStore((s) => s.project);
   const session = useWorkspaceStore((s) => s.session);
   const setProject = useWorkspaceStore((s) => s.setProject);
   const setSession = useWorkspaceStore((s) => s.setSession);
+  const status = useAgentStreamStore((s) => s.status);
+  const activeRunId = useAgentStreamStore((s) => s.activeRunId);
+  const activeSessionId = useAgentStreamStore((s) => s.activeSessionId);
   const resetSessionView = useAgentStreamStore((s) => s.resetSessionView);
   const setScope = useAgentStreamStore((s) => s.setScope);
 
+  /** Which projects show their tasks. The open one starts expanded. */
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
-  const [archivingPath, setArchivingPath] = useState<string | null>(null);
-  const [archivingSessionKey, setArchivingSessionKey] = useState<string | null>(null);
-  const [showAllSessions, setShowAllSessions] = useState(false);
-  const [showEmptyAgents, setShowEmptyAgents] = useState(false);
   const queryClient = useQueryClient();
 
-  const nav = useQuery({
-    queryKey: ['history.nav'],
-    queryFn: () => invoke<HistoryNav>({ method: 'history.nav', params: {} }),
-    staleTime: 0,
-  });
-
-  const scopedSessions = useQuery({
-    queryKey: ['history.list', historyScope],
-    enabled: historyScope.kind === 'agent' || historyScope.kind === 'project',
-    queryFn: () =>
-      invoke<{ sessions: HistorySessionMeta[]; total: number }>({
-        method: 'history.list',
-        params:
-          historyScope.kind === 'agent'
-            ? { agent: historyScope.agent, limit: 80 }
-            : historyScope.kind === 'project'
-              ? { projectPath: historyScope.path, limit: 80 }
-              : { limit: 80 },
-      }),
-  });
-
+  // Expanding the project you just opened, without fighting a manual collapse:
+  // this only ever adds, so closing it again sticks.
   useEffect(() => {
-    setShowAllSessions(false);
-  }, [historyScope]);
-
-  // Keep the empty-agents fold open when the active filter is one of them.
-  useEffect(() => {
-    if (historyScope.kind !== 'agent') return;
-    const empty = (nav.data?.agents ?? []).some(
-      (a) => a.count === 0 && a.agent === historyScope.agent,
+    if (!project?.id) return;
+    setExpanded((current) =>
+      current.has(project.id) ? current : new Set([...current, project.id]),
     );
-    if (empty) setShowEmptyAgents(true);
-  }, [historyScope, nav.data?.agents]);
+  }, [project?.id]);
 
-  // Auto-open the first session when the agent / project filter changes.
-  useEffect(() => {
-    const sessions = scopedSessions.data?.sessions;
-    if (!sessions?.length) return;
-    if (historySessionKey && sessions.some((s) => s.key === historySessionKey)) return;
-    onSelectHistorySession(sessions[0]!);
-  }, [scopedSessions.data, historySessionKey, onSelectHistorySession]);
+  function toggleExpanded(projectId: string) {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
+      return next;
+    });
+  }
 
-  const activeProjects = useMemo(
-    () => activeSidebarProjects(nav.data?.projects),
-    [nav.data?.projects],
-  );
+  const busy = opening;
+  const error = openError ?? externalError ?? null;
+
+  const recent = useQuery({
+    queryKey: ['project.listRecent'],
+    queryFn: () => invoke<ProjectSummary[]>({ method: 'project.listRecent' }),
+  });
 
   async function openProjectPath(path: string): Promise<ProjectSummary | null> {
     if (!path.trim() || opening) return null;
@@ -145,8 +107,9 @@ export function ProjectSidebar({
       setSession(null);
       resetSessionView();
       setScope(opened.id, null);
-      upsertOpenedProjectInNav(queryClient, opened);
-      void queryClient.refetchQueries({ queryKey: ['history.nav'] });
+      void recent.refetch();
+      // No task is selected in the project you just switched to, so the run
+      // screen would otherwise keep showing the previous project's thread.
       onProjectSwitched();
       return opened;
     } catch (err) {
@@ -157,6 +120,11 @@ export function ProjectSidebar({
     }
   }
 
+  /**
+   * Prepare an unstarted task. Session creation is deliberately deferred until
+   * the first message, so the project selector above the composer can still
+   * change where the task belongs without leaving empty sessions behind.
+   */
   async function handleNewTask(into?: ProjectSummary) {
     const prior = session;
     let target = into ?? project;
@@ -173,8 +141,7 @@ export function ProjectSidebar({
         setSession(null);
         resetSessionView();
         setScope(target.id, null);
-        upsertOpenedProjectInNav(queryClient, target);
-        void queryClient.refetchQueries({ queryKey: ['history.nav'] });
+        void recent.refetch();
       } catch (err) {
         setOpenError(err instanceof Error ? err.message : String(err));
         return;
@@ -201,8 +168,7 @@ export function ProjectSidebar({
         setSession(null);
         resetSessionView();
         setScope(target.id, null);
-        upsertOpenedProjectInNav(queryClient, target);
-        void queryClient.refetchQueries({ queryKey: ['history.nav'] });
+        void recent.refetch();
       } catch (err) {
         setOpenError(err instanceof Error ? err.message : String(err));
         return;
@@ -213,162 +179,39 @@ export function ProjectSidebar({
     onNewTask(prior, { temporary: true });
   }
 
-  async function handleNewSessionForProject(item: HistoryProjectNav) {
-    setOpenError(null);
-    // Prefer PiX project when linked; otherwise open the folder then create a task.
-    if (item.pixProjectId) {
-      const opened = await openProjectPath(item.path);
-      if (!opened) return;
-      onNewTask(session);
-      return;
-    }
-    const opened = await openProjectPath(item.path);
-    if (!opened) return;
-    onNewTask(session);
-  }
-
-  function handleNewSessionForAgent(agent: HistoryNav['agents'][number]) {
-    setOpenError(null);
-    if (agent.agent === 'pix') {
-      void handleNewTask();
-      return;
-    }
-    if (!agent.runnable) {
-      setOpenError(`${agent.displayName || agent.agent} isn’t available for a new session yet.`);
-      return;
-    }
-    const cwd = project?.path;
-    if (!cwd) {
-      setOpenError('Open a project first, then start a new agent session.');
-      return;
-    }
-    onStartExternalAgent({
-      agent: agent.agent,
-      projectPath: cwd,
-      projectName: project?.name,
-    });
-  }
-
-  const busy = opening;
-  const error = openError ?? externalError ?? null;
-  const agents = nav.data?.agents ?? [];
-  const agentsWithSessions = agents.filter((a) => a.count > 0);
-  const emptyAgents = agents.filter((a) => a.count === 0);
-  const sessions = scopedSessions.data?.sessions ?? [];
-  const sessionsLoading = scopedSessions.isLoading;
-  const visibleSessions = showAllSessions ? sessions : sessions.slice(0, 5);
-  const hiddenSessionCount = Math.max(0, sessions.length - 5);
-
-  function sessionListUnder(active: boolean) {
-    if (!active) return null;
-    if (sessionsLoading && !sessions.length) {
-      return <EmptyHint>Loading…</EmptyHint>;
-    }
-    if (!sessions.length) {
-      return <EmptyHint>No sessions</EmptyHint>;
-    }
-    return (
-      <div className="mb-0.5 flex flex-col gap-px pl-4">
-        {visibleSessions.map((item) => (
-          <SessionRow
-            key={item.key}
-            session={item}
-            active={
-              historySessionKey === item.key ||
-              Boolean(item.pixSessionId && item.pixSessionId === session?.id)
-            }
-            archiving={archivingSessionKey === item.key}
-            onClick={() => onSelectHistorySession(item)}
-            onArchive={() => void archiveSession(item)}
-          />
-        ))}
-        {hiddenSessionCount > 0 ? (
-          <button
-            type="button"
-            onClick={() => setShowAllSessions((v) => !v)}
-            className="px-2 py-1.5 text-left text-[11.5px] text-foreground/40 hover:text-foreground"
-          >
-            {showAllSessions ? 'Show less' : `Show ${hiddenSessionCount} more`}
-          </button>
-        ) : null}
-      </div>
-    );
-  }
-
-  async function archiveSession(item: HistorySessionMeta) {
-    if (archivingSessionKey) return;
-    setArchivingSessionKey(item.key);
-    setOpenError(null);
+  async function deleteSession(item: SessionSummary) {
     try {
-      await invoke({
-        method: 'history.archiveSession',
-        params: { key: item.key, archived: true },
+      const isRunning =
+        status === 'starting' ||
+        status === 'running' ||
+        status === 'waiting_for_approval' ||
+        status === 'stopping';
+      if (item.id === activeSessionId && activeRunId && isRunning) {
+        await invoke({ method: 'agent.abort', params: { runId: activeRunId } });
+      }
+      await invoke<SessionSummary>({
+        method: 'session.delete',
+        params: { sessionId: item.id, deleted: true },
       });
-      await queryClient.invalidateQueries({ queryKey: ['history.list'] });
-      await queryClient.invalidateQueries({ queryKey: ['history.nav'] });
-      await queryClient.invalidateQueries({ queryKey: ['history.listArchived'] });
-      if (historySessionKey === item.key) onHistoryScope({ kind: 'none' });
+      if (session?.id === item.id) {
+        setSession(null);
+        resetSessionView();
+        if (project) setScope(project.id, null);
+      }
+      await queryClient.invalidateQueries({ queryKey: ['session.list'] });
     } catch (err) {
-      setOpenError(shortError(err));
-    } finally {
-      setArchivingSessionKey(null);
+      setOpenError(err instanceof Error ? err.message : String(err));
     }
   }
 
-  async function setProjectArchived(item: HistoryProjectNav, archived: boolean) {
-    if (archivingPath) return;
-    setArchivingPath(item.path);
-    // Optimistic: move the row immediately so archive feels instant.
-    queryClient.setQueryData<HistoryNav>(['history.nav'], (prev) => {
-      if (!prev) return prev;
-      const exists = prev.projects.some((p) => p.path === item.path);
-      const projects = exists
-        ? prev.projects.map((p) => (p.path === item.path ? { ...p, archived } : p))
-        : archived
-          ? [
-              ...prev.projects,
-              {
-                path: item.path,
-                name: item.name,
-                count: item.count,
-                lastActive: item.lastActive,
-                archived: true,
-                ...(item.pixProjectId ? { pixProjectId: item.pixProjectId } : {}),
-              },
-            ]
-          : prev.projects;
-      return { ...prev, projects };
-    });
-    if (
-      archived &&
-      historyScope.kind === 'project' &&
-      historyScope.path === item.path
-    ) {
-      onHistoryScope({ kind: 'agent', agent: 'pix' });
-    }
-    try {
-      await invoke({
-        method: 'history.archiveProject',
-        params: { path: item.path, archived, name: item.name },
-      });
-      await queryClient.invalidateQueries({ queryKey: ['history.nav'] });
-      await queryClient.invalidateQueries({ queryKey: ['history.listArchived'] });
-    } catch (err) {
-      setOpenError(shortError(err));
-      // Roll back optimistic flag.
-      queryClient.setQueryData<HistoryNav>(['history.nav'], (prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          projects: prev.projects.map((p) =>
-            p.path === item.path ? { ...p, archived: !archived } : p,
-          ),
-        };
-      });
-    } finally {
-      setArchivingPath(null);
-    }
-  }
+  const projects = (recent.data ?? []).slice(0, 24).map((item) =>
+    item.isPlayground
+      ? {
+          ...item,
+          name: item.name === 'playground' ? 'Scratch playground' : item.name,
+        }
+      : item,
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -415,112 +258,6 @@ export function ProjectSidebar({
       ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2.5 pb-2">
-        <div className="flex h-7 items-center px-1.5 pb-1">
-          <SectionLabel>Agents</SectionLabel>
-        </div>
-        <div className="flex flex-col gap-px">
-          {agents.length ? (
-            <>
-              {agentsWithSessions.map((agent) => {
-                const expanded =
-                  historyScope.kind === 'agent' && historyScope.agent === agent.agent;
-                return (
-                  <div key={agent.agent}>
-                    <FilterRow
-                      label={agent.displayName || HISTORY_AGENT_DISPLAY[agent.agent]}
-                      count={agent.count}
-                      expanded={expanded}
-                      muted={!agent.detected}
-                      onClick={() =>
-                        onHistoryScope(
-                          expanded
-                            ? { kind: 'none' }
-                            : { kind: 'agent', agent: agent.agent },
-                        )
-                      }
-                      actions={[
-                        {
-                          title: 'New session',
-                          icon: <Plus className="h-3 w-3" />,
-                          disabled: busy || (agent.agent !== 'pix' && !agent.runnable),
-                          onClick: () => handleNewSessionForAgent(agent),
-                        },
-                      ]}
-                    />
-                    {sessionListUnder(expanded)}
-                  </div>
-                );
-              })}
-              {emptyAgents.length ? (
-                <div className="mt-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setShowEmptyAgents((v) => !v)}
-                    className="density-row group flex w-full items-center gap-0.5 rounded-xl pr-1 text-left transition-colors"
-                  >
-                    <span className="flex h-6 w-5 flex-none items-center justify-center text-muted">
-                      <ChevronDown
-                        className={cn(
-                          'h-3.5 w-3.5 transition-transform',
-                          !showEmptyAgents && '-rotate-90',
-                        )}
-                      />
-                    </span>
-                    <span className="min-w-0 flex-1 truncate py-1.5 pr-1 text-[12.5px] text-foreground/45 group-hover:text-foreground/70">
-                      No sessions
-                      <span className="ml-1.5 text-[11px] text-foreground/35">
-                        {emptyAgents.length}
-                      </span>
-                    </span>
-                  </button>
-                  {showEmptyAgents ? (
-                    <div className="mb-0.5 flex flex-col gap-px pl-4">
-                      {emptyAgents.map((agent) => {
-                        const expanded =
-                          historyScope.kind === 'agent' && historyScope.agent === agent.agent;
-                        return (
-                          <div key={agent.agent}>
-                            <FilterRow
-                              label={
-                                agent.displayName || HISTORY_AGENT_DISPLAY[agent.agent]
-                              }
-                              count={agent.count}
-                              expanded={expanded}
-                              muted={!agent.detected}
-                              onClick={() =>
-                                onHistoryScope(
-                                  expanded
-                                    ? { kind: 'none' }
-                                    : { kind: 'agent', agent: agent.agent },
-                                )
-                              }
-                              actions={[
-                                {
-                                  title: 'New session',
-                                  icon: <Plus className="h-3 w-3" />,
-                                  disabled: busy || (agent.agent !== 'pix' && !agent.runnable),
-                                  onClick: () => handleNewSessionForAgent(agent),
-                                },
-                              ]}
-                            />
-                            {sessionListUnder(expanded)}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </>
-          ) : nav.isLoading ? (
-            <EmptyHint>Loading…</EmptyHint>
-          ) : (
-            <EmptyHint>No agents yet</EmptyHint>
-          )}
-        </div>
-
-        <div className="mx-1.5 my-2.5 h-px bg-border" />
-
         <div className="flex h-7 items-center justify-between px-1.5 pb-1">
           <SectionLabel>Projects</SectionLabel>
           <IconButton title="Open project folder" disabled={busy} onClick={onBrowseForProject}>
@@ -528,47 +265,25 @@ export function ProjectSidebar({
           </IconButton>
         </div>
         <div className="flex flex-col gap-px">
-          {activeProjects.length ? (
-            activeProjects.map((item) => {
-              const expanded =
-                historyScope.kind === 'project' && historyScope.path === item.path;
-              return (
-                <div key={item.path}>
-                  <FilterRow
-                    label={item.name}
-                    count={item.count}
-                    title={item.path}
-                    expanded={expanded}
-                    onClick={() => {
-                      if (expanded) {
-                        onHistoryScope({ kind: 'none' });
-                        return;
-                      }
-                      onHistoryScope({ kind: 'project', path: item.path, name: item.name });
-                      if (item.pixProjectId && item.pixProjectId !== project?.id) {
-                        void openProjectPath(item.path);
-                      }
-                    }}
-                    actions={[
-                      {
-                        title: 'New session',
-                        icon: <Plus className="h-3 w-3" />,
-                        disabled: busy,
-                        onClick: () => void handleNewSessionForProject(item),
-                      },
-                      {
-                        title: 'Archive project',
-                        icon: <Archive className="h-3 w-3" />,
-                        disabled: archivingPath === item.path,
-                        onClick: () => void setProjectArchived(item, true),
-                      },
-                    ]}
-                  />
-                  {sessionListUnder(expanded)}
-                </div>
-              );
-            })
-          ) : nav.isLoading ? (
+          {projects.length ? (
+            projects.map((item) => (
+              <ProjectBranch
+                key={item.id}
+                project={item}
+                isActive={project?.id === item.id}
+                expanded={expanded.has(item.id)}
+                busy={busy}
+                activeSessionId={activeSessionId}
+                runStatus={status as RunStatus}
+                selectedSessionId={session?.id ?? null}
+                onToggle={() => toggleExpanded(item.id)}
+                onOpenProject={() => void openProjectPath(item.path)}
+                onSelectSession={onSelectSession}
+                onDeleteSession={(task) => void deleteSession(task)}
+                onNewTask={() => void handleNewTask(item)}
+              />
+            ))
+          ) : recent.isLoading ? (
             <EmptyHint>Loading…</EmptyHint>
           ) : (
             <EmptyHint>No projects yet — open a folder to begin</EmptyHint>
@@ -590,155 +305,132 @@ export function ProjectSidebar({
   );
 }
 
-function SessionRow({
-  session,
-  active,
-  archiving,
-  onClick,
-  onArchive,
-}: {
-  session: HistorySessionMeta;
-  active?: boolean;
-  archiving?: boolean;
-  onClick: () => void;
-  onArchive: () => void;
-}) {
-  return (
-    <div
-      className={cn(
-        'density-row group/task flex items-center gap-1 rounded-xl pr-1 transition-colors',
-        active ? 'bg-accent-soft' : 'hover:bg-foreground/[0.07]',
-      )}
-    >
-      <button
-        type="button"
-        title={session.title || 'Untitled'}
-        onClick={onClick}
-        className={cn(
-          'flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-[12.5px]',
-          active ? 'text-foreground' : 'text-foreground/60 group-hover/task:text-foreground',
-        )}
-      >
-        <span className="min-w-0 flex-1 truncate text-left">{session.title || 'Untitled'}</span>
-        {session.favorite ? (
-          <Star className="h-3 w-3 flex-none fill-current text-accent" />
-        ) : null}
-        <span className="flex-none tabular-nums text-[11px] opacity-50">
-          {relativeTime(session.updatedAt)}
-        </span>
-      </button>
-      <button
-        type="button"
-        title="Archive session"
-        aria-label={`Archive ${session.title || 'session'}`}
-        disabled={archiving}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onArchive();
-        }}
-        className="hidden h-5 w-5 flex-none cursor-pointer items-center justify-center rounded-full text-muted group-hover/task:flex hover:bg-foreground/[0.1] hover:text-foreground disabled:opacity-40"
-      >
-        <Archive className="h-3 w-3" />
-      </button>
-    </div>
-  );
-}
-
-function relativeTime(ts: number): string {
-  if (!ts) return '';
-  const diff = Date.now() - ts;
-  const min = Math.floor(diff / 60_000);
-  if (min < 1) return 'now';
-  if (min < 60) return `${min}m`;
-  const hr = Math.floor(min / 60);
-  if (hr < 48) return `${hr}h`;
-  return `${Math.floor(hr / 24)}d`;
-}
-
-function shortError(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
-  const first = raw.split('\n')[0]?.trim() || 'Something went wrong';
-  return first.length > 160 ? `${first.slice(0, 157)}…` : first;
-}
-
-function FilterRow({
-  label,
-  count,
+/**
+ * One project and, when expanded, its PiX tasks.
+ * The query lives here so a collapsed project costs nothing to fetch.
+ */
+function ProjectBranch({
+  project,
+  isActive,
   expanded,
-  muted,
-  title,
-  onClick,
-  actions,
+  busy,
+  activeSessionId,
+  runStatus,
+  selectedSessionId,
+  onToggle,
+  onOpenProject,
+  onSelectSession,
+  onDeleteSession,
+  onNewTask,
 }: {
-  label: string;
-  count: number;
-  expanded?: boolean;
-  muted?: boolean;
-  title?: string;
-  onClick?: () => void;
-  actions?: Array<{
-    title: string;
-    icon: ReactNode;
-    disabled?: boolean;
-    onClick: () => void;
-  }>;
+  project: ProjectSummary;
+  isActive: boolean;
+  expanded: boolean;
+  busy: boolean;
+  activeSessionId: string | null;
+  runStatus: RunStatus;
+  selectedSessionId: string | null;
+  onToggle: () => void;
+  onOpenProject: () => void;
+  onSelectSession: (session: SessionSummary, project?: ProjectSummary) => void;
+  onDeleteSession: (session: SessionSummary) => void;
+  onNewTask: () => void;
 }) {
+  const sessions = useQuery({
+    queryKey: ['session.list', project.id],
+    enabled: expanded,
+    queryFn: () =>
+      invoke<SessionSummary[]>({ method: 'session.list', params: { projectId: project.id } }),
+  });
+  const tasks = (sessions.data ?? []).filter((item) => !item.archived && !item.deletedAt);
+
   return (
-    <div
-      title={title}
-      className={cn(
-        'density-row group flex items-center gap-0.5 rounded-xl pr-1 transition-colors',
-        muted && !expanded ? 'opacity-55' : null,
-      )}
-    >
-      <button
-        type="button"
-        title={expanded ? 'Hide sessions' : 'Show sessions'}
-        aria-expanded={expanded}
-        onClick={onClick}
-        className="flex h-6 w-5 flex-none cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:text-foreground"
-      >
-        <ChevronRight
-          className={cn('h-3.5 w-3.5 transition-transform', expanded && 'rotate-90')}
-        />
-      </button>
-      <button
-        type="button"
-        onClick={onClick}
-        className={cn(
-          'min-w-0 flex-1 cursor-pointer truncate rounded-xl py-1.5 pr-1 text-left text-[12.5px] transition-colors',
-          expanded
-            ? 'text-foreground'
-            : 'text-foreground/60 group-hover:text-foreground',
-        )}
-      >
-        {label}
-        <span className="ml-1.5 text-[11px] text-foreground/40">{count}</span>
-      </button>
-      {actions?.length ? (
-        <div className="hidden flex-none items-center gap-0.5 group-hover:flex">
-          {actions.map((action) => (
-            <button
-              key={action.title}
-              type="button"
-              title={action.title}
-              aria-label={action.title}
-              disabled={action.disabled}
-              onMouseDown={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-              }}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                action.onClick();
-              }}
-              className="flex h-5 w-5 cursor-pointer items-center justify-center rounded-full text-muted hover:bg-foreground/[0.1] hover:text-foreground disabled:opacity-40"
-            >
-              {action.icon}
-            </button>
-          ))}
+    <div>
+      <div className="density-row group flex items-center gap-0.5 rounded-xl pr-1 transition-colors">
+        <button
+          type="button"
+          title={expanded ? 'Hide tasks' : 'Show tasks'}
+          aria-expanded={expanded}
+          onClick={onToggle}
+          className="flex h-6 w-5 flex-none cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:text-foreground"
+        >
+          <ChevronRight
+            className={cn('h-3.5 w-3.5 transition-transform', expanded && 'rotate-90')}
+          />
+        </button>
+        <button
+          type="button"
+          title={project.path}
+          onClick={() => {
+            if (!isActive) onOpenProject();
+            if (!expanded) onToggle();
+          }}
+          className={cn(
+            'min-w-0 flex-1 cursor-pointer truncate rounded-xl py-1.5 pr-1 text-left text-[12.5px] transition-colors',
+            isActive ? 'text-foreground' : 'text-foreground/60 group-hover:text-foreground',
+          )}
+        >
+          {project.name}
+        </button>
+        <button
+          type="button"
+          title={`New task in ${project.name}`}
+          aria-label={`New task in ${project.name}`}
+          disabled={busy}
+          onClick={onNewTask}
+          className="hidden h-5 w-5 flex-none cursor-pointer items-center justify-center rounded-full text-muted group-hover:flex hover:bg-foreground/[0.1] hover:text-foreground disabled:opacity-40"
+        >
+          <Plus className="h-3 w-3" />
+        </button>
+      </div>
+
+      {expanded ? (
+        <div className="mb-0.5 flex flex-col gap-px pl-4">
+          {sessions.isLoading ? (
+            <EmptyHint>Loading…</EmptyHint>
+          ) : tasks.length ? (
+            tasks.map((item) => {
+              const isSelected = selectedSessionId === item.id;
+              const isLive = item.id === activeSessionId;
+              return (
+                <div
+                  key={item.id}
+                  className={cn(
+                    'density-row group/task flex items-center gap-1 rounded-xl pr-1 transition-colors',
+                    isSelected ? 'bg-accent-soft' : 'hover:bg-foreground/[0.07]',
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onSelectSession(item, project)}
+                    className={cn(
+                      'flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-[12.5px]',
+                      isSelected
+                        ? 'text-foreground'
+                        : 'text-foreground/60 group-hover/task:text-foreground',
+                    )}
+                  >
+                    <span
+                      className="flex-none rounded-full"
+                      style={dotStyle(isLive ? statusTone(runStatus) : 'done')}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-left">{item.title}</span>
+                  </button>
+                  <button
+                    type="button"
+                    title="Delete task"
+                    aria-label={`Delete ${item.title}`}
+                    onClick={() => onDeleteSession(item)}
+                    className="hidden h-5 w-5 flex-none cursor-pointer items-center justify-center rounded-full text-muted group-hover/task:flex hover:bg-foreground/[0.1] hover:text-foreground"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              );
+            })
+          ) : (
+            <EmptyHint>No tasks yet</EmptyHint>
+          )}
         </div>
       ) : null}
     </div>
