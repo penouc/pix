@@ -127,8 +127,8 @@ export class SqliteProjectRepository implements ProjectRepository {
       name: path.basename(resolved) || resolved,
       trusted,
       isGit,
-      // Bump on every open so the Projects sidebar floats the folder you just picked.
-      lastOpenedAt: Date.now(),
+      // Only stamp on first add — reopening must not reshuffle the Projects sidebar.
+      lastOpenedAt: existing?.lastOpenedAt ?? Date.now(),
     };
     return this.put(summary);
   }
@@ -142,7 +142,6 @@ export class SqliteProjectRepository implements ProjectRepository {
     return this.put({
       ...existing,
       trusted,
-      lastOpenedAt: Date.now(),
     });
   }
 

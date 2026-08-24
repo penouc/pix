@@ -238,11 +238,16 @@ export class HistoryService {
       if (!pathKey) continue;
       const pix = pixByPath.get(pathKey);
       const prev = byPath.get(pathKey);
+      // PiX projects keep a stable sidebar order (first-added). Session activity
+      // only updates count — not lastActive — so chatting won't reshuffle the list.
+      const lastActive = pix
+        ? (pix.lastOpenedAt ?? 0)
+        : Math.max(prev?.lastActive ?? 0, p.lastActive);
       if (prev) {
         byPath.set(pathKey, {
           ...prev,
           count: prev.count + p.count,
-          lastActive: Math.max(prev.lastActive, p.lastActive, pix?.lastOpenedAt ?? 0),
+          lastActive,
           name: prev.name || p.name || projectNameOf(pathKey),
           archived: prev.archived || archivedPaths.has(pathKey),
           ...(prev.pixProjectId || pix?.id
@@ -255,7 +260,7 @@ export class HistoryService {
         path: pathKey,
         name: p.name || projectNameOf(pathKey),
         count: p.count,
-        lastActive: Math.max(p.lastActive, pix?.lastOpenedAt ?? 0),
+        lastActive,
         archived: archivedPaths.has(pathKey),
         ...(pix?.id ? { pixProjectId: pix.id } : {}),
       });
@@ -270,7 +275,7 @@ export class HistoryService {
       if (existing) {
         byPath.set(pathKey, {
           ...existing,
-          lastActive: Math.max(existing.lastActive, item.lastOpenedAt ?? 0),
+          lastActive: item.lastOpenedAt ?? existing.lastActive,
           ...(existing.pixProjectId ? {} : { pixProjectId: item.id }),
           name: existing.name || displayName,
           archived: existing.archived || archivedPaths.has(pathKey),
