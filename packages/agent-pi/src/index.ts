@@ -26,3 +26,12 @@ export {
   buildSessionTitleUserPrompt,
   SESSION_TITLE_SYSTEM_PROMPT,
 } from './session-title.js';
+export {
+  buildMemoryExtractionUserPrompt,
+  collectRecentExchange,
+  filterNewMemories,
+  MEMORY_EXTRACTION_SYSTEM_PROMPT,
+  parseMemoryExtractionReply,
+  shouldAttemptMemoryExtraction,
+} from './memory-extraction.js';
+export { loadMemory, saveMemory, applyMemoryOp, type MemoryNote } from './memory-tools.js';

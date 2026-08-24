@@ -162,6 +162,12 @@ export const DesktopAgentEventSchema = z.discriminatedUnion('type', [
     title: z.string().min(1),
     timestamp: z.number().int().nonnegative(),
   }),
+  /** Saved user memories changed (auto-extracted or edited). */
+  z.object({
+    type: z.literal('memory.updated'),
+    timestamp: z.number().int().nonnegative(),
+    added: z.number().int().nonnegative().optional(),
+  }),
   /**
    * Live context-window occupancy from Pi `getContextUsage()`.
    * Session-scoped — compaction can fire outside an active run.

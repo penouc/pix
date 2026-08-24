@@ -99,6 +99,15 @@ describe('DesktopAgentEventSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts memory.updated without a run scope', () => {
+    const result = DesktopAgentEventSchema.safeParse({
+      type: 'memory.updated',
+      timestamp: Date.now(),
+      added: 2,
+    });
+    expect(result.success).toBe(true);
+  });
+
   it('accepts context.updated and compaction events without a run scope', () => {
     expect(
       DesktopAgentEventSchema.safeParse({

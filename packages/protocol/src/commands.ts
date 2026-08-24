@@ -4,7 +4,9 @@ import {
   AddMemoryInputSchema,
   ClearMemoriesInputSchema,
   DeleteMemoryInputSchema,
+  DeleteProjectMemoryInputSchema,
   ListMemoriesInputSchema,
+  ListProjectMemoriesInputSchema,
   UpdateMemoryInputSchema,
 } from './memory.js';
 
@@ -781,6 +783,14 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('memory.update'), params: UpdateMemoryInputSchema }),
   z.object({ method: z.literal('memory.delete'), params: DeleteMemoryInputSchema }),
   z.object({ method: z.literal('memory.clear'), params: ClearMemoriesInputSchema }),
+  z.object({
+    method: z.literal('memory.project.list'),
+    params: ListProjectMemoriesInputSchema,
+  }),
+  z.object({
+    method: z.literal('memory.project.delete'),
+    params: DeleteProjectMemoryInputSchema,
+  }),
   z.object({ method: z.literal('agent.setApprovalMode'), params: SetApprovalModeInputSchema }),
   z.object({
     method: z.literal('agent.getApprovalMode'),

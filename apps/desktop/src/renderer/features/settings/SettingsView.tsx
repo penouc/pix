@@ -57,7 +57,7 @@ const TABS: Array<{ id: TabId; name: string; title: string; desc: string }> = [
     id: 'memory',
     name: 'Memory',
     title: 'Saved memories',
-    desc: 'Facts PiX keeps about you across projects — like ChatGPT Memory.',
+    desc: 'Facts PiX keeps about you and per-project notes — like ChatGPT Memory.',
   },
   {
     id: 'projects',

@@ -15,11 +15,14 @@ import fsp from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 import {
+  applyMemoryOp,
   createAgentRuntime,
   deriveSessionTitle,
   describeAuthSources,
+  loadMemory,
   PI_SDK_PACKAGES,
   sanitizeSessionTitle,
+  saveMemory,
   type ProviderAuthSummary,
 } from '@pi-desktop/agent-pi';
 import type { AgentRuntime } from '@pi-desktop/agent-domain';
@@ -673,6 +676,7 @@ function broadcastEvent(event: unknown): void {
           ? 'failed'
           : 'cancelled';
     void applyPendingSessionTitle(data.sessionId, data.projectId, outcome);
+    void maybeExtractUserMemories(data.sessionId, outcome);
     // 聊完一轮 → 同步进 Agents → Pix / Projects（等 transcript 落库再投影）。
     schedulePixHistorySync(data.sessionId, 180);
     void automationScheduler
@@ -895,6 +899,47 @@ async function applyPendingSessionTitle(
     });
   } catch (error) {
     console.error('[main] auto-naming the task failed', error);
+  }
+}
+
+/**
+ * After a successful non-temporary turn, ask the session model for durable user
+ * facts and persist any new ones. Side-channel — never blocks the run path.
+ */
+async function maybeExtractUserMemories(
+  sessionId: string,
+  outcome: 'completed' | 'failed' | 'cancelled',
+): Promise<void> {
+  if (outcome !== 'completed') return;
+  try {
+    const db = await getDb();
+    const session = db.sessions.get(sessionId);
+    if (!session || session.temporary) return;
+
+    const agent = ensureRuntime();
+    if (!agent.extractUserMemories) return;
+
+    const candidates = await agent.extractUserMemories(sessionId);
+    if (!candidates.length) return;
+
+    let added = 0;
+    for (const content of candidates) {
+      try {
+        db.memories.add({ content, source: 'agent' });
+        added += 1;
+      } catch (error) {
+        console.warn('[main] memory extraction write skipped', error);
+      }
+    }
+    if (added > 0) {
+      broadcastEvent({
+        type: 'memory.updated',
+        timestamp: Date.now(),
+        added,
+      });
+    }
+  } catch (error) {
+    console.warn('[main] auto memory extraction failed', error);
   }
 }
 
@@ -1979,6 +2024,49 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       case 'memory.clear': {
         const deleted = db.memories.clear();
         return okResult({ deleted });
+      }
+      case 'memory.project.list': {
+        const projectId = cmd.params?.projectId;
+        if (projectId) {
+          const project = db.projects.get(projectId);
+          if (!project) return errResult('PROJECT_NOT_FOUND', `Project ${projectId} not found`);
+          return okResult([
+            {
+              projectId: project.id,
+              projectName: project.name,
+              projectPath: project.path,
+              notes: loadMemory(project.path),
+            },
+          ]);
+        }
+        const groups = db.projects
+          .listRecent(50)
+          .map((project) => ({
+            projectId: project.id,
+            projectName: project.name,
+            projectPath: project.path,
+            notes: loadMemory(project.path),
+          }))
+          .filter((group) => group.notes.length > 0);
+        return okResult(groups);
+      }
+      case 'memory.project.delete': {
+        const project = db.projects.get(cmd.params.projectId);
+        if (!project) return errResult('PROJECT_NOT_FOUND', `Project ${cmd.params.projectId} not found`);
+        const notes = loadMemory(project.path);
+        const next = applyMemoryOp(notes, { action: 'forget', key: cmd.params.key });
+        if (next.length === notes.length) {
+          return errResult('MEMORY_NOT_FOUND', 'Project note not found');
+        }
+        try {
+          saveMemory(project.path, next);
+        } catch (error) {
+          return errResult(
+            'MEMORY_WRITE_FAILED',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+        return okResult({ ok: true });
       }
       case 'audit.summary': {
         return okResult(await readAuditSummary());

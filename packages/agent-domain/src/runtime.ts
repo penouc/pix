@@ -235,6 +235,11 @@ export interface AgentRuntime {
    */
   generateSessionTitle?(sessionId: string): Promise<string | null>;
   /**
+   * Optional: extract durable user facts from the latest exchange after a
+   * completed turn. Returns candidate strings — Main writes them to SQLite.
+   */
+  extractUserMemories?(sessionId: string): Promise<string[]>;
+  /**
    * Installs Main's checkpoint hook. Implementations must await it before a
    * write/edit tool executes and must not expose SDK-specific event types.
    */

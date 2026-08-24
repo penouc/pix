@@ -76,6 +76,14 @@ import {
   sanitizeSessionTitle,
   SESSION_TITLE_SYSTEM_PROMPT,
 } from './session-title.js';
+import {
+  buildMemoryExtractionUserPrompt,
+  collectRecentExchange,
+  filterNewMemories,
+  MEMORY_EXTRACTION_SYSTEM_PROMPT,
+  parseMemoryExtractionReply,
+  shouldAttemptMemoryExtraction,
+} from './memory-extraction.js';
 
 /** Maximum wall-clock time a single run may take before auto-abort (§14.1). */
 const DEFAULT_RUN_TIMEOUT_MS = 10 * 60 * 1000;
@@ -1224,6 +1232,58 @@ export class PiAgentRuntime implements AgentRuntime {
     } catch (error) {
       console.warn('[PiAgentRuntime] generateSessionTitle failed', error);
       return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * ChatGPT-style side-channel extraction: scan the latest exchange for durable
+   * user facts. Returns candidate strings — Main persists them to SQLite.
+   */
+  async extractUserMemories(sessionId: string): Promise<string[]> {
+    this.assertAlive();
+    const record = this.sessions.get(sessionId);
+    if (!record || !this.userMemoryPersistence) return [];
+    await this.ensureRuntime(record.projectPath);
+    const model = record.pi.model;
+    if (!model || !this.modelRuntime) return [];
+
+    const exchange = collectRecentExchange(
+      record.pi.messages as Array<{ role?: string; content?: unknown }>,
+    );
+    if (!exchange || !shouldAttemptMemoryExtraction(exchange)) return [];
+
+    const existing = await this.userMemoryPersistence.list();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25_000);
+    try {
+      const reply = await this.modelRuntime.completeSimple(
+        model,
+        {
+          systemPrompt: MEMORY_EXTRACTION_SYSTEM_PROMPT,
+          messages: [
+            {
+              role: 'user',
+              content: buildMemoryExtractionUserPrompt({ ...exchange, existingMemories: existing }),
+              timestamp: Date.now(),
+            },
+          ],
+        },
+        {
+          maxTokens: 256,
+          temperature: 0.1,
+          signal: controller.signal,
+        },
+      );
+      if (reply.stopReason === 'error' || reply.stopReason === 'aborted') {
+        return [];
+      }
+      const candidates = parseMemoryExtractionReply(extractTextContent(reply.content));
+      return filterNewMemories(candidates, existing);
+    } catch (error) {
+      console.warn('[PiAgentRuntime] extractUserMemories failed', error);
+      return [];
     } finally {
       clearTimeout(timer);
     }

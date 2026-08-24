@@ -32,6 +32,7 @@ describe('FakeAgentRuntime', () => {
       if (
         event.type === 'update.status' ||
         event.type === 'history.updated' ||
+        event.type === 'memory.updated' ||
         event.type === 'terminal.data' ||
         event.type === 'terminal.exit'
       ) {

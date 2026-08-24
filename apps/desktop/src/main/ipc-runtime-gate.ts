@@ -123,6 +123,8 @@ export function ipcMethodNeedsRuntime(method: IpcMethod): boolean {
     case 'memory.update':
     case 'memory.delete':
     case 'memory.clear':
+    case 'memory.project.list':
+    case 'memory.project.delete':
     case 'system.revealPath':
     case 'history.nav':
     case 'history.list':
