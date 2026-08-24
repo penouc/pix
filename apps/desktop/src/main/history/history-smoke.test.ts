@@ -33,7 +33,7 @@ describe('history library local smoke', () => {
     ].filter((a) => a.detect());
 
     if (!adapters.length) {
-      console.log('[history-smoke] no local agent histories — skip');
+      console.warn('[history-smoke] no local agent histories — skip');
       return;
     }
 
@@ -58,7 +58,7 @@ describe('history library local smoke', () => {
       PiHistoryAdapter.pi().detect() ||
       PiHistoryAdapter.omp().detect();
     if (!hasLocal) {
-      console.log('[history-smoke] no local agent histories — skip refresh');
+      console.warn('[history-smoke] no local agent histories — skip refresh');
       return;
     }
 
@@ -75,7 +75,7 @@ describe('history library local smoke', () => {
     const listed = service.list({ limit: 20 });
     // Fresh DB may only have external sessions after refresh
     expect(listed.total + result.scanned).toBeGreaterThan(0);
-    console.log(
+    console.warn(
       '[history-smoke]',
       `scanned=${result.scanned}`,
       `ms=${result.durationMs}`,
@@ -88,7 +88,7 @@ describe('history library local smoke', () => {
   it('detects installed ACP agent CLIs', async () => {
     const agents = await detectAcpAgents(true);
     const available = agents.filter((a) => a.available);
-    console.log(
+    console.warn(
       '[acp-smoke]',
       available.map((a) => `${a.id}=${a.command}`).join(', ') || '(none)',
     );

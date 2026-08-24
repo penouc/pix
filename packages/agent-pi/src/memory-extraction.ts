@@ -73,7 +73,7 @@ export function parseMemoryExtractionReply(raw: string | null | undefined): stri
   return trimmed
     .split(/\r?\n/)
     .map((line) => line.replace(/^[-*•]\s*/, '').trim())
-    .filter((line) => line.length > 0 && !/^none$/i.test(line) && !/^[\[\],]+$/.test(line));
+    .filter((line) => line.length > 0 && !/^none$/i.test(line) && !/^[[\],]+$/.test(line));
 }
 
 /** Drop duplicates and facts already covered by existing memories. */

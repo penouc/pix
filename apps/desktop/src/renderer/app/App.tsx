@@ -21,7 +21,7 @@ import { AskDialog } from '@/features/ask/AskDialog';
 import { AutomationsView } from '@/features/automations/AutomationsView';
 import { ChatPanel } from '@/features/chat/ChatPanel';
 import { DiffPanel } from '@/features/diff/DiffPanel';
-import { HistoryBrowser, type HistoryBootLive, type HistoryScope } from '@/features/history/HistoryBrowser';
+import { HistoryBrowser, type HistoryBootLive } from '@/features/history/HistoryBrowser';
 import { ProjectSidebar } from '@/features/projects/ProjectSidebar';
 import { PreflightBanner } from '@/features/preflight/PreflightBanner';
 import { SearchPalette, type PaletteCommand } from '@/features/search/SearchPalette';
@@ -49,7 +49,6 @@ export function App() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [dismissedApproval, setDismissedApproval] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [historyScope, setHistoryScope] = useState<HistoryScope>({ kind: 'none' });
   const [historySessionKey, setHistorySessionKey] = useState<string | null>(null);
   const [historyBootLive, setHistoryBootLive] = useState<HistoryBootLive | null>(null);
   const [composerInsert, setComposerInsert] = useState<{
@@ -572,15 +571,6 @@ export function App() {
                   });
                   return;
                 }
-                setHistoryScope(
-                  meta.projectPath
-                    ? {
-                        kind: 'project',
-                        path: meta.projectPath,
-                        name: meta.projectName || meta.projectPath,
-                      }
-                    : { kind: 'agent', agent: meta.agent },
-                );
                 selectHistorySession(meta);
               }}
               onOpenFile={(hit) => void openIndexHit(hit)}
