@@ -261,6 +261,8 @@ Pi SDK 类型只允许出现在 `packages/agent-pi`，Renderer 不直接依赖 P
 - [Data Model](./docs/data-model.md)
 - [Acceptance Tests](./docs/acceptance-tests.md)
 - [Architecture Decision Records](./docs/decisions/)
+- [OMP 能力借鉴清单](./docs/omp-capability-borrow.md)
+- [DeepSeek Harness 能力借鉴清单](./docs/dsh-capability-borrow.md)
 
 ## 参与项目
 

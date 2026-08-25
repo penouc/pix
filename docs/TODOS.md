@@ -540,7 +540,9 @@ Each item needs its own ADR + evaluation + security review.
 | Doc | Role |
 |-----|------|
 | [`omp-capability-todo.md`](./omp-capability-todo.md) | OMP 紧急能力完成状态 |
-| [`omp-capability-borrow.md`](./omp-capability-borrow.md) | OMP 对照与借鉴说明 |
+| [`omp-capability-borrow.md`](./omp-capability-borrow.md) | OMP 对照与借鉴说明（功能雷达） |
+| [`dsh-capability-todo.md`](./dsh-capability-todo.md) | DeepSeek Harness 紧急能力完成状态 |
+| [`dsh-capability-borrow.md`](./dsh-capability-borrow.md) | DeepSeek Harness 对照与借鉴说明（harness 机制雷达） |
 | [`onboarding.md`](./onboarding.md) | 新装 / 首启 checklist 与 onboarding 约定（P0+P1 已落地） |
 
 ### 9.4 First-run onboarding (2026-08-12)
