@@ -461,6 +461,12 @@ export class FakeAgentRuntime implements AgentRuntime {
     ];
   }
 
+  async refreshModels(_options?: { providerId?: string }) {
+    this.assertAlive();
+    const models = await this.listModels();
+    return { modelCount: models.length, errors: [] };
+  }
+
   async getAuthStatus() {
     return [{ providerId: 'fake', hasAuth: true, source: 'runtime' }];
   }

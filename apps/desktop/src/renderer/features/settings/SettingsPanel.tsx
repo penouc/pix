@@ -346,7 +346,8 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           <div>
             <h2 className="text-sm font-semibold">Favourite models</h2>
             <p className="mt-1 text-xs text-muted">
-              Pinned to the top of the composer&apos;s picker. You can also star them there.
+              Pinned to the top of the composer&apos;s picker. Refresh the catalog when a provider
+              adds models the app does not list yet.
             </p>
           </div>
           <FavoriteModelsSection />

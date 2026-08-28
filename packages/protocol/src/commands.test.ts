@@ -214,6 +214,28 @@ describe('Compaction IPC commands', () => {
   });
 });
 
+describe('Model catalog refresh IPC', () => {
+  it('accepts a global refresh and a provider-scoped one', () => {
+    expect(parseIpcCommand({ method: 'agent.refreshModels' }).success).toBe(true);
+    expect(parseIpcCommand({ method: 'agent.refreshModels', params: {} }).success).toBe(true);
+    expect(
+      parseIpcCommand({
+        method: 'agent.refreshModels',
+        params: { providerId: 'opencode-go' },
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects an empty provider id', () => {
+    expect(
+      parseIpcCommand({
+        method: 'agent.refreshModels',
+        params: { providerId: '' },
+      }).success,
+    ).toBe(false);
+  });
+});
+
 describe('Interactive terminal PTY IPC commands', () => {
   it('accepts open / write / resize / close', () => {
     expect(

@@ -705,6 +705,10 @@ export const IpcCommandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('agent.setModel'), params: SetModelInputSchema }),
   z.object({ method: z.literal('agent.resolveApproval'), params: ResolveApprovalInputSchema }),
   z.object({ method: z.literal('agent.listModels'), params: z.object({}).optional() }),
+  z.object({
+    method: z.literal('agent.refreshModels'),
+    params: z.object({ providerId: z.string().min(1).optional() }).optional(),
+  }),
   z.object({ method: z.literal('settings.getFavoriteModels'), params: z.object({}).optional() }),
   z.object({
     method: z.literal('settings.setFavoriteModels'),

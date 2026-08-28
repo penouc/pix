@@ -29,6 +29,7 @@ import type {
   CompactionResult,
   ContextUsage,
   DesktopAgentEvent,
+  ModelCatalogRefreshResult,
   ModelRef,
   ModelSelection,
   RunRef,
@@ -1033,6 +1034,58 @@ export class PiAgentRuntime implements AgentRuntime {
           : {}),
       };
     });
+  }
+
+  /**
+   * Force a network catalogue refresh. Startup still uses the bundled snapshot
+   * (`allowModelNetwork: false`); this is what Settings and the picker call when
+   * the user asks for models that shipped after the SDK was pinned.
+   */
+  async refreshModels(options?: { providerId?: string }): Promise<ModelCatalogRefreshResult> {
+    this.assertAlive();
+    await this.ensureRuntime(process.cwd());
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45_000);
+    const scoped = options?.providerId?.trim();
+    const fromAuth = this.authSummaries
+      .filter((summary) => summary.hasAuth)
+      .map((summary) => summary.providerId);
+    const fromRuntime = this.modelRuntime!.getProviders()
+      .filter(
+        (provider) =>
+          this.modelRuntime!.hasConfiguredAuth(provider.id) ||
+          this.modelRuntime!.getProviderAuthStatus(provider.id)?.configured === true,
+      )
+      .map((provider) => provider.id);
+    const providers = scoped ? [scoped] : [...new Set([...fromAuth, ...fromRuntime])];
+
+    try {
+      const result = await this.modelRuntime!.refresh({
+        allowNetwork: true,
+        force: true,
+        signal: controller.signal,
+        ...(providers.length > 0 ? { providers } : {}),
+      });
+      if (result.aborted) {
+        throw new DomainError(
+          agentError(
+            'CATALOG_REFRESH_ABORTED',
+            'Model catalog refresh timed out or was cancelled.',
+            { retryable: true },
+          ),
+        );
+      }
+      const models = await this.listModels();
+      return {
+        modelCount: models.length,
+        errors: [...result.errors.entries()].map(([providerId, error]) => ({
+          providerId,
+          message: error instanceof Error ? error.message : String(error),
+        })),
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   /**

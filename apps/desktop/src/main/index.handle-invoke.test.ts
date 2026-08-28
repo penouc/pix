@@ -109,6 +109,7 @@ function mockAgent(overrides: Partial<AgentRuntime> = {}): AgentRuntime {
     setApprovalMode: vi.fn(async () => undefined),
     configureProvider: vi.fn(async () => undefined),
     listModels: vi.fn(async () => []),
+    refreshModels: vi.fn(async () => ({ modelCount: 0, errors: [] })),
     getAuthStatus: vi.fn(async () => []),
     dispose: vi.fn(async () => undefined),
     ...overrides,
@@ -243,6 +244,12 @@ describe('Main IPC skips AgentRuntime for first-paint DB commands', () => {
   it('still constructs AgentRuntime for agent.listModels', async () => {
     const listed = await handleInvoke({ method: 'agent.listModels' });
     expectOk(listed, []);
+    expect(agentPi.createAgentRuntime).toHaveBeenCalled();
+  });
+
+  it('refreshes the model catalog through AgentRuntime', async () => {
+    const refreshed = await handleInvoke({ method: 'agent.refreshModels' });
+    expectOk(refreshed, { modelCount: 0, errors: [] });
     expect(agentPi.createAgentRuntime).toHaveBeenCalled();
   });
 });

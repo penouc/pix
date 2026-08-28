@@ -203,16 +203,29 @@ export const CheckpointRecoverySummarySchema = z.object({
 });
 export type CheckpointRecoverySummary = z.infer<typeof CheckpointRecoverySummarySchema>;
 
+export const ModelCatalogRefreshResultSchema = z.object({
+  /** How many models the catalogue reports after the refresh. */
+  modelCount: z.number().int().nonnegative(),
+  /** Per-provider failures; an empty list means every requested provider succeeded. */
+  errors: z.array(
+    z.object({
+      providerId: z.string().min(1),
+      message: z.string().min(1),
+    }),
+  ),
+});
+export type ModelCatalogRefreshResult = z.infer<typeof ModelCatalogRefreshResultSchema>;
+
 export const ModelInfoSchema = z.object({
   providerId: z.string(),
   modelId: z.string(),
   displayName: z.string(),
   hasAuth: z.boolean().optional(),
   /*
-   * Capability and price, straight from Pi's bundled models.dev catalogue — the
-   * same numbers models.dev publishes, already local, so nothing is fetched and
-   * nothing is guessed. Every field is optional because a provider may report
-   * none of it, and an absent value must read as "not reported" rather than 0.
+   * Capability and price, from Pi's models.dev catalogue — bundled at startup,
+   * and replaced in-place when the user refreshes from Settings or the picker.
+   * Every field is optional because a provider may report none of it, and an
+   * absent value must read as "not reported" rather than 0.
    */
   contextWindow: z.number().int().positive().optional(),
   maxOutputTokens: z.number().int().positive().optional(),

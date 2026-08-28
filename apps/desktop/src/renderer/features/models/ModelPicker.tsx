@@ -3,6 +3,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  RefreshCw,
   Search,
   Sparkles,
   Star,
@@ -19,6 +20,7 @@ import {
   groupByProvider,
   matchesModel,
   useOfferedModels,
+  useRefreshModelCatalog,
 } from '@/features/models/use-offered-models';
 import { invoke } from '@/lib/ipc';
 import { listOptionClass, useListKeyboard } from '@/lib/use-list-keyboard';
@@ -47,6 +49,7 @@ export function ModelPicker({ onAddProvider }: { onAddProvider?: () => void } = 
   const selectedModel = useWorkspaceStore((s) => s.selectedModel);
   const setSelectedModel = useWorkspaceStore((s) => s.setSelectedModel);
   const { models, favorites, toggleFavorite, isLoading } = useOfferedModels();
+  const refresh = useRefreshModelCatalog();
   const queryClient = useQueryClient();
   const saved = useQuery({
     queryKey: ['settings.get'],
@@ -277,6 +280,24 @@ export function ModelPicker({ onAddProvider }: { onAddProvider?: () => void } = 
                     onListKeyDown(event);
                   }}
                 />
+                <button
+                  type="button"
+                  disabled={refresh.isPending}
+                  title={
+                    refresh.isError
+                      ? refresh.error instanceof Error
+                        ? refresh.error.message
+                        : 'Unable to refresh the catalog'
+                      : provider
+                        ? `Refresh ${provider} catalog`
+                        : 'Refresh model catalog'
+                  }
+                  aria-label={provider ? `Refresh ${provider} catalog` : 'Refresh model catalog'}
+                  onClick={() => refresh.mutate(provider ?? undefined)}
+                  className="flex size-6 flex-none cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted hover:bg-foreground/[0.08] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <RefreshCw className={cn('h-3.5 w-3.5', refresh.isPending && 'animate-spin')} />
+                </button>
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto py-1">

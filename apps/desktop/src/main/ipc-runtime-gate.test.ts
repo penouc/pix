@@ -18,6 +18,7 @@ describe('ipcMethodNeedsRuntime', () => {
 
   it('still requires AgentRuntime for agent, auth, and session.create', () => {
     expect(ipcMethodNeedsRuntime('agent.listModels')).toBe(true);
+    expect(ipcMethodNeedsRuntime('agent.refreshModels')).toBe(true);
     expect(ipcMethodNeedsRuntime('agent.sendMessage')).toBe(true);
     expect(ipcMethodNeedsRuntime('session.create')).toBe(true);
     expect(ipcMethodNeedsRuntime('session.messages')).toBe(true);

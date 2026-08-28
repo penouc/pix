@@ -127,6 +127,14 @@ describe('FakeAgentRuntime', () => {
     await expect(runtime.forkSession(session.id, 'nope')).rejects.toThrow();
     await runtime.dispose();
   });
+
+  it('reports the fake catalog on refresh without going to the network', async () => {
+    const runtime = new FakeAgentRuntime();
+    const result = await runtime.refreshModels();
+    expect(result.modelCount).toBe(2);
+    expect(result.errors).toEqual([]);
+    await runtime.dispose();
+  });
 });
 
 function waitFor(predicate: () => boolean, timeoutMs: number): Promise<void> {

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
-import type { ModelInfo } from '@pi-desktop/protocol';
+import type { ModelCatalogRefreshResult, ModelInfo } from '@pi-desktop/protocol';
 
 import { modelKey } from '@/features/models/model-key';
 import { invoke } from '@/lib/ipc';
@@ -81,3 +81,25 @@ export function matchesModel(model: ModelInfo, needle: string): boolean {
 }
 
 export { modelKey };
+
+/**
+ * Pull the live provider catalogues into the picker. Invalidates the same
+ * queries Settings and the composer read, so a newly listed model appears
+ * without restarting.
+ */
+export function useRefreshModelCatalog() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (providerId?: string) =>
+      invoke<ModelCatalogRefreshResult>({
+        method: 'agent.refreshModels',
+        params: providerId ? { providerId } : {},
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['agent.models'] }),
+        queryClient.invalidateQueries({ queryKey: ['provider.listAvailable'] }),
+      ]);
+    },
+  });
+}

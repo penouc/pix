@@ -5,6 +5,7 @@ import type {
   ContextUsage,
   DesktopAgentEvent,
   InputImage,
+  ModelCatalogRefreshResult,
   ModelRef,
   ModelSelection,
   RunRef,
@@ -186,6 +187,11 @@ export interface AgentRuntime {
   removeProviderConfiguration?(providerId: string): Promise<void>;
   approve(requestId: string, decision: ApprovalDecision): Promise<void>;
   listModels(): Promise<ModelCatalogEntry[]>;
+  /**
+   * Pull remote model catalogues (models.dev / pi.dev overlays) into the live
+   * runtime. Startup stays offline; this is the in-app update path.
+   */
+  refreshModels(options?: { providerId?: string }): Promise<ModelCatalogRefreshResult>;
   /** Optional: every provider Pi knows, with its declared auth methods. */
   listProviders?(): Promise<ProviderCatalogEntry[]>;
   /**

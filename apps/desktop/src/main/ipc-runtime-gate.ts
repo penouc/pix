@@ -25,6 +25,7 @@ export function ipcMethodNeedsRuntime(method: IpcMethod): boolean {
     case 'agent.setModel':
     case 'agent.resolveApproval':
     case 'agent.listModels':
+    case 'agent.refreshModels':
     case 'agent.authStatus':
     case 'agent.setApprovalMode':
     case 'agent.getApprovalMode':

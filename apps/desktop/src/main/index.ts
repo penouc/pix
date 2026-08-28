@@ -948,6 +948,8 @@ function ensureRuntime(): AgentRuntime {
     const agentDir = path.join(app.getPath('userData'), 'pi-agent');
     runtime = createAgentRuntime({
       agentDir,
+      // Bundled catalogue at startup so first paint is not waiting on models.dev.
+      // `agent.refreshModels` still forces a network refresh when the user asks.
       allowModelNetwork: false,
       forceFake: process.env['PI_DESKTOP_FAKE_RUNTIME'] === '1',
       // #11: durable todo checklists — the runtime calls back into SQLite on
@@ -1470,6 +1472,9 @@ export async function handleInvoke(raw: unknown): Promise<IpcResult> {
       }
       case 'agent.listModels': {
         return okResult((await agent.listModels()) as ModelInfo[]);
+      }
+      case 'agent.refreshModels': {
+        return okResult(await agent.refreshModels(cmd.params));
       }
       case 'provider.login': {
         const providers = agent.listProviders ? await agent.listProviders() : [];

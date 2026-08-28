@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check } from 'lucide-react';
+import { Check, RefreshCw } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import type { ModelInfo } from '@pi-desktop/protocol';
 
 import { Button } from '@/components/ui/button';
 import { modelKey } from '@/features/models/model-key';
+import { useRefreshModelCatalog } from '@/features/models/use-offered-models';
 import { invoke } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 
@@ -19,6 +20,7 @@ import { cn } from '@/lib/utils';
 export function FavoriteModelsSection() {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState('');
+  const refresh = useRefreshModelCatalog();
 
   const models = useQuery({
     queryKey: ['agent.models'],
@@ -79,7 +81,7 @@ export function FavoriteModelsSection() {
 
   return (
     <>
-      <div className="mb-2.5 flex items-center gap-2">
+      <div className="mb-2.5 flex flex-wrap items-center gap-2">
         <input
           className="min-w-0 flex-1 rounded-xl border border-border bg-background px-2.5 py-1.5 text-[12.5px] outline-none focus:border-accent/50"
           placeholder="Filter models…"
@@ -89,12 +91,36 @@ export function FavoriteModelsSection() {
         <span className="flex-none text-[11px] text-muted">
           {showingAll ? `none pinned of ${runnable.length}` : `${selected.size} pinned`}
         </span>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="flex-none"
+          disabled={refresh.isPending}
+          onClick={() => refresh.mutate(undefined)}
+        >
+          <RefreshCw className={cn('h-3.5 w-3.5', refresh.isPending && 'animate-spin')} />
+          {refresh.isPending ? 'Updating…' : 'Refresh catalog'}
+        </Button>
         {!showingAll ? (
           <Button variant="ghost" size="sm" onClick={() => save.mutate([])}>
             Clear
           </Button>
         ) : null}
       </div>
+
+      {refresh.isError ? (
+        <p className="mb-2 text-[12px] text-danger">
+          {refresh.error instanceof Error ? refresh.error.message : 'Unable to refresh the catalog.'}
+        </p>
+      ) : refresh.isSuccess ? (
+        <p className="mb-2 text-[12px] text-muted">
+          {refresh.data.errors.length
+            ? `Updated ${refresh.data.modelCount} models. ${refresh.data.errors.length} provider${
+                refresh.data.errors.length === 1 ? '' : 's'
+              } failed: ${refresh.data.errors.map((entry) => entry.providerId).join(', ')}.`
+            : `Updated — ${refresh.data.modelCount} models in the catalogue.`}
+        </p>
+      ) : null}
 
       {!runnable.length ? (
         <div className="rounded-[18px] border border-dashed border-foreground/20 px-4 py-6 text-center text-[12.5px] text-muted">
@@ -151,7 +177,8 @@ export function FavoriteModelsSection() {
       <p className="mt-2.5 text-[11.5px] leading-relaxed text-muted">
         Only models with usable credentials are listed — a key saved here, an environment variable,
         or another tool&apos;s auth store. Pinning changes the order of the composer&apos;s picker,
-        never what it contains.
+        never what it contains. Refresh catalog pulls new models from connected providers without
+        waiting for an app update.
       </p>
     </>
   );
