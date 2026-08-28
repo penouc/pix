@@ -87,3 +87,40 @@ export function useAnchorAbove(
 
   return style;
 }
+
+/**
+ * Fixed-position style at a cursor point (context menus).
+ * Clamped so a portalled menu is never painted off-screen.
+ */
+export function useAnchorAtPoint(
+  open: boolean,
+  point: { x: number; y: number } | null,
+  menuRef: RefObject<HTMLElement | null>,
+  gap = 6,
+): CSSProperties | null {
+  const [style, setStyle] = useState<CSSProperties | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open || !point) {
+      setStyle(null);
+      return;
+    }
+    const x = point.x;
+    const y = point.y;
+    function measure() {
+      const menu = menuRef.current;
+      const width = menu?.offsetWidth ?? 168;
+      const height = menu?.offsetHeight ?? 40;
+      setStyle({
+        position: 'fixed',
+        left: Math.min(Math.max(gap, x), window.innerWidth - width - gap),
+        top: Math.min(Math.max(gap, y), window.innerHeight - height - gap),
+      });
+    }
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [open, point, menuRef, gap]);
+
+  return style;
+}

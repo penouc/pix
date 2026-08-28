@@ -11,12 +11,15 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 import type { HistoryNav, HistoryProjectNav, ProjectSummary, SessionSummary } from '@pi-desktop/protocol';
 
 import { activeSidebarProjects, upsertOpenedProjectInNav } from '@/features/projects/history-nav-cache';
 import { invoke } from '@/lib/ipc';
+import { useAnchorAtPoint, useDismiss } from '@/lib/use-dismiss';
+import { listOptionClass, useListKeyboard } from '@/lib/use-list-keyboard';
 import { cn } from '@/lib/utils';
 import { dotStyle, statusTone, type RunStatus } from '@/lib/status';
 import { useAgentStreamStore } from '@/stores/agent-stream-store';
@@ -408,10 +411,21 @@ function ProjectBranch({
       invoke<SessionSummary[]>({ method: 'session.list', params: { projectId: project.id } }),
   });
   const tasks = (sessions.data ?? []).filter((item) => !item.archived && !item.deletedAt);
+  const [menuPoint, setMenuPoint] = useState<{ x: number; y: number } | null>(null);
+  const closeMenu = useCallback(() => setMenuPoint(null), []);
+
+  // Archive is a rare, hiding action. Hover keeps the rightmost control as
+  // "new task"; archive only appears from a right-click.
 
   return (
     <div>
-      <div className="density-row group flex items-center gap-0.5 rounded-xl pr-1 transition-colors">
+      <div
+        className="density-row group flex items-center gap-0.5 rounded-xl pr-1 transition-colors"
+        onContextMenu={(event) => {
+          event.preventDefault();
+          setMenuPoint({ x: event.clientX, y: event.clientY });
+        }}
+      >
         <button
           type="button"
           title={expanded ? 'Hide tasks' : 'Show tasks'}
@@ -447,17 +461,16 @@ function ProjectBranch({
         >
           <Plus className="h-3 w-3" />
         </button>
-        <button
-          type="button"
-          title={`Archive ${project.name}`}
-          aria-label={`Archive ${project.name}`}
-          disabled={busy || archiving}
-          onClick={onArchive}
-          className="hidden h-5 w-5 flex-none cursor-pointer items-center justify-center rounded-full text-muted group-hover:flex hover:bg-foreground/[0.1] hover:text-danger disabled:opacity-40"
-        >
-          <Archive className="h-3 w-3" />
-        </button>
       </div>
+      {menuPoint ? (
+        <ProjectArchiveMenu
+          projectName={project.name}
+          point={menuPoint}
+          disabled={busy || archiving}
+          onArchive={onArchive}
+          onClose={closeMenu}
+        />
+      ) : null}
 
       {expanded ? (
         <div className="mb-0.5 flex flex-col gap-px pl-4">
@@ -509,6 +522,70 @@ function ProjectBranch({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function ProjectArchiveMenu({
+  projectName,
+  point,
+  disabled,
+  onArchive,
+  onClose,
+}: {
+  projectName: string;
+  point: { x: number; y: number };
+  disabled: boolean;
+  onArchive: () => void;
+  onClose: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => onClose(), [onClose]);
+  useDismiss(true, [menuRef], close);
+  const style = useAnchorAtPoint(true, point, menuRef);
+  const { cursor, setCursor } = useListKeyboard({
+    open: true,
+    count: 1,
+    window: true,
+    enabled: () => !disabled,
+    onSelect: () => {
+      if (disabled) return;
+      onArchive();
+      onClose();
+    },
+    onClose: close,
+  });
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      role="menu"
+      aria-label={`${projectName} actions`}
+      style={style ?? { position: 'fixed', left: point.x, top: point.y }}
+      onContextMenu={(event) => event.preventDefault()}
+      className="z-50 min-w-[168px] overflow-hidden rounded-[16px] border border-border bg-background py-1 shadow-[var(--shadow-lg)]"
+    >
+      <button
+        type="button"
+        role="menuitem"
+        data-active={cursor === 0 ? 'true' : undefined}
+        disabled={disabled}
+        onMouseEnter={() => setCursor(0)}
+        onClick={() => {
+          if (disabled) return;
+          onArchive();
+          onClose();
+        }}
+        className={cn(
+          'flex w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-3 py-2 text-left text-[12.5px]',
+          listOptionClass(cursor === 0),
+          disabled && 'cursor-not-allowed opacity-45',
+        )}
+      >
+        <Archive className="h-3.5 w-3.5 flex-none text-muted" />
+        Archive
+      </button>
+    </div>,
+    document.body,
   );
 }
 
