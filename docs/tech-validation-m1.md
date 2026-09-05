@@ -7,9 +7,9 @@
 
 | Component | Choice | Date |
 |-----------|--------|------|
-| Pi coding agent | `@earendil-works/pi-coding-agent@0.82.0` | 2026-07-24 |
-| Pi agent core | `@earendil-works/pi-agent-core@0.82.0` | 2026-07-24 |
-| Pi AI | `@earendil-works/pi-ai@0.82.0` | 2026-07-24 |
+| Pi coding agent | `@earendil-works/pi-coding-agent@0.85.1` | 2026-09-05 |
+| Pi agent core | `@earendil-works/pi-agent-core@0.85.1` | 2026-09-05 |
+| Pi AI | `@earendil-works/pi-ai@0.85.1` | 2026-09-05 |
 | Adapter | `PiAgentRuntime` in `packages/agent-pi` | 2026-07-24 |
 | Fallback | `FakeAgentRuntime` via `PI_DESKTOP_FAKE_RUNTIME=1` | 2026-07-24 |
 

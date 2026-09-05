@@ -6,5 +6,5 @@ export const PI_SDK_PACKAGES = {
   codingAgent: '@earendil-works/pi-coding-agent',
   agentCore: '@earendil-works/pi-agent-core',
   ai: '@earendil-works/pi-ai',
-  version: '0.84.2',
+  version: '0.85.1',
 } as const;

@@ -14,7 +14,7 @@
   <img alt="macOS Apple Silicon" src="https://img.shields.io/badge/macOS-Apple%20Silicon-1f2722?logo=apple" />
   <img alt="Windows x64" src="https://img.shields.io/badge/Windows-x64-1f2722?logo=windows" />
   <img alt="Electron" src="https://img.shields.io/badge/Electron-36-445c52?logo=electron" />
-  <img alt="Pi Agent SDK" src="https://img.shields.io/badge/Pi%20Agent%20SDK-0.84.2-d97941" />
+  <img alt="Pi Agent SDK" src="https://img.shields.io/badge/Pi%20Agent%20SDK-0.85.1-d97941" />
   <a href="https://pix.penglei.dev"><img alt="Website" src="https://img.shields.io/badge/Website-pix.penglei.dev-718662" /></a>
 </p>
 
@@ -193,7 +193,7 @@ Local Workspace / Git / Child Processes
 |---|---|
 | Desktop | Electron 36 |
 | UI | React 19、TypeScript、Tailwind CSS 4 |
-| Agent | Pi Agent SDK 0.84.2 |
+| Agent | Pi Agent SDK 0.85.1 |
 | Async state | TanStack Query、Zustand |
 | Protocol | Typed IPC、Zod |
 | Diff | `@pierre/diffs` |

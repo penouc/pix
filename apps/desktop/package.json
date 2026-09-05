@@ -20,9 +20,9 @@
     "package:win": "pnpm rebuild:native && pnpm build && electron-builder --win nsis zip --x64 --config electron-builder.yml --publish never"
   },
   "dependencies": {
-    "@earendil-works/pi-agent-core": "0.84.2",
-    "@earendil-works/pi-ai": "0.84.2",
-    "@earendil-works/pi-coding-agent": "0.84.2",
+    "@earendil-works/pi-agent-core": "0.85.1",
+    "@earendil-works/pi-ai": "0.85.1",
+    "@earendil-works/pi-coding-agent": "0.85.1",
     "@pi-desktop/agent-domain": "workspace:*",
     "@pi-desktop/agent-pi": "workspace:*",
     "@pi-desktop/database": "workspace:*",
