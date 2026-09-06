@@ -78,6 +78,7 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
+          set -euo pipefail
           if [[ -z "${CSC_LINK:-}" || -z "${CSC_KEY_PASSWORD:-}" ]]; then
             echo "CSC_LINK and CSC_KEY_PASSWORD secrets are required for Developer ID signing" >&2
             exit 1
@@ -86,6 +87,32 @@ jobs:
             echo "APPLE_API_KEY_ID and APPLE_API_ISSUER secrets are required for notarization" >&2
             exit 1
           fi
+
+          # electron-builder 26.0.12 passes the .p12 password to
+          # `security set-key-partition-list -k`, but that flag needs the
+          # temporary keychain password. macOS 26 runners reject the mismatch
+          # (electron-userland/electron-builder#10066). Import the identity
+          # ourselves, then drop CSC_LINK so electron-builder uses
+          # `security find-identity` instead of its own keychain path.
+          CERT_PATH="$RUNNER_TEMP/developer-id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/pix-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "$CSC_LINK" | base64 --decode > "$CERT_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" \
+            -k "$KEYCHAIN_PATH" \
+            -P "$CSC_KEY_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/productbuild \
+            -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          rm -f "$CERT_PATH"
+          unset CSC_LINK CSC_KEY_PASSWORD
+          security find-identity -v -p codesigning
+
           pnpm --filter @pi-desktop/desktop exec electron-builder \
             --mac dmg zip \
             --arm64 \

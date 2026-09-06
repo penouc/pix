@@ -106,6 +106,8 @@ git push origin v0.2.1
 
 The Release workflow will sign with Developer ID, notarize via notarytool, then upload DMG/ZIP/yml for auto-update.
 
+On GitHub `macos-latest` (macOS 26+), the workflow imports `CSC_LINK` into a job-local keychain **before** calling electron-builder. electron-builder 26.0.12 otherwise unlocks that keychain with the `.p12` password and fails with `SecKeychainUnlock: The user name or passphrase you entered is not correct` ([electron-builder#10066](https://github.com/electron-userland/electron-builder/issues/10066)). Secrets stay the same; do not rotate them for this error.
+
 ## Local signed smoke (optional)
 
 ```bash
