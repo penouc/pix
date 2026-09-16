@@ -4,7 +4,8 @@
 > 策略：**不换内核**（继续 `@earendil-works/pi`），把 OMP 当竞品功能雷达；能接线的接线，值得学的学交互/算法，重的自建并走 PiX 权限与 Checkpoint。  
 > 对照：[`product-and-engineering-plan.md`](./product-and-engineering-plan.md) §22–§24  
 > **进度跟踪（完成状态）：** [`omp-capability-todo.md`](./omp-capability-todo.md)  
-> **新装 / 首启（尚未实现）：** [`onboarding.md`](./onboarding.md)
+> **新装 / 首启（尚未实现）：** [`onboarding.md`](./onboarding.md)  
+> **Harness 机制雷达（dsh，勿混）：** [`dsh-capability-borrow.md`](./dsh-capability-borrow.md) · [`dsh-capability-todo.md`](./dsh-capability-todo.md)
 
 ---
 
@@ -56,7 +57,7 @@
 
 ### 推进顺序
 
-紧急池已全部勾完。后续从下方「完整能力对照」里挑下一批（对照表「建议路径」仍为雷达，**不是**承诺排期）。
+紧急池已全部勾完。后续从下方「完整能力对照」里挑下一批（对照表「建议路径」仍为雷达，**不是**承诺排期）。Harness 层缺口（spill、循环卫生、OS sandbox、Trajectory）见 [`dsh-capability-borrow.md`](./dsh-capability-borrow.md)，不要把 dsh 项填回本表。
 
 ### 明确不进本轮池（避免分心）
 
@@ -217,3 +218,4 @@
 | 2026-08-07 | Batch D（#16–20）完成；紧急池 21/21 |
 | 2026-08-07 | 同步完整对照表「PiX 现状」与批次落地摘要（对齐 v0.4.0 / todo 21/21）；推进顺序改为从对照表挑下一批 |
 | 2026-08-07 | 链到 [`onboarding.md`](./onboarding.md)（新装 checklist 约定） |
+| 2026-08-17 | 交叉链接 [`dsh-capability-borrow.md`](./dsh-capability-borrow.md)（harness 机制雷达；与本表功能雷达分工） |
