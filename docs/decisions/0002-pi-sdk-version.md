@@ -1,8 +1,8 @@
-# ADR 0002: Lock Pi SDK at 0.85.1
+# ADR 0002: Lock Pi SDK at 1.4.0
 
 ## Status
 
-Accepted (2026-07-24); last upgraded 2026-09-05
+Accepted (2026-07-24); last upgraded 2026-10-26
 
 ## Context
 
@@ -15,9 +15,9 @@ Lock the following exact versions (no caret ranges):
 
 | Package | Version |
 |---------|---------|
-| `@earendil-works/pi-coding-agent` | `0.85.1` |
-| `@earendil-works/pi-agent-core` | `0.85.1` |
-| `@earendil-works/pi-ai` | `0.85.1` |
+| `@earendil-works/pi-coding-agent` | `1.4.0` |
+| `@earendil-works/pi-agent-core` | `1.4.0` |
+| `@earendil-works/pi-ai` | `1.4.0` |
 
 Adapter entry: `packages/agent-pi` → `PiAgentRuntime` via `createAgentSession` + `ModelRuntime` + `SessionManager.inMemory()`.
 
